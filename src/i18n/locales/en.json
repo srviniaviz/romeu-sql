@@ -1,0 +1,35 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "settings": "Settings",
+    "security": "Security",
+    "search": "Search",
+    "overview": "Overview",
+    "nodes": "Nodes",
+    "explorer": "Explorer"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Monitoring encrypted infrastructure nodes",
+    "vault_active": "Vault Active",
+    "init_node_title": "Initialize Node",
+    "init_node_desc": "Connect a new database and apply AES-256 multi-lock encryption to your credentials.",
+    "recent_nodes": "Recent Encrypted Nodes",
+    "no_nodes": "Zero Nodes found",
+    "view_registry": "View Full Registry"
+  },
+  "modal": {
+    "new_connection": "New Connection",
+    "init_node": "Initialization of secure datasource node",
+    "alias": "Friendly Name",
+    "engine": "Engine",
+    "host": "Host Address",
+    "port": "Port",
+    "database": "Database Name",
+    "username": "Username",
+    "password": "Password",
+    "connect": "Connect & Initialize",
+    "encrypting": "Encrypting..."
+  }
+}
