@@ -1,24 +1,30 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useTranslation } from "react- i18next";
+import { useTranslation } from "react-i18next";
 import * as z from "zod";
 import { 
   Dialog, 
-  Flex, 
-  Text, 
-  Button, 
-  TextField, 
-  Select, 
-  Grid, 
-  Box, 
-  IconButton
-} from "@radix-ui/themes";
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { 
-  X,
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { 
+  Database,
   Server,
   User,
   Lock,
-  Database,
   RefreshCw
 } from "lucide-react";
 
@@ -54,118 +60,122 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
   };
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content 
-        maxWidth="520px" 
-        size="4" 
-        className="animate-in fade-in zoom-in-95 duration-200 border border-[--border-subtle] overflow-hidden !p-0"
-      >
-        <Flex direction="column">
-          <Box p="6">
-            <Flex align="center" gap="4">
-              <Box p="3" className="bg-[--accent-color] text-[--accent-text] rounded-2xl shadow-xl">
-                 <Database size={24} />
-              </Box>
-              <Box>
-                <Dialog.Title className="text-2xl font-black uppercase tracking-tight italic m-0">{t('modal.new_connection')}</Dialog.Title>
-                <Dialog.Description className="text-[10px] font-black uppercase tracking-widest opacity-60 m-0 mt-1">{t('modal.init_node')}</Dialog.Description>
-              </Box>
-              <Dialog.Close ml="auto" asChild>
-                <IconButton size="3" variant="soft" color="gray" className="rounded-2xl shrink-0">
-                  <X size={20} />
-                </IconButton>
-              </Dialog.Close>
-            </Flex>
-          </Box>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Database className="size-5" />
+            </div>
+            <div className="grid gap-0.5 text-left">
+              <DialogTitle>{t('modal.new_connection')}</DialogTitle>
+              <DialogDescription>{t('modal.init_node')}</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
 
-          <Box className="bg-black/5 dark:bg-white/[0.02]" p="6">
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <Flex direction="column" gap="5">
-                <Grid columns="2" gap="4">
-                  <Flex direction="column" gap="2">
-                    <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.alias')}</label>
-                    <TextField.Root {...register("name")} size="3" variant="soft" placeholder="Main Tunnel" radius="large" />
-                    {errors.name && <Text size="1" color="red" weight="bold">{errors.name.message}</Text>}
-                  </Flex>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">{t('modal.alias')}</Label>
+              <Input 
+                id="name"
+                {...register("name")} 
+                placeholder="Production DB" 
+              />
+              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            </div>
 
-                  <Flex direction="column" gap="2">
-                    <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.engine')}</label>
-                    <Controller
-                      name="type"
-                      control={control}
-                      render={({ field }) => (
-                        <Select.Root onValueChange={field.onChange} value={field.value} size="3">
-                          <Select.Trigger variant="soft" radius="large" className="w-full" />
-                          <Select.Content position="popper" sideOffset={5} className="z-[200] rounded-xl border border-[--border-subtle] shadow-2xl">
-                            <Select.Item className="uppercase font-black text-[10px] tracking-widest focus:bg-[--accent-color] focus:text-[--accent-text]" value="postgres">Postgre</Select.Item>
-                            <Select.Item className="uppercase font-black text-[10px] tracking-widest focus:bg-[--accent-color] focus:text-[--accent-text]" value="mysql">MySQL</Select.Item>
-                            <Select.Item className="uppercase font-black text-[10px] tracking-widest focus:bg-[--accent-color] focus:text-[--accent-text]" value="sqlite">SQLite</Select.Item>
-                            <Select.Item className="uppercase font-black text-[10px] tracking-widest focus:bg-[--accent-color] focus:text-[--accent-text]" value="sqlserver">SQL Server</Select.Item>
-                          </Select.Content>
-                        </Select.Root>
-                      )}
-                    />
-                  </Flex>
-                </Grid>
+            <div className="grid gap-2">
+              <Label>{t('modal.engine')}</Label>
+              <Controller
+                name="type"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="postgres">PostgreSQL</SelectItem>
+                      <SelectItem value="mysql">MySQL</SelectItem>
+                      <SelectItem value="sqlite">SQLite</SelectItem>
+                      <SelectItem value="sqlserver">SQL Server</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          </div>
 
-                <Grid columns="12" gap="4">
-                  <Box className="col-span-8">
-                    <Flex direction="column" gap="2">
-                      <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.host')}</label>
-                      <TextField.Root {...register("host")} size="3" variant="soft" placeholder="localhost" radius="large">
-                        <TextField.Slot>
-                          <Server size={14} className="opacity-40" />
-                        </TextField.Slot>
-                      </TextField.Root>
-                    </Flex>
-                  </Box>
-                  <Box className="col-span-4">
-                    <Flex direction="column" gap="2">
-                      <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.port')}</label>
-                      <TextField.Root {...register("port")} size="3" variant="soft" radius="large" className="text-center font-bold" />
-                    </Flex>
-                  </Box>
-                </Grid>
+          <div className="grid grid-cols-4 gap-4 items-start">
+            <div className="col-span-3 grid gap-2">
+              <Label htmlFor="host">{t('modal.host')}</Label>
+              <div className="relative group">
+                <Server className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
+                <Input 
+                  id="host"
+                  {...register("host")} 
+                  placeholder="localhost" 
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="port">{t('modal.port')}</Label>
+              <Input 
+                id="port"
+                {...register("port")} 
+              />
+            </div>
+          </div>
 
-                <Flex direction="column" gap="2">
-                  <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.database')}</label>
-                  <TextField.Root {...register("database")} size="3" variant="soft" radius="large" placeholder="master" />
-                </Flex>
+          <div className="grid gap-2">
+            <Label htmlFor="database">{t('modal.database')}</Label>
+            <Input 
+              id="database"
+              {...register("database")} 
+              placeholder="postgres"
+            />
+          </div>
 
-                <Grid columns="2" gap="4">
-                  <Flex direction="column" gap="2">
-                    <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.username')}</label>
-                    <TextField.Root {...register("username")} size="3" variant="soft" radius="large">
-                      <TextField.Slot>
-                        <User size={14} className="opacity-40" />
-                      </TextField.Slot>
-                    </TextField.Root>
-                  </Flex>
-                  <Flex direction="column" gap="2">
-                    <label className="text-[10px] font-black uppercase tracking-widest opacity-70 ml-1">{t('modal.password')}</label>
-                    <TextField.Root {...register("password")} type="password" size="3" variant="soft" radius="large">
-                      <TextField.Slot>
-                        <Lock size={14} className="opacity-40" />
-                      </TextField.Slot>
-                    </TextField.Root>
-                  </Flex>
-                </Grid>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="username">{t('modal.username')}</Label>
+              <div className="relative group">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
+                <Input 
+                  id="username"
+                  {...register("username")} 
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="password">{t('modal.password')}</Label>
+              <div className="relative group">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
+                <Input 
+                  id="password"
+                  {...register("password")} 
+                  type="password" 
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
 
-                <Flex gap="3" mt="2">
-                  <Dialog.Close asChild>
-                    <Button variant="surface" size="3" color="gray" className="flex-1 rounded-xl h-12 font-black uppercase tracking-widest transition-all">
-                      {t('common.cancel')}
-                    </Button>
-                  </Dialog.Close>
-                  <Button type="submit" size="3" color="gray" disabled={isSubmitting} highContrast className="flex-[1.5] rounded-xl h-12 font-black uppercase tracking-widest shadow-xl transition-all">
-                    {isSubmitting ? <RefreshCw size={20} className="animate-spin" /> : t('modal.connect')}
-                  </Button>
-                </Flex>
-              </Flex>
-            </form>
-          </Box>
-        </Flex>
-      </Dialog.Content>
-    </Dialog.Root>
+          <DialogFooter className="gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={isSubmitting} className="flex-1 font-bold">
+              {isSubmitting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
+              {t('modal.connect')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

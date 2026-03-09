@@ -1,7 +1,8 @@
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "react-i18next";
-import { Flex, Box, Text, Button, IconButton, Separator } from "@radix-ui/themes";
 import { Minus, Square, X, Sun, Moon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 export function Titlebar() {
   const { theme, toggleTheme } = useTheme();
@@ -28,59 +29,59 @@ export function Titlebar() {
   };
 
   return (
-    <Flex align="center" justify="between" height="44px" position="relative" className="select-none z-50">
-      <Flex 
+    <div className="titlebar select-none z-50 flex items-center justify-between h-10 border-b border-border/10 bg-background/50 backdrop-blur-md">
+      <div 
         data-tauri-drag-region 
-        className="flex-1 h-full flex items-center px-4 gap-3 bg-transparent"
+        className="flex-1 h-full flex items-center px-4"
       >
-        <Text size="1" weight="black" className="uppercase tracking-[0.2em] opacity-40">Romeu SQL</Text>
-      </Flex>
+        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground opacity-60">Romeu SQL</span>
+      </div>
 
-      <Flex height="100%" align="center" px="1">
-        <IconButton 
+      <div className="flex h-full items-center px-1">
+        <Button 
           variant="ghost" 
-          color="gray"
+          size="sm"
           onClick={toggleLanguage}
-          className="uppercase font-black text-[10px] tracking-tighter w-11 h-11"
+          className="h-8 w-8 p-0 font-bold text-[10px] uppercase tracking-tighter"
           title="Change Language"
         >
           {i18n.language.startsWith('en') ? 'PT' : 'EN'}
-        </IconButton>
+        </Button>
 
-        <Separator orientation="vertical" size="1" className="bg-[--border-subtle] mx-1 h-4" />
+        <Separator orientation="vertical" className="h-4 mx-1.5 opacity-20" />
 
-        <IconButton 
+        <Button 
           variant="ghost" 
-          color="gray"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             toggleTheme();
           }}
-          className="w-11 h-11"
+          className="h-8 w-8 p-0"
           title={theme === 'dark' ? "Switch to Light" : "Switch to Dark"}
         >
-          {theme === 'dark' ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
-        </IconButton>
+          {theme === 'dark' ? <Sun size={14} strokeWidth={2.5} /> : <Moon size={14} strokeWidth={2.5} />}
+        </Button>
 
-        <Separator orientation="vertical" size="1" className="bg-[--border-subtle] mx-1 h-4" />
+        <Separator orientation="vertical" className="h-4 mx-1.5 opacity-20" />
 
-        <IconButton variant="ghost" color="gray" onClick={minimize} className="w-11 h-11">
-          <Minus size={16} strokeWidth={2} />
-        </IconButton>
+        <Button variant="ghost" size="sm" onClick={minimize} className="h-8 w-8 p-0">
+          <Minus size={14} strokeWidth={2.5} />
+        </Button>
         
-        <IconButton variant="ghost" color="gray" onClick={toggleMaximize} className="w-11 h-11">
-          <Square size={14} strokeWidth={2} />
-        </IconButton>
+        <Button variant="ghost" size="sm" onClick={toggleMaximize} className="h-8 w-8 p-0">
+          <Square size={12} strokeWidth={2.5} />
+        </Button>
         
-        <IconButton 
+        <Button 
           variant="ghost" 
-          color="red" 
+          size="sm" 
           onClick={close} 
-          className="w-11 h-11 hover:bg-red-500 hover:text-white"
+          className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground transition-colors"
         >
-          <X size={16} strokeWidth={2} />
-        </IconButton>
-      </Flex>
-    </Flex>
+          <X size={14} strokeWidth={2.5} />
+        </Button>
+      </div>
+    </div>
   );
 }
