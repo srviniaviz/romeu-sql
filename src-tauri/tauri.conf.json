@@ -15,7 +15,8 @@
         "title": "Romeu SQL",
         "width": 1000,
         "height": 700,
-        "decorations": false
+        "decorations": false,
+        "maximized": true
       }
     ],
     "security": {
