@@ -7,7 +7,10 @@
     "search": "Buscar",
     "overview": "Visão Geral",
     "nodes": "Nós",
-    "explorer": "Explorador"
+    "explorer": "Explorador",
+    "my_queries": "Minhas Consultas",
+    "modeling": "Modelagem de Dados",
+    "connections": "CONEXÕES"
   },
   "dashboard": {
     "title": "Painel",
@@ -30,6 +33,48 @@
     "username": "Usuário",
     "password": "Senha",
     "connect": "Conectar",
-    "encrypting": "Conectando..."
+    "encrypting": "Conectando...",
+    "tabs": {
+      "general": "Geral",
+      "connection": "Conexão",
+      "ssl": "SSL",
+      "ssh_tunnel": "SSH Tunnel",
+      "parameters": "Parâmetros"
+    },
+    "general": {
+      "name": "Nome",
+      "group": "Grupo de Conexão",
+      "comment": "Comentário"
+    },
+    "connection": {
+      "host": "Endereço Host",
+      "port": "Porta",
+      "database": "Banco de Dados de Manutenção",
+      "user": "Usuário",
+      "password": "Senha",
+      "save_password": "Salvar senha?",
+      "role": "Role",
+      "ssl_mode": "Modo SSL"
+    },
+    "ssl": {
+      "root_cert": "Certificado Root",
+      "cert": "Certificado do Cliente",
+      "key": "Chave do Cliente",
+      "crl": "CRL (Lista de Revogação)"
+    },
+    "ssh": {
+      "use_tunnel": "Usar tunnel SSH?",
+      "host": "Host do Tunnel",
+      "port": "Porta do Tunnel",
+      "user": "Usuário do Tunnel",
+      "auth_method": "Método de Autenticação",
+      "identity_file": "Arquivo de Identidade",
+      "password": "Senha do SSH"
+    },
+    "params": {
+      "encoding": "Encoding do Cliente",
+      "app_name": "Nome da Aplicação",
+      "timeout": "Timeout da Conexão (s)"
+    }
   }
 }

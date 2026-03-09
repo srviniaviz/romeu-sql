@@ -20,24 +20,67 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Database,
-  Server,
   User,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Globe,
+  FileCode,
+  FolderOpen
 } from "lucide-react";
 
+/**
+ * Define the schema for connection settings.
+ * Mirrored after pgAdmin's extensive configuration options.
+ */
 const connectionSchema = z.object({
+  // General Tab
   name: z.string().min(1, "Name is required"),
+  group: z.string().optional(),
+  comment: z.string().optional(),
+  
+  // Connection Tab
   type: z.enum(["postgres", "mysql", "sqlite", "sqlserver"]),
   host: z.string().min(1, "Host is required"),
   port: z.string().regex(/^\d+$/, "Must be a number"),
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
   database: z.string().min(1, "Database is required"),
+  savePassword: z.boolean(),
+  role: z.string().optional(),
+  sslMode: z.enum(["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]),
+
+  // SSL Tab
+  sslRootCert: z.string().optional(),
+  sslCert: z.string().optional(),
+  sslKey: z.string().optional(),
+  sslCrl: z.string().optional(),
+
+  // SSH Tunnel Tab
+  sshEnabled: z.boolean(),
+  sshHost: z.string().optional(),
+  sshPort: z.string().optional(),
+  sshUser: z.string().optional(),
+  sshAuthMethod: z.enum(["password", "key"]),
+  sshPassword: z.string().optional(),
+  sshIdentityFile: z.string().optional(),
+
+  // Parameters Tab
+  clientEncoding: z.string().optional(),
+  appName: z.string().optional(),
+  connectTimeout: z.string()
 });
 
+/**
+ * Infer form values from the zod schema.
+ * Using a partial or mapping specifically if needed, but infer is usually correct.
+ */
 type ConnectionFormValues = z.infer<typeof connectionSchema>;
 
 interface Props {
@@ -48,132 +91,330 @@ interface Props {
 export function CreateConnectionModal({ isOpen, onClose }: Props) {
   const { t } = useTranslation();
   
-  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<ConnectionFormValues>({
+  // Initialize form with default values matching the schema.
+  const { register, handleSubmit, control, watch, formState: { isSubmitting } } = useForm<ConnectionFormValues>({
     resolver: zodResolver(connectionSchema),
-    defaultValues: { type: "postgres", host: "localhost", port: "5432" }
+    defaultValues: { 
+      type: "postgres", 
+      host: "localhost", 
+      port: "5432",
+      savePassword: true,
+      sslMode: "disable",
+      sshEnabled: false,
+      sshAuthMethod: "password",
+      connectTimeout: "10"
+    }
   });
 
+  const sshEnabled = watch("sshEnabled");
+  const sshAuthMethod = watch("sshAuthMethod");
+
   const onSubmit = async (data: ConnectionFormValues) => {
-    await new Promise(r => setTimeout(r, 1000));
-    console.log("Saving Connection:", data);
+    // Artificial delay to show loading state.
+    await new Promise(r => setTimeout(r, 1200));
+    console.log("Saving Connection via SubmitHandler:", data);
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+      <DialogContent className="sm:max-w-[720px] gap-0 p-0 overflow-hidden border-none shadow-2xl ring-1 ring-border/10">
+        <DialogHeader className="p-6 bg-muted/20 border-b border-border/10">
+          <div className="flex items-center gap-4">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
               <Database className="size-5" />
             </div>
-            <div className="grid gap-0.5 text-left">
-              <DialogTitle>{t('modal.new_connection')}</DialogTitle>
-              <DialogDescription>{t('modal.init_node')}</DialogDescription>
+            <div className="grid gap-0.5">
+              <DialogTitle className="text-lg font-bold tracking-tight uppercase italic">{t('modal.new_connection')}</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-40">{t('modal.init_node')}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">{t('modal.alias')}</Label>
-              <Input 
-                id="name"
-                {...register("name")} 
-                placeholder="Production DB" 
-              />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Tabs defaultValue="general" className="w-full">
+            <div className="px-8 py-4 border-b border-border/10 bg-muted/5">
+              <TabsList className="grid w-full grid-cols-5 h-10 p-1 bg-muted/50 rounded-lg">
+                <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  {t('modal.tabs.general')}
+                </TabsTrigger>
+                <TabsTrigger value="connection" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  {t('modal.tabs.connection')}
+                </TabsTrigger>
+                <TabsTrigger value="ssl" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  {t('modal.tabs.ssl')}
+                </TabsTrigger>
+                <TabsTrigger value="ssh" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  {t('modal.tabs.ssh_tunnel')}
+                </TabsTrigger>
+                <TabsTrigger value="params" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                  {t('modal.tabs.parameters')}
+                </TabsTrigger>
+              </TabsList>
             </div>
 
-            <div className="grid gap-2">
-              <Label>{t('modal.engine')}</Label>
-              <Controller
-                name="type"
-                control={control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="postgres">PostgreSQL</SelectItem>
-                      <SelectItem value="mysql">MySQL</SelectItem>
-                      <SelectItem value="sqlite">SQLite</SelectItem>
-                      <SelectItem value="sqlserver">SQL Server</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-          </div>
+            <ScrollArea className="h-[480px]">
+              <div className="p-10 pb-16">
+                <TabsContent value="general" className="space-y-6 mt-0">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.name')}</Label>
+                      <Input {...register("name")} placeholder="My Primary DB" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.group')}</Label>
+                      <Input {...register("group")} placeholder="Production" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.comment')}</Label>
+                      <Textarea {...register("comment")} placeholder="Add notes here..." className="min-h-[140px] bg-muted/20 border-border/10 focus-visible:ring-1" />
+                    </div>
+                  </div>
+                </TabsContent>
 
-          <div className="grid grid-cols-4 gap-4 items-start">
-            <div className="col-span-3 grid gap-2">
-              <Label htmlFor="host">{t('modal.host')}</Label>
-              <div className="relative group">
-                <Server className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
-                <Input 
-                  id="host"
-                  {...register("host")} 
-                  placeholder="localhost" 
-                  className="pl-9"
-                />
+                <TabsContent value="connection" className="space-y-6 mt-0">
+                  <div className="grid gap-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.engine')}</Label>
+                        <Controller
+                          name="type"
+                          control={control}
+                          render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="postgres">PostgreSQL</SelectItem>
+                                <SelectItem value="mysql">MySQL</SelectItem>
+                                <SelectItem value="sqlite">SQLite</SelectItem>
+                                <SelectItem value="sqlserver">SQL Server</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.ssl_mode')}</Label>
+                        <Controller
+                          name="sslMode"
+                          control={control}
+                          render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="disable">Disable</SelectItem>
+                                <SelectItem value="allow">Allow</SelectItem>
+                                <SelectItem value="prefer">Prefer</SelectItem>
+                                <SelectItem value="require">Require</SelectItem>
+                                <SelectItem value="verify-ca">Verify-CA</SelectItem>
+                                <SelectItem value="verify-full">Verify-Full</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-12 gap-4">
+                      <div className="col-span-10 space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.host')}</Label>
+                        <div className="relative group">
+                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                          <Input {...register("host")} className="pl-9" />
+                        </div>
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.port')}</Label>
+                        <Input {...register("port")} className="text-center font-bold" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.database')}</Label>
+                      <div className="relative group">
+                        <Database className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                        <Input {...register("database")} className="pl-9" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.user')}</Label>
+                        <div className="relative group">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                          <Input {...register("username")} className="pl-9" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.password')}</Label>
+                        <div className="relative group">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                          <Input {...register("password")} type="password" className="pl-9" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 pt-2">
+                      <Controller
+                        name="savePassword"
+                        control={control}
+                        render={({ field }) => (
+                          <Checkbox 
+                            id="savePass" 
+                            checked={field.value} 
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                      <Label htmlFor="savePass" className="text-xs font-bold tracking-tight cursor-pointer">{t('modal.connection.save_password')}</Label>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="ssl" className="space-y-6 mt-0">
+                  <div className="grid gap-5">
+                    {['sslRootCert', 'sslCert', 'sslKey', 'sslCrl'].map((cert) => (
+                      <div key={cert} className="space-y-2">
+                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t(`modal.ssl.${cert.replace('ssl', '').toLowerCase()}`)}</Label>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1 group">
+                            <FileCode className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
+                            <Input {...register(cert as any)} className="pl-9" placeholder="/path/to/identity.key" />
+                          </div>
+                          <Button type="button" variant="secondary" size="sm" className="h-9 px-4 font-bold text-[10px] uppercase tracking-widest">
+                            <FolderOpen size={14} className="mr-2 opacity-60" />Browse
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="ssh" className="space-y-6 mt-0">
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-5 rounded-xl bg-muted/20 border border-border/10">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-bold">{t('modal.ssh.use_tunnel')}</Label>
+                        <p className="text-[10px] text-muted-foreground opacity-60 uppercase tracking-widest font-semibold italic">Connect via Bastion Host</p>
+                      </div>
+                      <Controller
+                        name="sshEnabled"
+                        control={control}
+                        render={({ field }) => (
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        )}
+                      />
+                    </div>
+
+                    {sshEnabled && (
+                      <div className="grid gap-5 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-12 gap-4">
+                          <div className="col-span-10 space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.host')}</Label>
+                            <Input {...register("sshHost")} />
+                          </div>
+                          <div className="col-span-2 space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.port')}</Label>
+                            <Input {...register("sshPort")} placeholder="22" className="text-center font-bold" />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.user')}</Label>
+                            <Input {...register("sshUser")} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.auth_method')}</Label>
+                            <Controller
+                              name="sshAuthMethod"
+                              control={control}
+                              render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="password">Password</SelectItem>
+                                    <SelectItem value="key">Identity File</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        {sshAuthMethod === "password" ? (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.password')}</Label>
+                            <Input {...register("sshPassword")} type="password" />
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.identity_file')}</Label>
+                            <div className="flex gap-2">
+                              <Input {...register("sshIdentityFile")} placeholder="/path/to/key" className="flex-1" />
+                              <Button type="button" variant="secondary" size="sm" className="h-9 font-bold text-[10px] uppercase tracking-widest">
+                                <FolderOpen size={14} className="mr-2 opacity-60" />Browse
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="params" className="space-y-6 mt-0">
+                  <div className="grid gap-5">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.encoding')}</Label>
+                      <Controller
+                        name="clientEncoding"
+                        control={control}
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="AUTO" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="UTF8">UTF8</SelectItem>
+                              <SelectItem value="SQL_ASCII">SQL_ASCII</SelectItem>
+                              <SelectItem value="LATIN1">LATIN1</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.app_name')}</Label>
+                      <Input {...register("appName")} placeholder="Romeu SQL Client" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.timeout')}</Label>
+                      <Input {...register("connectTimeout")} type="number" />
+                    </div>
+                  </div>
+                </TabsContent>
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="port">{t('modal.port')}</Label>
-              <Input 
-                id="port"
-                {...register("port")} 
-              />
-            </div>
-          </div>
+            </ScrollArea>
 
-          <div className="grid gap-2">
-            <Label htmlFor="database">{t('modal.database')}</Label>
-            <Input 
-              id="database"
-              {...register("database")} 
-              placeholder="postgres"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="username">{t('modal.username')}</Label>
-              <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
-                <Input 
-                  id="username"
-                  {...register("username")} 
-                  className="pl-9"
-                />
-              </div>
+            <div className="p-6 bg-muted/20 border-t border-border/10">
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button type="button" variant="ghost" onClick={onClose} className="h-10 font-bold uppercase tracking-widest text-xs">
+                  {t('common.cancel')}
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="h-10 px-10 font-bold uppercase tracking-widest text-xs bg-primary text-primary-foreground shadow-lg shadow-primary/10">
+                  {isSubmitting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
+                  {t('modal.connect')}
+                </Button>
+              </DialogFooter>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="password">{t('modal.password')}</Label>
-              <div className="relative group">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/50 pointer-events-none" />
-                <Input 
-                  id="password"
-                  {...register("password")} 
-                  type="password" 
-                  className="pl-9"
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={isSubmitting} className="flex-1 font-bold">
-              {isSubmitting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
-              {t('modal.connect')}
-            </Button>
-          </DialogFooter>
+          </Tabs>
         </form>
       </DialogContent>
     </Dialog>

@@ -7,7 +7,10 @@
     "search": "Search",
     "overview": "Overview",
     "nodes": "Nodes",
-    "explorer": "Explorer"
+    "explorer": "Explorer",
+    "my_queries": "My Queries",
+    "modeling": "Data Modeling",
+    "connections": "CONNECTIONS"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -30,6 +33,48 @@
     "username": "Username",
     "password": "Password",
     "connect": "Connect",
-    "encrypting": "Connecting..."
+    "encrypting": "Connecting...",
+    "tabs": {
+      "general": "General",
+      "connection": "Connection",
+      "ssl": "SSL",
+      "ssh_tunnel": "SSH Tunnel",
+      "parameters": "Parameters"
+    },
+    "general": {
+      "name": "Name",
+      "group": "Connection group",
+      "comment": "Comment"
+    },
+    "connection": {
+      "host": "Host name/address",
+      "port": "Port",
+      "database": "Maintenance database",
+      "user": "Username",
+      "password": "Password",
+      "save_password": "Save password?",
+      "role": "Role",
+      "ssl_mode": "SSL Mode"
+    },
+    "ssl": {
+      "root_cert": "Root certificate",
+      "cert": "Client certificate",
+      "key": "Client key",
+      "crl": "CRL (Revocation list)"
+    },
+    "ssh": {
+      "use_tunnel": "Use SSH tunnel?",
+      "host": "Tunnel host",
+      "port": "Tunnel port",
+      "user": "Tunnel user",
+      "auth_method": "Authentication method",
+      "identity_file": "Identity file",
+      "password": "SSH Password"
+    },
+    "params": {
+      "encoding": "Client encoding",
+      "app_name": "Application name",
+      "timeout": "Connection timeout (s)"
+    }
   }
 }
