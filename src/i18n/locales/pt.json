@@ -11,17 +11,17 @@
   },
   "dashboard": {
     "title": "Painel",
-    "subtitle": "Monitorando nós de infraestrutura criptografados",
-    "vault_active": "Cofre Ativo",
+    "subtitle": "Gerenciando suas conexões de banco de dados",
+    "vault_active": "Ativo",
     "init_node_title": "Inicializar Nó",
-    "init_node_desc": "Conecte um novo banco de dados e aplique criptografia AES-256 multi-lock às suas credenciais.",
-    "recent_nodes": "Nós Criptografados Recentes",
+    "init_node_desc": "Conecte um novo banco de dados para começar a explorar seus dados.",
+    "recent_nodes": "Conexões Recentes",
     "no_nodes": "Nenhum nó encontrado",
     "view_registry": "Ver Registro Completo"
   },
   "modal": {
     "new_connection": "Nova Conexão",
-    "init_node": "Inicialização de nó de dados seguro",
+    "init_node": "Configure uma nova conexão de dados",
     "alias": "Nome Amigável",
     "engine": "Motor",
     "host": "Endereço Host",
@@ -29,7 +29,7 @@
     "database": "Nome do Banco",
     "username": "Usuário",
     "password": "Senha",
-    "connect": "Conectar e Inicializar",
-    "encrypting": "Criptografando..."
+    "connect": "Conectar",
+    "encrypting": "Conectando..."
   }
 }

@@ -9,8 +9,7 @@ import {
   Database, 
   Search, 
   DatabaseZap, 
-  ExternalLink, 
-  Lock 
+  ExternalLink 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,13 +98,6 @@ function App() {
                 </div>
               </Card>
 
-              {/* Placeholder for future status cards */}
-              <Card className="border-dashed border-muted-foreground/20 bg-muted/10 flex items-center justify-center p-8 opacity-50">
-                <div className="flex flex-col items-center gap-2 text-center">
-                  <Lock size={20} />
-                  <span className="text-xs font-bold uppercase tracking-widest">Secure Storage</span>
-                </div>
-              </Card>
             </div>
 
             <section className="space-y-6 pt-4">

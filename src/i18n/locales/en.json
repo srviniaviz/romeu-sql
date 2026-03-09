@@ -11,17 +11,17 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Monitoring encrypted infrastructure nodes",
-    "vault_active": "Vault Active",
+    "subtitle": "Manage your database connections",
+    "vault_active": "Active",
     "init_node_title": "Initialize Node",
-    "init_node_desc": "Connect a new database and apply AES-256 multi-lock encryption to your credentials.",
-    "recent_nodes": "Recent Encrypted Nodes",
+    "init_node_desc": "Connect a new database to start exploring your data.",
+    "recent_nodes": "Recent Connections",
     "no_nodes": "Zero Nodes found",
     "view_registry": "View Full Registry"
   },
   "modal": {
     "new_connection": "New Connection",
-    "init_node": "Initialization of secure datasource node",
+    "init_node": "Configure a new data connection",
     "alias": "Friendly Name",
     "engine": "Engine",
     "host": "Host Address",
@@ -29,7 +29,7 @@
     "database": "Database Name",
     "username": "Username",
     "password": "Password",
-    "connect": "Connect & Initialize",
-    "encrypting": "Encrypting..."
+    "connect": "Connect",
+    "encrypting": "Connecting..."
   }
 }
