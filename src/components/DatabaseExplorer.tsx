@@ -25,21 +25,45 @@ export function DatabaseExplorer({ connection }: Props) {
       setLoading(true);
       setError(null);
       
-      const connStr = `${connection.type}://${connection.username}:${connection.password}@${connection.host}:${connection.port}/${connection.database}`;
+      // Construct connection string properly based on type
+      let connStr = "";
+      const { type, host, port, username, password, database } = connection;
+      
+      if (type === 'postgres') {
+        connStr = `postgres://${username}:${password}@${host}:${port}/${database}`;
+      } else if (type === 'mysql') {
+        connStr = `mysql://${username}:${password}@${host}:${port}/${database}`;
+      } else if (type === 'sqlite') {
+        connStr = `sqlite:${host}`;
+      } else if (type === 'sqlserver') {
+        connStr = `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
+      }
+
+      console.log(`[DatabaseExplorer] Connecting to ${type} at ${host}...`);
       const db = await Database.load(connStr);
       
       let query = "";
-      if (connection.type === 'postgres') {
+      if (type === 'postgres') {
         query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
-      } else if (connection.type === 'mysql') {
+      } else if (type === 'mysql') {
         query = "SHOW TABLES";
-      } else if (connection.type === 'sqlite') {
+      } else if (type === 'sqlite') {
         query = "SELECT name FROM sqlite_master WHERE type='table'";
+      } else if (type === 'sqlserver') {
+        query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
       }
 
       const result = await db.select<any[]>(query);
-      const names = result.map(r => r.table_name || r.name || Object.values(r)[0]);
-      setTables(names);
+      console.log(`[DatabaseExplorer] Query result:`, result);
+
+      // Extract names robustly
+      const names = result.map(r => {
+        // Fallback for MySQL/generic results
+        return r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0];
+      });
+
+      setTables(names as string[]);
+      await db.close();
     } catch (err: any) {
       console.error("Database connection error:", err);
       setError(err.message || "Failed to connect to database");

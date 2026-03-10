@@ -2,6 +2,8 @@
   "common": {
     "cancel": "Cancel",
     "save": "Save",
+    "success": "Success",
+    "error": "Error",
     "settings": "Settings",
     "security": "Security",
     "search": "Search",
@@ -33,6 +35,7 @@
     "username": "Username",
     "password": "Password",
     "connect": "Connect",
+    "test_connection": "Test Connection",
     "encrypting": "Connecting...",
     "tabs": {
       "general": "General",

@@ -14,7 +14,9 @@ import {
   FolderTree,
   Filter,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,12 +28,51 @@ import { motion } from "framer-motion";
 import { useConnections, Connection } from "./lib/useConnections";
 
 import { DatabaseExplorer } from "./components/DatabaseExplorer";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
 
 function App() {
   const { t } = useTranslation();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { connections, loading } = useConnections();
+  const [editingConn, setEditingConn] = useState<Connection | null>(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [connToDelete, setConnToDelete] = useState<string | null>(null);
+  const { connections, loading, removeConnection } = useConnections();
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
+
+  const handleEdit = (conn: Connection, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingConn(conn);
+    setIsModalOpen(true);
+  };
+
+  const confirmDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConnToDelete(id);
+    setIsDeleteOpen(true);
+  };
+
+  const handleDelete = () => {
+    if (connToDelete) {
+      removeConnection(connToDelete);
+      if (selectedConn?.id === connToDelete) {
+        setSelectedConn(null);
+      }
+      setIsDeleteOpen(false);
+      setConnToDelete(null);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingConn(null);
+  };
 
   const getEngineColor = (type: string) => {
     switch (type) {
@@ -135,6 +176,24 @@ function App() {
                           </span>
                         </div>
                       </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 rounded opacity-40 hover:opacity-100 hover:bg-primary/10"
+                          onClick={(e) => handleEdit(conn, e)}
+                        >
+                          <Pencil size={12} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 rounded opacity-40 hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => confirmDelete(conn.id, e)}
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -209,7 +268,30 @@ function App() {
         </ScrollArea>
       </main>
 
-      <CreateConnectionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <CreateConnectionModal 
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal}
+        connectionToEdit={editingConn}
+      />
+
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black italic uppercase italic tracking-tighter text-destructive">Delete Connection?</DialogTitle>
+            <DialogDescription className="text-xs font-medium opacity-60">
+              This action cannot be undone. This will permanently delete the connection profile.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} className="text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100">
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} className="text-[10px] font-black uppercase tracking-widest">
+              Delete Forever
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

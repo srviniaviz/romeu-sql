@@ -24,4 +24,5 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-store = "2.0.0-rc.0"
 tauri-plugin-sql = { version = "2.3.2", features = ["postgres", "mysql", "sqlite"] }
+tauri-plugin-stronghold = "2"
 

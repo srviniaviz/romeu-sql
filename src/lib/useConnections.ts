@@ -24,23 +24,33 @@ export function useConnections() {
     try {
       setLoading(true);
       const saved = await store.get<Connection[]>("registry");
-      if (saved) {
-        setConnections(saved);
-      }
+      setConnections(saved || []);
     } catch (error) {
-      console.error("Failed to load connections:", error);
+      console.error("[useConnections] Error loading connections:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const addConnection = async (conn: Omit<Connection, "id">) => {
-    const newConn = { ...conn, id: crypto.randomUUID() };
-    const updated = [...connections, newConn];
+    const id = crypto.randomUUID();
+    const newConn = { ...conn, id };
+
+    const updated = [...connections, newConn as Connection];
+    await store.set("registry", updated);
+    await store.save();
+
+    setConnections(updated);
+    return newConn;
+  };
+
+  const updateConnection = async (id: string, conn: Partial<Connection>) => {
+    const updated = connections.map(c =>
+      c.id === id ? { ...c, ...conn, id } : c
+    );
     await store.set("registry", updated);
     await store.save();
     setConnections(updated);
-    return newConn;
   };
 
   const removeConnection = async (id: string) => {
@@ -54,5 +64,5 @@ export function useConnections() {
     loadConnections();
   }, []);
 
-  return { connections, addConnection, removeConnection, loading, refresh: loadConnections };
+  return { connections, addConnection, updateConnection, removeConnection, loading, refresh: loadConnections };
 }
