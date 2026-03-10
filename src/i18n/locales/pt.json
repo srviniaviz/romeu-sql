@@ -49,12 +49,12 @@
     "connection": {
       "host": "Endereço Host",
       "port": "Porta",
-      "database": "Banco de Dados de Manutenção",
+      "database": "Banco de Dados",
       "user": "Usuário",
       "password": "Senha",
-      "save_password": "Salvar senha?",
-      "role": "Role",
-      "ssl_mode": "Modo SSL"
+      "save_password": "Salvar senha nas configurações",
+      "ssl_mode": "Modo SSL",
+      "magic_url": "Magic URL (Auto-preenchimento)"
     },
     "ssl": {
       "root_cert": "Certificado Root",

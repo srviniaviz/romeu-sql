@@ -1,6 +1,7 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
 import * as z from "zod";
 import { 
   Dialog, 
@@ -46,6 +47,7 @@ const connectionSchema = z.object({
   comment: z.string().optional(),
   
   // Connection Tab
+  connectionUrl: z.string().optional(),
   type: z.enum(["postgres", "mysql", "sqlite", "sqlserver"]),
   host: z.string().min(1, "Host is required"),
   port: z.string().regex(/^\d+$/, "Must be a number"),
@@ -83,6 +85,8 @@ const connectionSchema = z.object({
  */
 type ConnectionFormValues = z.infer<typeof connectionSchema>;
 
+import { useConnections } from "../lib/useConnections";
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -90,9 +94,9 @@ interface Props {
 
 export function CreateConnectionModal({ isOpen, onClose }: Props) {
   const { t } = useTranslation();
+  const { addConnection } = useConnections();
   
-  // Initialize form with default values matching the schema.
-  const { register, handleSubmit, control, watch, formState: { isSubmitting } } = useForm<ConnectionFormValues>({
+  const { register, handleSubmit, control, watch, setValue, formState: { isSubmitting } } = useForm<ConnectionFormValues>({
     resolver: zodResolver(connectionSchema),
     defaultValues: { 
       type: "postgres", 
@@ -108,18 +112,49 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
 
   const sshEnabled = watch("sshEnabled");
   const sshAuthMethod = watch("sshAuthMethod");
+  const connectionUrl = watch("connectionUrl");
+
+  // Magic URL Parser
+  useEffect(() => {
+    if (!connectionUrl) return;
+
+    try {
+      const url = new URL(connectionUrl);
+      
+      // Map protocol to type
+      const protocol = url.protocol.replace(':', '');
+      if (['postgres', 'postgresql'].includes(protocol)) setValue('type', 'postgres');
+      else if (['mysql', 'mariadb'].includes(protocol)) setValue('type', 'mysql');
+      else if (['sqlite'].includes(protocol)) setValue('type', 'sqlite');
+      else if (['sqlserver', 'mssql', 'sqlserver'].includes(protocol)) setValue('type', 'sqlserver');
+
+      if (url.hostname) setValue('host', url.hostname);
+      if (url.port) setValue('port', url.port);
+      if (url.username) setValue('username', decodeURIComponent(url.username));
+      if (url.password) setValue('password', decodeURIComponent(url.password));
+      
+      // Handle database name (path)
+      const dbName = url.pathname.replace('/', '');
+      if (dbName) setValue('database', dbName);
+
+    } catch (e) {
+      // Not a valid URL yet, skip
+    }
+  }, [connectionUrl, setValue]);
 
   const onSubmit = async (data: ConnectionFormValues) => {
-    // Artificial delay to show loading state.
-    await new Promise(r => setTimeout(r, 1200));
-    console.log("Saving Connection via SubmitHandler:", data);
-    onClose();
+    try {
+      await addConnection(data);
+      onClose();
+    } catch (error) {
+      console.error("Failed to save connection:", error);
+    }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[720px] gap-0 p-0 overflow-hidden border-none shadow-2xl ring-1 ring-border/10">
-        <DialogHeader className="p-6 bg-muted/20 border-b border-border/10">
+        <DialogHeader className="p-8 pb-2">
           <div className="flex items-center gap-4">
             <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
               <Database className="size-5" />
@@ -133,8 +168,8 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <Tabs defaultValue="general" className="w-full">
-            <div className="px-8 py-4 border-b border-border/10 bg-muted/5">
-              <TabsList className="grid w-full grid-cols-5 h-10 p-1 bg-muted/50 rounded-lg">
+            <div className="px-8 py-2">
+              <TabsList className="grid w-full grid-cols-5 h-11 p-1.5 bg-muted/30 rounded-xl">
                 <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   {t('modal.tabs.general')}
                 </TabsTrigger>
@@ -174,6 +209,20 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
 
                 <TabsContent value="connection" className="space-y-6 mt-0">
                   <div className="grid gap-5">
+                    {/* Magic URL Field */}
+                    <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                      <div className="flex items-center gap-2 mb-1">
+                        <RefreshCw size={14} className="text-primary opacity-60" />
+                        <Label className="text-[10px] uppercase tracking-widest font-black text-primary">{t('modal.connection.magic_url')}</Label>
+                      </div>
+                      <Input 
+                        {...register("connectionUrl")} 
+                        placeholder="postgresql://user:password@localhost:5432/database" 
+                        className="bg-background/80 border-primary/10 focus-visible:ring-primary/20"
+                      />
+                      <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-tighter italic">Pasting a URL will automatically fill all fields below</p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.engine')}</Label>
@@ -403,17 +452,15 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
               </div>
             </ScrollArea>
 
-            <div className="p-6 bg-muted/20 border-t border-border/10">
-              <DialogFooter className="gap-2 sm:gap-2">
-                <Button type="button" variant="ghost" onClick={onClose} className="h-10 font-bold uppercase tracking-widest text-xs">
-                  {t('common.cancel')}
-                </Button>
-                <Button type="submit" disabled={isSubmitting} className="h-10 px-10 font-bold uppercase tracking-widest text-xs bg-primary text-primary-foreground shadow-lg shadow-primary/10">
-                  {isSubmitting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
-                  {t('modal.connect')}
-                </Button>
-              </DialogFooter>
-            </div>
+            <DialogFooter className="px-10 pb-10 pt-4 gap-3">
+              <Button type="button" variant="ghost" onClick={onClose} className="h-11 px-6 font-bold uppercase tracking-widest text-[10px] opacity-40 hover:opacity-100 hover:bg-white/5 transition-all">
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="h-11 px-12 font-bold uppercase tracking-widest text-[10px] bg-white text-black hover:bg-white/90 shadow-xl shadow-white/5 transition-all active:scale-[0.98]">
+                {isSubmitting ? <RefreshCw className="mr-2 size-3 animate-spin" /> : null}
+                {t('modal.connect')}
+              </Button>
+            </DialogFooter>
           </Tabs>
         </form>
       </DialogContent>

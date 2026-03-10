@@ -49,12 +49,13 @@
     "connection": {
       "host": "Host name/address",
       "port": "Port",
-      "database": "Maintenance database",
+      "database": "Database",
       "user": "Username",
       "password": "Password",
-      "save_password": "Save password?",
+      "save_password": "Save password in settings",
       "role": "Role",
-      "ssl_mode": "SSL Mode"
+      "ssl_mode": "SSL Mode",
+      "magic_url": "Magic URL (Auto-fill)"
     },
     "ssl": {
       "root_cert": "Root certificate",

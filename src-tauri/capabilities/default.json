@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "store:default",
+    "sql:default",
     {
       "identifier": "core:window:allow-close",
       "windows": ["main"]
