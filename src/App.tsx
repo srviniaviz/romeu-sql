@@ -9,22 +9,18 @@ import {
   Search, 
   Code2,
   GitBranch,
-  ChevronRight,
   MoreHorizontal,
   FolderTree,
   Filter,
   ExternalLink,
   RefreshCw,
-  Pencil,
-  Trash2,
-  LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 import { useConnections, Connection } from "./lib/useConnections";
 
@@ -37,6 +33,7 @@ import {
   DialogHeader, 
   DialogTitle 
 } from "@/components/ui/dialog";
+import { SidebarConnection } from "./components/SidebarConnection";
 
 function App() {
   const { t } = useTranslation();
@@ -46,6 +43,14 @@ function App() {
   const [connToDelete, setConnToDelete] = useState<string | null>(null);
   const { connections, loading, removeConnection } = useConnections();
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
+  const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
+  const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
+
+  const handleCreateAction = (conn: Connection, type: 'table' | 'db' = 'table') => {
+    setSelectedConn(conn);
+    if (type === 'table') setShouldOpenCreateModal(true);
+    else setShouldOpenCreateDbModal(true);
+  };
 
   const handleEdit = (conn: Connection, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -80,15 +85,6 @@ function App() {
     setEditingConn(null);
   };
 
-  const getEngineColor = (type: string) => {
-    switch (type) {
-      case 'postgres': return 'bg-cyan-500';
-      case 'mysql': return 'bg-amber-500';
-      case 'sqlite': return 'bg-emerald-500';
-      case 'sqlserver': return 'bg-red-500';
-      default: return 'bg-primary';
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-xs">
@@ -160,71 +156,25 @@ function App() {
                   </div>
                 </div>
 
-                {/* Connection Items */}
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-0.5 px-3">
                   {loading ? (
                     <div className="p-4 flex justify-center">
                       <RefreshCw size={16} className="animate-spin opacity-20" />
                     </div>
-                  ) : connections.map((conn) => {
-                    const isActive = selectedConn?.id === conn.id;
-                    return (
-                      <div 
-                        key={conn.id}
-                        className={`group flex items-center h-9 px-3 gap-3 rounded-lg hover:bg-primary/5 cursor-pointer transition-all ${isActive ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(var(--primary),0.1)]' : ''}`}
-                        onClick={() => setSelectedConn(conn)}
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <ChevronRight size={14} className={`opacity-20 transition-opacity ${isActive ? 'rotate-90 opacity-100 text-primary' : 'group-hover:opacity-40'}`} />
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="relative flex items-center">
-                              <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} opacity-80 group-hover:opacity-100 transition-opacity shadow-[0_0_8px_rgba(0,0,0,0.1)]`} />
-                              {isActive && (
-                                <motion.div 
-                                  layoutId="active-dot" 
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] border-[1.5px] border-background" 
-                                />
-                              )}
-                            </div>
-                            <span className={`text-[11px] font-bold tracking-tight text-muted-foreground transition-colors truncate uppercase ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`}>
-                              {conn.name}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className={`flex items-center gap-1 transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                          {isActive && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-6 rounded text-primary hover:bg-primary/20 hover:text-primary transition-all"
-                              onClick={(e) => handleDisconnect(e)}
-                            >
-                              <LogOut size={12} />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-6 rounded opacity-40 hover:opacity-100 hover:bg-primary/10"
-                            onClick={(e) => handleEdit(conn, e)}
-                          >
-                            <Pencil size={12} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-6 rounded opacity-40 hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                            onClick={(e) => confirmDelete(conn.id, e)}
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  ) : connections.map((conn) => (
+                    <SidebarConnection 
+                      key={conn.id}
+                      conn={conn}
+                      isActive={selectedConn?.id === conn.id}
+                      activeDatabase={selectedConn?.id === conn.id ? selectedConn.database : undefined}
+                      onSelect={setSelectedConn}
+                      onEdit={handleEdit}
+                      onDelete={confirmDelete}
+                      onDisconnect={handleDisconnect}
+                      onCreateAction={(c) => handleCreateAction(c, 'table')}
+                      onCreateDatabase={(c) => handleCreateAction(c, 'db')}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -245,6 +195,12 @@ function App() {
               <DatabaseExplorer 
                 connection={selectedConn} 
                 onDisconnect={() => setSelectedConn(null)}
+                openCreateOnMount={shouldOpenCreateModal}
+                openCreateDbOnMount={shouldOpenCreateDbModal}
+                onModalOpened={() => {
+                   setShouldOpenCreateModal(false);
+                   setShouldOpenCreateDbModal(false);
+                }}
               />
             ) : (
               <div className="max-w-4xl mx-auto space-y-12 animate-in fade-in duration-1000">
