@@ -7,15 +7,18 @@ import {
   AlertCircle,
   Hash,
   Type,
-  Calendar
+  Calendar,
+  LogOut
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   connection: Connection;
+  onDisconnect: () => void;
 }
 
-export function DatabaseExplorer({ connection }: Props) {
+export function DatabaseExplorer({ connection, onDisconnect }: Props) {
   const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,12 +96,22 @@ export function DatabaseExplorer({ connection }: Props) {
           <span className="font-bold uppercase tracking-widest text-xs">Connection Failed</span>
         </div>
         <p className="text-sm font-medium opacity-60 leading-relaxed">{error}</p>
-        <button 
-          onClick={fetchTables}
-          className="w-fit text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-        >
-          Try Again
-        </button>
+        <div className="flex gap-3">
+          <Button 
+            onClick={fetchTables}
+            className="w-fit text-[10px] font-black uppercase tracking-widest"
+            variant="destructive"
+          >
+            Try Again
+          </Button>
+          <Button 
+            onClick={onDisconnect}
+            className="w-fit text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100"
+            variant="ghost"
+          >
+            Disconnect
+          </Button>
+        </div>
       </div>
     );
   }
@@ -124,6 +137,15 @@ export function DatabaseExplorer({ connection }: Props) {
             <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">Tables: </span>
             <span className="text-xs font-bold tabular-nums">{tables.length}</span>
           </div>
+
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="size-10 rounded-xl opacity-20 hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive group"
+            onClick={onDisconnect}
+          >
+            <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
+          </Button>
         </div>
       </div>
 

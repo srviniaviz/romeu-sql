@@ -16,14 +16,15 @@ import {
   ExternalLink,
   RefreshCw,
   Pencil,
-  Trash2
+  Trash2,
+  LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { useConnections, Connection } from "./lib/useConnections";
 
@@ -50,6 +51,11 @@ function App() {
     e.stopPropagation();
     setEditingConn(conn);
     setIsModalOpen(true);
+  };
+
+  const handleDisconnect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedConn(null);
   };
 
   const confirmDelete = (id: string, e: React.MouseEvent) => {
@@ -85,7 +91,7 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans">
+    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground font-sans text-xs">
       <Titlebar />
 
       <main className="flex-1 flex overflow-hidden">
@@ -160,42 +166,65 @@ function App() {
                     <div className="p-4 flex justify-center">
                       <RefreshCw size={16} className="animate-spin opacity-20" />
                     </div>
-                  ) : connections.map((conn) => (
-                    <div 
-                      key={conn.id}
-                      className={`group flex items-center h-9 px-3 gap-3 rounded-lg hover:bg-primary/5 cursor-pointer transition-colors ${selectedConn?.id === conn.id ? 'bg-primary/10 text-primary' : ''}`}
-                      onClick={() => setSelectedConn(conn)}
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <ChevronRight size={14} className={`opacity-20 transition-opacity ${selectedConn?.id === conn.id ? 'rotate-90 opacity-100' : 'group-hover:opacity-40'}`} />
-                        <div className="flex items-center gap-2.5">
-                          <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} opacity-80 group-hover:opacity-100 transition-opacity shadow-[0_0_8px_rgba(0,0,0,0.1)]`} />
-                          <Database size={14} className="opacity-30 group-hover:opacity-100 transition-opacity" />
-                          <span className={`text-[11px] font-bold tracking-tight text-muted-foreground transition-colors truncate uppercase ${selectedConn?.id === conn.id ? 'text-primary' : 'group-hover:text-foreground'}`}>
-                            {conn.name}
-                          </span>
+                  ) : connections.map((conn) => {
+                    const isActive = selectedConn?.id === conn.id;
+                    return (
+                      <div 
+                        key={conn.id}
+                        className={`group flex items-center h-9 px-3 gap-3 rounded-lg hover:bg-primary/5 cursor-pointer transition-all ${isActive ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(var(--primary),0.1)]' : ''}`}
+                        onClick={() => setSelectedConn(conn)}
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <ChevronRight size={14} className={`opacity-20 transition-opacity ${isActive ? 'rotate-90 opacity-100 text-primary' : 'group-hover:opacity-40'}`} />
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative flex items-center">
+                              <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} opacity-80 group-hover:opacity-100 transition-opacity shadow-[0_0_8px_rgba(0,0,0,0.1)]`} />
+                              {isActive && (
+                                <motion.div 
+                                  layoutId="active-dot" 
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] border-[1.5px] border-background" 
+                                />
+                              )}
+                            </div>
+                            <span className={`text-[11px] font-bold tracking-tight text-muted-foreground transition-colors truncate uppercase ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`}>
+                              {conn.name}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className={`flex items-center gap-1 transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                          {isActive && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 rounded text-primary hover:bg-primary/20 hover:text-primary transition-all"
+                              onClick={(e) => handleDisconnect(e)}
+                            >
+                              <LogOut size={12} />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-6 rounded opacity-40 hover:opacity-100 hover:bg-primary/10"
+                            onClick={(e) => handleEdit(conn, e)}
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-6 rounded opacity-40 hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => confirmDelete(conn.id, e)}
+                          >
+                            <Trash2 size={12} />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 rounded opacity-40 hover:opacity-100 hover:bg-primary/10"
-                          onClick={(e) => handleEdit(conn, e)}
-                        >
-                          <Pencil size={12} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 rounded opacity-40 hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => confirmDelete(conn.id, e)}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -213,7 +242,10 @@ function App() {
             className="max-w-6xl mx-auto px-8 py-16"
           >
             {selectedConn ? (
-              <DatabaseExplorer connection={selectedConn} />
+              <DatabaseExplorer 
+                connection={selectedConn} 
+                onDisconnect={() => setSelectedConn(null)}
+              />
             ) : (
               <div className="max-w-4xl mx-auto space-y-12 animate-in fade-in duration-1000">
                 <header className="space-y-1">
