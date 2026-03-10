@@ -6,6 +6,7 @@ import {
   DialogDescription,
   DialogFooter
 } from "@/components/ui/dialog";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
+  const { t } = useTranslation();
   const {
     tableName,
     setTableName,
@@ -77,9 +79,9 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
               <TableIcon size={20} />
             </div>
             <div>
-              <DialogTitle>Create New Table</DialogTitle>
+              <DialogTitle>{t('modal_create_table.title')}</DialogTitle>
               <DialogDescription>
-                Design your table schema for {dbType.toUpperCase()}
+                {t('modal_create_table.description', { dbType: dbType.toUpperCase() })}
               </DialogDescription>
             </div>
           </div>
@@ -90,12 +92,12 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           <div className="flex-1 flex flex-col min-w-0">
             <div className="p-6 pb-2 shrink-0">
               <div className="grid gap-2">
-                <Label htmlFor="tableName" className="text-xs font-semibold opacity-60">Table Name</Label>
+                <Label htmlFor="tableName" className="text-xs font-semibold opacity-60">{t('modal_create_table.field_label')}</Label>
                 <Input 
                   id="tableName"
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
-                  placeholder="users, orders, etc." 
+                  placeholder={t('modal_create_table.placeholder')} 
                   className="h-9"
                 />
               </div>
@@ -104,14 +106,14 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
             <div className="flex-1 overflow-y-auto px-6 py-2 custom-scrollbar">
               <div className="space-y-4 pb-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wider">Columns</h4>
+                  <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wider">{t('modal_create_table.columns_label')}</h4>
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={addColumn}
                     className="h-8 gap-2 text-xs"
                   >
-                    <Plus size={14} /> Add Column
+                    <Plus size={14} /> {t('modal_create_table.add_column')}
                   </Button>
                 </div>
 
@@ -130,13 +132,13 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                             <Input 
                               value={col.name}
                               onChange={(e) => updateColumn(col.id, { name: e.target.value })}
-                              placeholder="column_name"
+                              placeholder={t('modal_create_table.column_name_placeholder')}
                               className="h-9 font-bold tracking-tight bg-background/50 border-muted"
                             />
 
                             <Select value={col.type} onValueChange={(val) => updateColumn(col.id, { type: val })}>
                               <SelectTrigger className="h-9 text-xs bg-background/50 border-muted">
-                                <SelectValue placeholder="Type" />
+                                <SelectValue placeholder={t('modal_create_table.column_type_placeholder')} />
                               </SelectTrigger>
                               <SelectContent>
                                 {commonTypes.map(t => (
@@ -166,7 +168,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                                 onCheckedChange={(val) => updateColumn(col.id, { isPrimary: !!val, isNullable: !val })} 
                                 className="size-4 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                               />
-                              <Label htmlFor={`pk-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">Primary</Label>
+                              <Label htmlFor={`pk-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">{t('modal_create_table.column_primary')}</Label>
                             </div>
                             
                             <Separator orientation="vertical" className="h-4 bg-muted" />
@@ -179,14 +181,14 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                                 disabled={col.isPrimary}
                                 className="size-4 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                               />
-                              <Label htmlFor={`null-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">Nullable</Label>
+                              <Label htmlFor={`null-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">{t('modal_create_table.column_nullable')}</Label>
                             </div>
                           </div>
 
                           <Input 
                             value={col.defaultValue}
                             onChange={(e) => updateColumn(col.id, { defaultValue: e.target.value })}
-                            placeholder="Default Value (e.g. NULL, 'value')"
+                            placeholder={t('modal_create_table.column_default_placeholder')}
                             className="h-9 text-xs font-mono flex-1 bg-background/40 border-muted"
                           />
                         </div>
@@ -212,7 +214,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           <div className="w-[300px] bg-muted/10 flex flex-col p-6 border-l shrink-0">
             <div className="flex items-center gap-2 mb-4 opacity-70">
               <FileCode size={16} />
-              <span className="text-xs font-semibold uppercase tracking-wider">SQL Preview</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">{t('modal_create_table.sql_preview')}</span>
             </div>
 
             <div className="flex-1 rounded-lg border bg-muted/20 p-4 font-mono text-[10px] text-muted-foreground overflow-y-auto custom-scrollbar">
@@ -222,20 +224,20 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
             <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 flex gap-2 shrink-0">
               <AlertCircle size={14} className="text-amber-500 shrink-0" />
               <p className="text-[10px] text-amber-500/80 leading-snug">
-                Execution will modify your database schema immediately.
+                {t('modal_create_table.warn_modification')}
               </p>
             </div>
           </div>
         </div>
 
         <DialogFooter className="p-6">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button 
             onClick={handleCreate}
             disabled={!tableName || columns.some(c => !c.name) || loading}
             className="min-w-[120px]"
           >
-            {loading ? <Loader2 size={16} className="animate-spin" /> : 'Create Table'}
+            {loading ? <Loader2 size={16} className="animate-spin" /> : t('modal_create_table.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

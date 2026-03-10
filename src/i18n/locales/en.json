@@ -79,5 +79,62 @@
       "app_name": "Application name",
       "timeout": "Connection timeout (s)"
     }
+  },
+  "explorer": {
+    "connecting": "Connecting to Engine...",
+    "connection_failed": "Connection Failed",
+    "try_again": "Try Again",
+    "disconnect": "Disconnect",
+    "records": "Records",
+    "tables": "Tables",
+    "table_view": "Table",
+    "json_view": "JSON",
+    "console": "Console",
+    "sql_editor": "SQL Editor",
+    "activity_log": "Activity Log",
+    "clear": "Clear",
+    "run_script": "Run Script",
+    "clear_history": "Clear History",
+    "no_activity": "No activity recorded yet",
+    "sync_success": "Sync Success",
+    "engine_error": "Engine Error",
+    "engine_fault": "Engine Fault",
+    "back_to_grid": "Back to Grid",
+    "add_document": "Add Document",
+    "fetching_records": "Fetching records...",
+    "no_data": "No data found in this collection",
+    "no_collections": "No collections found in this database.",
+    "explore": "Explore",
+    "placeholder_sql": "-- Write your SQL script here...\\nCREATE TABLE demo (id INT, name TEXT);",
+    "record_label": "Record"
+  },
+  "modal_create_db": {
+    "title": "Create New Database",
+    "description": "Define a name for your new engine schema.",
+    "field_label": "Database Name",
+    "placeholder": "my_new_database",
+    "submit": "Create Database"
+  },
+  "modal_create_table": {
+    "title": "Create New Table",
+    "description": "Design your table schema for {{dbType}}",
+    "field_label": "Table Name",
+    "placeholder": "users, orders, etc.",
+    "columns_label": "Columns",
+    "add_column": "Add Column",
+    "column_name_placeholder": "column_name",
+    "column_type_placeholder": "Type",
+    "column_primary": "Primary",
+    "column_nullable": "Nullable",
+    "column_default_placeholder": "Default Value (e.g. NULL, 'value')",
+    "sql_preview": "SQL Preview",
+    "warn_modification": "Execution will modify your database schema immediately.",
+    "submit": "Create Table"
+  },
+  "modal_insert": {
+    "title": "Insert Into {{tableName}}",
+    "description": "Add a new record to this collection",
+    "no_fields": "No editable fields found",
+    "submit": "Save Record"
   }
 }

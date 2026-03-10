@@ -79,5 +79,62 @@
       "app_name": "Nome da Aplicação",
       "timeout": "Timeout da Conexão (s)"
     }
+  },
+  "explorer": {
+    "connecting": "Conectando ao Motor...",
+    "connection_failed": "Falha na Conexão",
+    "try_again": "Tentar Novamente",
+    "disconnect": "Desconectar",
+    "records": "Registros",
+    "tables": "Tabelas",
+    "table_view": "Tabela",
+    "json_view": "JSON",
+    "console": "Console",
+    "sql_editor": "Editor SQL",
+    "activity_log": "Log de Atividades",
+    "clear": "Limpar",
+    "run_script": "Executar Script",
+    "clear_history": "Limpar Histórico",
+    "no_activity": "Nenhuma atividade registrada ainda",
+    "sync_success": "Sucesso na Sincronização",
+    "engine_error": "Erro do Motor",
+    "engine_fault": "Falha no Motor",
+    "back_to_grid": "Voltar para a Grade",
+    "add_document": "Adicionar Item",
+    "fetching_records": "Buscando registros...",
+    "no_data": "Nenhum dado encontrado nesta coleção",
+    "no_collections": "Nenhuma coleção encontrada neste banco de dados.",
+    "explore": "Explorar",
+    "placeholder_sql": "-- Escreva seu script SQL aqui...\\nCREATE TABLE demo (id INT, nome TEXT);",
+    "record_label": "Registro"
+  },
+  "modal_create_db": {
+    "title": "Criar Novo Banco de Dados",
+    "description": "Defina um nome para o seu novo esquema no motor.",
+    "field_label": "Nome do Banco",
+    "placeholder": "meu_novo_banco",
+    "submit": "Criar Banco"
+  },
+  "modal_create_table": {
+    "title": "Criar Nova Tabela",
+    "description": "Desenhe o esquema da sua tabela para {{dbType}}",
+    "field_label": "Nome da Tabela",
+    "placeholder": "usuarios, pedidos, etc.",
+    "columns_label": "Colunas",
+    "add_column": "Adicionar Coluna",
+    "column_name_placeholder": "nome_da_coluna",
+    "column_type_placeholder": "Tipo",
+    "column_primary": "Chave Primária",
+    "column_nullable": "Nulável",
+    "column_default_placeholder": "Valor Padrão (ex: NULL, 'valor')",
+    "sql_preview": "Prévia do SQL",
+    "warn_modification": "A execução modificará o esquema do banco de dados imediatamente.",
+    "submit": "Criar Tabela"
+  },
+  "modal_insert": {
+    "title": "Inserir em {{tableName}}",
+    "description": "Adicione um novo registro a esta coleção",
+    "no_fields": "Nenhum campo editável encontrado",
+    "submit": "Salvar Registro"
   }
 }

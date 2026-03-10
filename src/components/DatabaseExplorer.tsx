@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import Database from "@tauri-apps/plugin-sql";
 import { Connection } from "../lib/useConnections";
 import { 
@@ -31,13 +33,6 @@ import { CreateTableModal } from "./CreateTableModal";
 import { CreateDatabaseModal } from "./CreateDatabaseModal";
 import { InsertDataModal } from "./InsertDataModal";
 
-interface ColumnInfo {
-  name: string;
-  type: string;
-  nullable: boolean;
-  defaultValue: any;
-  isPrimaryKey: boolean;
-}
 
 interface Props {
   connection: Connection;
@@ -67,25 +62,28 @@ export function DatabaseExplorer({
     selectedTable,
     onTableSelected
 }: Props) {
-  const [tables, setTables] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
+  const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
+  
   const [sqlQuery, setSqlQuery] = useState("");
-  const [executing, setExecuting] = useState(false);
   const [execResult, setExecResult] = useState<{ success: boolean, message: string } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [tableData, setTableData] = useState<any[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
-  const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
-  const [columns, setColumns] = useState<ColumnInfo[]>([]);
-  const lastRequestId = useRef<string | null>(null);
+  
+  const getConnectionString = useMemo(() => {
+    const { type, host, port, username, password, database } = connection;
+    if (type === 'postgres') return `postgres://${username}:${password}@${host}:${port}/${database}`;
+    if (type === 'mysql') return `mysql://${username}:${password}@${host}:${port}/${database}`;
+    if (type === 'sqlite') return `sqlite:${host}`;
+    if (type === 'sqlserver') return `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
+    return "";
+  }, [connection]);
 
   const addHistory = (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
     setHistory(prev => [{
@@ -105,253 +103,194 @@ export function DatabaseExplorer({
     }
   }, [openCreateOnMount, openCreateDbOnMount]);
 
-  const handleCreateDatabase = async (name: string) => {
-    const query = connection.type === 'sqlserver' ? `CREATE SCHEMA ${name}` : `CREATE DATABASE ${name}`;
-    try {
-      setExecuting(true);
-      const db = await Database.load(getConnectionString());
-      await db.execute(query);
-      const msg = `Database ${name} created successfully!`;
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: 'Create Database', query, status: 'success', message: msg });
-      await db.close();
-      fetchTables();
-    } catch (err: any) {
-      const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: 'Create Database', query, status: 'error', message: msg });
-      throw err;
-    } finally {
-      setExecuting(false);
-    }
-  };
+  // --- QUERIES ---
 
-  const handleCreateTable = async (sql: string) => {
-    try {
-      setExecuting(true);
-      setExecResult(null);
-      const db = await Database.load(getConnectionString());
-      await db.execute(sql);
-      const msg = "Table created successfully!";
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: 'Create Table', query: sql, status: 'success', message: msg });
-      await db.close();
-      fetchTables();
-      setIsCreateModalOpen(false);
-    } catch (err: any) {
-      const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: 'Create Table', query: sql, status: 'error', message: msg });
-      setIsConsoleOpen(true);
-      setActiveTab('editor');
-      throw err;
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const fetchTables = async () => {
-    // ID to track this specific request
-    const requestId = Date.now().toString();
-    lastRequestId.current = requestId;
-
-    try {
-      if (isFirstLoad) setLoading(true);
-      setRefreshing(true);
-      setError(null);
-      
-      let connStr = getConnectionString();
-      const db = await Database.load(connStr);
-      
-      try {
-          if (lastRequestId.current !== requestId) {
-              await db.close();
-              return;
-          }
-
+  const { data: tables = [], isLoading: loading, error: fetchError, refetch: refetchTables, isFetching: refreshing } = useQuery({
+    queryKey: ['tables', connection.id, connection.database],
+    queryFn: async () => {
+        const db = await Database.load(getConnectionString);
+        try {
           let query = "";
           const type = connection.type;
           if (type === 'postgres') {
-            query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
+            query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name ASC";
           } else if (type === 'mysql') {
             query = "SHOW TABLES";
           } else if (type === 'sqlite') {
-            query = "SELECT name FROM sqlite_master WHERE type='table'";
+            query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC";
           } else if (type === 'sqlserver') {
-            query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+            query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME ASC";
           }
-
+    
           const result = await db.select<any[]>(query);
-          
-          if (lastRequestId.current === requestId) {
-            const names = result.map(r => r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0]);
-            setTables(names as string[]);
-            setIsFirstLoad(false);
-          }
-      } finally {
+          return result.map(r => String(r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0]));
+        } finally {
           await db.close();
-      }
-    } catch (err: any) {
-      if (lastRequestId.current === requestId) {
-          const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-          setError(msg || "Failed to connect to database");
-          console.error("Database connection error:", err);
-      }
-    } finally {
-      if (lastRequestId.current === requestId) {
-          setLoading(false);
-          setRefreshing(false);
-      }
-    }
-  };
+        }
+    },
+    enabled: !!connection.id
+  });
 
-  const getConnectionString = () => {
-    const { type, host, port, username, password, database } = connection;
-    if (type === 'postgres') return `postgres://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'mysql') return `mysql://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'sqlite') return `sqlite:${host}`;
-    if (type === 'sqlserver') return `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
-    return "";
-  };
-
-  const executeSql = async () => {
-    if (!sqlQuery.trim()) return;
-    try {
-      setExecuting(true);
-      setExecResult(null);
-      const db = await Database.load(getConnectionString());
-      await db.execute(sqlQuery);
-      const msg = "Query executed successfully!";
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: 'Execute SQL', query: sqlQuery, status: 'success', message: msg });
-      await db.close();
-      fetchTables();
-    } catch (err: any) {
-      const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: 'Execute SQL', query: sqlQuery, status: 'error', message: msg });
-    } finally {
-      setExecuting(false);
-    }
-  };
-
-  const fetchTableData = async () => {
-    if (!selectedTable) return;
-    try {
-      setDataLoading(true);
-      const db = await Database.load(getConnectionString());
-      try {
-          const result = await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
-          setTableData(result);
-      } finally {
+  const { data: tableData = [], isLoading: dataLoading } = useQuery({
+    queryKey: ['tableData', connection.id, connection.database, selectedTable],
+    queryFn: async () => {
+        if (!selectedTable) return [];
+        const db = await Database.load(getConnectionString);
+        try {
+          return await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
+        } finally {
           await db.close();
-      }
-    } catch (err: any) {
-      console.error("Failed to fetch table data:", err);
-    } finally {
-      setDataLoading(false);
-    }
-  };
+        }
+    },
+    enabled: !!selectedTable
+  });
 
-  const fetchColumns = async () => {
-    if (!selectedTable) return;
-    try {
-      const db = await Database.load(getConnectionString());
-      try {
-          let query = "";
-          const type = connection.type;
-          
-          if (type === 'postgres') {
-            const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-            query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
-                     FROM information_schema.columns 
-                     WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
-                     ORDER BY ordinal_position`;
-          } else if (type === 'mysql') {
-            query = `DESCRIBE ${selectedTable}`;
-          } else if (type === 'sqlite') {
-            query = `PRAGMA table_info(${selectedTable})`;
-          } else if (type === 'sqlserver') {
-            const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-            query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
-                     FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
-          }
-
-          const result = await db.select<any[]>(query);
-          const mapped = result.map(r => {
-            const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
-            const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
+  const { data: columns = [] } = useQuery({
+    queryKey: ['columns', connection.id, connection.database, selectedTable],
+    queryFn: async () => {
+        if (!selectedTable) return [];
+        const db = await Database.load(getConnectionString);
+        try {
+            let query = "";
+            const type = connection.type;
             
-            // Basic PK detection that won't hide everything by mistake
-            const isPK = (
-                r.pk === 1 || 
-                r.Key === 'PRI' || 
-                r.is_identity === 1 ||
-                (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
-            );
-            
-            return {
-              name,
-              type: rawType,
-              nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
-              defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
-              isPrimaryKey: !!isPK
-            };
-          });
-          
-          setColumns(mapped);
-      } finally {
-          await db.close();
-      }
-    } catch (err) {
-      console.error("Failed to fetch columns:", err);
-    }
-  };
+            if (type === 'postgres') {
+              const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+              query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
+                       FROM information_schema.columns 
+                       WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
+                       ORDER BY ordinal_position`;
+            } else if (type === 'mysql') {
+              query = `DESCRIBE ${selectedTable}`;
+            } else if (type === 'sqlite') {
+              query = `PRAGMA table_info(${selectedTable})`;
+            } else if (type === 'sqlserver') {
+              const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+              query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
+                       FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
+            }
+  
+            const result = await db.select<any[]>(query);
+            return result.map(r => {
+              const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
+              const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
+              
+              const isPK = (
+                  r.pk === 1 || 
+                  r.Key === 'PRI' || 
+                  r.is_identity === 1 ||
+                  (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
+              );
+              
+              return {
+                name,
+                type: rawType,
+                nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
+                defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
+                isPrimaryKey: !!isPK
+              };
+            });
+        } finally {
+            await db.close();
+        }
+    },
+    enabled: !!selectedTable
+  });
 
-  const handleInsertData = async (data: Record<string, any>) => {
-    try {
-      const keys = Object.keys(data);
-      const values = Object.values(data).map(v => typeof v === 'string' ? `'${v}'` : v);
-      const query = `INSERT INTO ${selectedTable} (${keys.join(', ')}) VALUES (${values.join(', ')})`;
-      
-      const db = await Database.load(getConnectionString());
-      await db.execute(query);
-      await db.close();
-      
-      const msg = "Record inserted successfully!";
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: 'Insert Data', query, status: 'success', message: msg });
-      fetchTableData();
-    } catch (err: any) {
-      const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: 'Insert Data', status: 'error', message: msg });
-      throw err;
+  // --- MUTATIONS ---
+
+  const executeMutation = useMutation({
+    mutationFn: async (query: string) => {
+        const db = await Database.load(getConnectionString);
+        try {
+            await db.execute(query);
+            return { query };
+        } finally {
+            await db.close();
+        }
+    },
+    onSuccess: (res) => {
+        const msg = t('explorer.sync_success');
+        setExecResult({ success: true, message: msg });
+        addHistory({ action: t('explorer.sql_editor'), query: res.query, status: 'success', message: msg });
+        queryClient.invalidateQueries({ queryKey: ['tables'] });
+    },
+    onError: (err: any, query) => {
+        const msg = err.message || JSON.stringify(err);
+        addHistory({ action: t('explorer.sql_editor'), query, status: 'error', message: msg });
+        setExecResult({ success: false, message: msg });
     }
-  };
+  });
+
+  const insertMutation = useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+        const keys = Object.keys(data);
+        const values = Object.values(data).map(v => typeof v === 'string' ? `'${v}'` : v);
+        const query = `INSERT INTO ${selectedTable} (${keys.join(', ')}) VALUES (${values.join(', ')})`;
+        
+        const db = await Database.load(getConnectionString);
+        try {
+            await db.execute(query);
+            return { query };
+        } finally {
+            await db.close();
+        }
+    },
+    onSuccess: (res) => {
+        setExecResult({ success: true, message: t('explorer.sync_success') });
+        addHistory({ action: t('explorer.add_document'), query: res.query, status: 'success', message: t('explorer.sync_success') });
+        queryClient.invalidateQueries({ queryKey: ['tableData'] });
+    },
+    onError: (err: any) => {
+        const msg = err.message || JSON.stringify(err);
+        setExecResult({ success: false, message: msg });
+        addHistory({ action: t('explorer.add_document'), status: 'error', message: msg });
+    }
+  });
+
+  const createTableMutation = useMutation({
+    mutationFn: async (query: string) => {
+        const db = await Database.load(getConnectionString);
+        try {
+            await db.execute(query);
+        } finally {
+            await db.close();
+        }
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['tables'] });
+        setIsCreateModalOpen(false);
+    }
+  });
+
+  const createDbMutation = useMutation({
+    mutationFn: async (name: string) => {
+        const query = connection.type === 'sqlserver' ? `CREATE SCHEMA ${name}` : `CREATE DATABASE ${name}`;
+        const db = await Database.load(getConnectionString);
+        try {
+            await db.execute(query);
+        } finally {
+            await db.close();
+        }
+    },
+    onSuccess: () => {
+        setIsCreateDbModalOpen(false);
+        queryClient.invalidateQueries({ queryKey: ['tables'] });
+    }
+  });
 
   useEffect(() => {
-    if (selectedTable) {
-        fetchTableData();
-        fetchColumns();
-    }
-  }, [selectedTable, connection.database]);
+    onModalOpened?.();
+  }, [isCreateModalOpen, isCreateDbModalOpen, isInsertModalOpen]);
 
-  useEffect(() => {
-    // If it's the same connection but different database, don't show full loader
-    fetchTables();
-  }, [connection.id, connection.database]);
-
-  useEffect(() => {
-    // Reset first load state when connection changes
-    setIsFirstLoad(true);
-  }, [connection.id]);
+  const error = fetchError ? (fetchError as any).message || String(fetchError) : null;
+  const executing = executeMutation.isPending;
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3 opacity-40">
         <Loader2 className="animate-spin" size={32} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Connecting to Engine...</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.3em]">{t('explorer.connecting')}</span>
       </div>
     );
   }
@@ -361,12 +300,12 @@ export function DatabaseExplorer({
       <div className="p-8 rounded-2xl bg-destructive/5 border border-destructive/10 flex flex-col gap-4">
         <div className="flex items-center gap-3 text-destructive">
           <AlertCircle size={20} />
-          <span className="font-bold uppercase tracking-widest text-xs">Connection Failed</span>
+          <span className="font-bold uppercase tracking-widest text-xs">{t('explorer.connection_failed')}</span>
         </div>
         <p className="text-sm font-medium opacity-60 leading-relaxed">{error}</p>
         <div className="flex gap-3">
-          <Button onClick={fetchTables} className="w-fit text-[10px] font-black uppercase tracking-widest" variant="destructive">Try Again</Button>
-          <Button onClick={onDisconnect} className="w-fit text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100" variant="ghost">Disconnect</Button>
+          <Button onClick={() => refetchTables()} className="w-fit text-[10px] font-black uppercase tracking-widest" variant="destructive">{t('explorer.try_again')}</Button>
+          <Button onClick={onDisconnect} className="w-fit text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100" variant="ghost">{t('explorer.disconnect')}</Button>
         </div>
       </div>
     );
@@ -385,7 +324,7 @@ export function DatabaseExplorer({
         </div>
         <div className="flex gap-2">
           <div className="px-4 py-2 rounded-xl bg-card border border-border/5 shadow-sm flex items-center gap-2">
-            <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">{selectedTable ? 'Records' : 'Tables'}: </span>
+            <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">{selectedTable ? t('explorer.records') : t('explorer.tables')}: </span>
             <span className="text-xs font-bold tabular-nums">{selectedTable ? tableData.length : tables.length}</span>
             {(refreshing || dataLoading) && <RefreshCw size={10} className="animate-spin text-primary ml-1" />}
           </div>
@@ -401,7 +340,7 @@ export function DatabaseExplorer({
                         onClick={() => setViewMode('table')}
                     >
                         <Rows3 size={12} className="mr-2" />
-                        Table
+                        {t('explorer.table_view')}
                     </Button>
                     <Button 
                         variant="ghost" 
@@ -410,7 +349,7 @@ export function DatabaseExplorer({
                         onClick={() => setViewMode('json')}
                     >
                         <LayoutGrid size={12} className="mr-2" />
-                        JSON
+                        {t('explorer.json_view')}
                     </Button>
                 </div>
             </>
@@ -424,9 +363,8 @@ export function DatabaseExplorer({
             onClick={() => setIsConsoleOpen(!isConsoleOpen)}
           >
             <Terminal size={14} className={isConsoleOpen ? 'text-primary' : 'group-hover:text-primary'} />
-            Console
+            {t('explorer.console')}
           </Button>
-
 
           <Button variant="ghost" size="icon" className="size-10 rounded-xl opacity-20 hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive group" onClick={onDisconnect}>
             <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
@@ -438,13 +376,13 @@ export function DatabaseExplorer({
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         dbType={connection.type}
-        onCreate={handleCreateTable}
+        onCreate={async (q) => { await createTableMutation.mutateAsync(q); }}
       />
 
       <CreateDatabaseModal
         isOpen={isCreateDbModalOpen}
         onClose={() => setIsCreateDbModalOpen(false)}
-        onCreate={handleCreateDatabase}
+        onCreate={async (n) => { await createDbMutation.mutateAsync(n); }}
       />
 
       <InsertDataModal
@@ -452,7 +390,7 @@ export function DatabaseExplorer({
         onClose={() => setIsInsertModalOpen(false)}
         tableName={selectedTable || ""}
         columns={columns}
-        onInsert={handleInsertData}
+        onInsert={async (d) => { await insertMutation.mutateAsync(d); }}
       />
 
       <AnimatePresence>
@@ -473,7 +411,7 @@ export function DatabaseExplorer({
                         onClick={() => setActiveTab('editor')}
                     >
                         <CodeIcon size={12} className="mr-2" />
-                        SQL Editor
+                        {t('explorer.sql_editor')}
                     </Button>
                     <Button 
                         variant="ghost" 
@@ -482,7 +420,7 @@ export function DatabaseExplorer({
                         onClick={() => setActiveTab('history')}
                     >
                         <History size={12} className="mr-2" />
-                        Activity Log
+                        {t('explorer.activity_log')}
                         {history.length > 0 && (
                             <span className="ml-2 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary tabular-nums">({history.length})</span>
                         )}
@@ -496,15 +434,15 @@ export function DatabaseExplorer({
                             variant="ghost" 
                             className="h-8 text-[9px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100"
                             onClick={() => setSqlQuery("")}
-                        >Clear</Button>
+                        >{t('explorer.clear')}</Button>
                         <Button 
                             size="sm" 
                             className={`h-8 px-4 text-[9px] font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 transition-all ${executing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onClick={executeSql}
+                            onClick={() => executeMutation.mutate(sqlQuery)}
                             disabled={executing}
                         >
                             {executing ? <Loader2 size={12} className="animate-spin mr-2" /> : <Play size={10} className="mr-2 fill-current" />}
-                            Run Script
+                            {t('explorer.run_script')}
                         </Button>
                     </div>
                 ) : (
@@ -515,7 +453,7 @@ export function DatabaseExplorer({
                         onClick={() => setHistory([])}
                     >
                         <TrashIcon size={12} className="mr-2" />
-                        Clear History
+                        {t('explorer.clear_history')}
                     </Button>
                 )}
               </div>
@@ -526,7 +464,7 @@ export function DatabaseExplorer({
                     <Textarea 
                 value={sqlQuery}
                 onChange={(e) => setSqlQuery(e.target.value)}
-                placeholder="-- Write your SQL script here...&#10;CREATE TABLE demo (id INT, name TEXT);" 
+                placeholder={t('explorer.placeholder_sql')} 
                 className="min-h-32 bg-black/40 border-border/10 font-mono text-[13px] leading-relaxed selection:bg-primary/30"
               />
 
@@ -535,7 +473,7 @@ export function DatabaseExplorer({
                   {execResult.success ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <XCircle size={16} className="mt-0.5 shrink-0" />}
                   <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                      {execResult.success ? 'Sync Success' : 'Engine Error'}
+                      {execResult.success ? t('explorer.sync_success') : t('explorer.engine_fault')}
                     </p>
                     <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap">{execResult.message}</p>
                   </div>
@@ -547,7 +485,7 @@ export function DatabaseExplorer({
                     {history.length === 0 ? (
                         <div className="py-12 text-center opacity-20 flex flex-col items-center gap-3">
                             <Clock size={32} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">No activity recorded yet</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t('explorer.no_activity')}</span>
                         </div>
                     ) : history.map((entry) => (
                         <div key={entry.id} className="p-4 rounded-2xl bg-muted/10 border border-border/5 flex flex-col gap-3 group/entry hover:bg-muted/20 transition-all">
@@ -558,7 +496,7 @@ export function DatabaseExplorer({
                                     <span className="text-[10px] font-bold opacity-20 tabular-nums lowercase">{entry.timestamp.toLocaleTimeString()}</span>
                                 </div>
                                 {entry.status === 'error' && (
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-destructive px-2 py-0.5 rounded bg-destructive/10">Engine Fault</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-destructive px-2 py-0.5 rounded bg-destructive/10">{t('explorer.engine_fault')}</span>
                                 )}
                             </div>
                             
@@ -592,7 +530,7 @@ export function DatabaseExplorer({
                     onClick={() => onTableSelected?.(null)}
                 >
                     <ChevronRightIcon size={14} className="rotate-180 mr-1" />
-                    Back to Grid
+                    {t('explorer.back_to_grid')}
                 </Button>
                 <Separator orientation="vertical" className="h-4 mx-2" />
                 <div className="flex items-center gap-2">
@@ -605,18 +543,18 @@ export function DatabaseExplorer({
                     onClick={() => setIsInsertModalOpen(true)}
                 >
                     <PlusIcon size={12} className="mr-2" />
-                    Add Document
+                    {t('explorer.add_document')}
                 </Button>
             </div>
 
             {dataLoading ? (
                 <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-20">
                     <RefreshCw size={32} className="animate-spin" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Fetching records...</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{t('explorer.fetching_records')}</span>
                 </div>
             ) : tableData.length === 0 ? (
                 <div className="py-20 text-center opacity-20 border-2 border-dashed border-border/10 rounded-3xl">
-                    <p className="text-[10px] font-black uppercase tracking-widest">No data found in this collection</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest">{t('explorer.no_data')}</p>
                 </div>
             ) : viewMode === 'table' ? (
                 <div className="rounded-xl border border-border/20 bg-background overflow-hidden relative shadow-sm">
@@ -685,13 +623,13 @@ export function DatabaseExplorer({
                 </div>
                 <div className="flex gap-1.5 opacity-20 group-hover:opacity-60 transition-opacity">
                 <Hash size={12} /> <Type size={12} /> <Calendar size={12} />
-                <span className="ml-auto text-[9px] font-black uppercase tracking-widest">Explore</span>
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest">{t('explorer.explore')}</span>
                 </div>
             </div>
             ))}
             {tables.length === 0 && !loading && !error && (
                 <div className="col-span-full py-12 text-center opacity-30">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em]">No collections found in this database.</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em]">{t('explorer.no_collections')}</p>
                 </div>
             )}
         </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns }: Props) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +73,10 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
         <DialogHeader>
           <DialogTitle className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-2">
             <Plus size={20} className="text-primary" />
-            Insert Into {tableName}
+            {t('modal_insert.title', { tableName })}
           </DialogTitle>
           <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-40">
-            Add a new record to this collection
+            {t('modal_insert.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -101,7 +103,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
             {columns.filter(col => !col.isPrimaryKey).length === 0 && (
                 <div className="py-10 text-center opacity-20 flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">No editable fields found</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{t('modal_insert.no_fields')}</span>
                 </div>
             )}
           </div>
@@ -110,7 +112,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-[9px] font-black uppercase tracking-widest opacity-60 text-destructive">Insertion Failed</p>
+                <p className="text-[9px] font-black uppercase tracking-widest opacity-60 text-destructive">{t('explorer.engine_fault')}</p>
                 <p className="text-xs font-bold leading-relaxed">{error}</p>
               </div>
             </div>
@@ -123,7 +125,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
               onClick={onClose}
               className="rounded-xl h-10 px-4 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100"
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
@@ -131,7 +133,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
               className="rounded-xl h-10 px-6 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 bg-primary"
             >
               {loading ? <Loader2 size={14} className="animate-spin mr-2" /> : <Plus size={14} className="mr-2" />}
-              Save Record
+              {t('modal_insert.submit')}
             </Button>
           </DialogFooter>
         </form>
