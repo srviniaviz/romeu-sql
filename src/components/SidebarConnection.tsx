@@ -75,6 +75,12 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
     }
   }, [isExpanded]);
 
+  useEffect(() => {
+    if (!isCurrentDb && isExpanded) {
+        setIsExpanded(false);
+    }
+  }, [isCurrentDb]);
+
   return (
     <div className="flex flex-col gap-0.5">
       <div 
@@ -243,6 +249,12 @@ export function SidebarConnection({
       fetchDatabases();
     }
   }, [isActive, isExpanded]);
+
+  useEffect(() => {
+    if (!isActive && isExpanded) {
+        setIsExpanded(false);
+    }
+  }, [isActive]);
 
   return (
     <div className="flex flex-col gap-0.5">

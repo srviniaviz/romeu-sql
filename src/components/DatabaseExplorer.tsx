@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { Connection } from "../lib/useConnections";
 import { 
@@ -85,6 +85,7 @@ export function DatabaseExplorer({
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
   const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
   const [columns, setColumns] = useState<ColumnInfo[]>([]);
+  const lastRequestId = useRef<string | null>(null);
 
   const addHistory = (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
     setHistory(prev => [{
@@ -150,6 +151,10 @@ export function DatabaseExplorer({
   };
 
   const fetchTables = async () => {
+    // ID to track this specific request
+    const requestId = Date.now().toString();
+    lastRequestId.current = requestId;
+
     try {
       if (isFirstLoad) setLoading(true);
       setRefreshing(true);
@@ -158,29 +163,45 @@ export function DatabaseExplorer({
       let connStr = getConnectionString();
       const db = await Database.load(connStr);
       
-      let query = "";
-      const type = connection.type;
-      if (type === 'postgres') {
-        query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
-      } else if (type === 'mysql') {
-        query = "SHOW TABLES";
-      } else if (type === 'sqlite') {
-        query = "SELECT name FROM sqlite_master WHERE type='table'";
-      } else if (type === 'sqlserver') {
-        query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+      try {
+          if (lastRequestId.current !== requestId) {
+              await db.close();
+              return;
+          }
+
+          let query = "";
+          const type = connection.type;
+          if (type === 'postgres') {
+            query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'";
+          } else if (type === 'mysql') {
+            query = "SHOW TABLES";
+          } else if (type === 'sqlite') {
+            query = "SELECT name FROM sqlite_master WHERE type='table'";
+          } else if (type === 'sqlserver') {
+            query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+          }
+
+          const result = await db.select<any[]>(query);
+          
+          if (lastRequestId.current === requestId) {
+            const names = result.map(r => r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0]);
+            setTables(names as string[]);
+            setIsFirstLoad(false);
+          }
+      } finally {
+          await db.close();
       }
-
-      const result = await db.select<any[]>(query);
-      const names = result.map(r => r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0]);
-
-      setTables(names as string[]);
-      await db.close();
-      setIsFirstLoad(false);
     } catch (err: any) {
-      setError(err.message || "Failed to connect to database");
+      if (lastRequestId.current === requestId) {
+          const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+          setError(msg || "Failed to connect to database");
+          console.error("Database connection error:", err);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (lastRequestId.current === requestId) {
+          setLoading(false);
+          setRefreshing(false);
+      }
     }
   };
 
@@ -219,9 +240,12 @@ export function DatabaseExplorer({
     try {
       setDataLoading(true);
       const db = await Database.load(getConnectionString());
-      const result = await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
-      setTableData(result);
-      await db.close();
+      try {
+          const result = await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
+          setTableData(result);
+      } finally {
+          await db.close();
+      }
     } catch (err: any) {
       console.error("Failed to fetch table data:", err);
     } finally {
@@ -233,49 +257,52 @@ export function DatabaseExplorer({
     if (!selectedTable) return;
     try {
       const db = await Database.load(getConnectionString());
-      let query = "";
-      const type = connection.type;
-      
-      if (type === 'postgres') {
-        const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-        query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
-                 FROM information_schema.columns 
-                 WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
-                 ORDER BY ordinal_position`;
-      } else if (type === 'mysql') {
-        query = `DESCRIBE ${selectedTable}`;
-      } else if (type === 'sqlite') {
-        query = `PRAGMA table_info(${selectedTable})`;
-      } else if (type === 'sqlserver') {
-        const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-        query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
-                 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
-      }
+      try {
+          let query = "";
+          const type = connection.type;
+          
+          if (type === 'postgres') {
+            const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+            query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
+                     FROM information_schema.columns 
+                     WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
+                     ORDER BY ordinal_position`;
+          } else if (type === 'mysql') {
+            query = `DESCRIBE ${selectedTable}`;
+          } else if (type === 'sqlite') {
+            query = `PRAGMA table_info(${selectedTable})`;
+          } else if (type === 'sqlserver') {
+            const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+            query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
+                     FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
+          }
 
-      const result = await db.select<any[]>(query);
-      const mapped = result.map(r => {
-        const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
-        const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
-        
-        // Basic PK detection that won't hide everything by mistake
-        const isPK = (
-            r.pk === 1 || 
-            r.Key === 'PRI' || 
-            r.is_identity === 1 ||
-            (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
-        );
-        
-        return {
-          name,
-          type: rawType,
-          nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
-          defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
-          isPrimaryKey: !!isPK
-        };
-      });
-      
-      setColumns(mapped);
-      await db.close();
+          const result = await db.select<any[]>(query);
+          const mapped = result.map(r => {
+            const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
+            const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
+            
+            // Basic PK detection that won't hide everything by mistake
+            const isPK = (
+                r.pk === 1 || 
+                r.Key === 'PRI' || 
+                r.is_identity === 1 ||
+                (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
+            );
+            
+            return {
+              name,
+              type: rawType,
+              nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
+              defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
+              isPrimaryKey: !!isPK
+            };
+          });
+          
+          setColumns(mapped);
+      } finally {
+          await db.close();
+      }
     } catch (err) {
       console.error("Failed to fetch columns:", err);
     }
@@ -592,25 +619,25 @@ export function DatabaseExplorer({
                     <p className="text-[10px] font-black uppercase tracking-widest">No data found in this collection</p>
                 </div>
             ) : viewMode === 'table' ? (
-                <div className="rounded-3xl border border-border/10 bg-card/30 backdrop-blur-xl overflow-hidden shadow-2xl">
+                <div className="rounded-xl border border-border/20 bg-background overflow-hidden relative shadow-sm">
                     <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full text-left border-collapse table-fixed min-w-full">
                             <thead>
-                                <tr className="border-b border-border/10 bg-muted/5">
+                                <tr className="border-b border-border/20 bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
                                     {Object.keys(tableData[0]).map(col => (
-                                        <th key={col} className="px-6 py-4 text-[10px] font-black uppercase tracking-widest opacity-40 whitespace-nowrap">
+                                        <th key={col} className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-foreground/60 border-r border-border/10 last:border-0 whitespace-nowrap overflow-hidden text-ellipsis">
                                             {col}
                                         </th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-border/10">
                                 {tableData.map((row, idx) => (
-                                    <tr key={idx} className="border-b border-border/5 hover:bg-white/5 transition-colors group">
+                                    <tr key={idx} className="hover:bg-primary/[0.04] transition-colors group">
                                         {Object.values(row).map((val: any, vidx) => (
-                                            <td key={vidx} className="px-6 py-4 text-[11px] font-medium whitespace-nowrap">
-                                                <span className="opacity-80 group-hover:opacity-100 transition-opacity">
-                                                    {val === null ? <span className="text-[9px] font-black uppercase opacity-20 italic">NULL</span> : String(val)}
+                                            <td key={vidx} className="px-5 py-3 text-[11px] font-medium border-r border-border/10 last:border-0 whitespace-nowrap overflow-hidden text-ellipsis">
+                                                <span className="opacity-90 group-hover:opacity-100 transition-opacity">
+                                                    {val === null ? <span className="text-[9px] font-black uppercase opacity-30 italic">NULL</span> : String(val)}
                                                 </span>
                                             </td>
                                         ))}
@@ -623,15 +650,15 @@ export function DatabaseExplorer({
             ) : (
                 <div className="space-y-4">
                     {tableData.map((row, idx) => (
-                        <div key={idx} className="p-6 rounded-3xl bg-card/30 border border-border/10 backdrop-blur-xl hover:border-primary/20 transition-all group shadow-sm hover:shadow-xl hover:shadow-primary/5">
+                        <div key={idx} className="p-6 rounded-3xl bg-card/60 border border-border/20 backdrop-blur-xl hover:border-primary/40 transition-all group shadow-sm hover:shadow-xl hover:shadow-primary/5">
                             <div className="flex items-center gap-2 mb-4">
-                                <span className="text-[10px] font-black uppercase tracking-widest opacity-20 group-hover:opacity-100 transition-opacity">Row #{idx + 1}</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 group-hover:opacity-100 transition-opacity">Record #{idx + 1}</span>
                             </div>
                             <div className="space-y-2">
                                 {Object.entries(row).map(([key, val]) => (
                                     <div key={key} className="flex items-start gap-4 font-mono text-xs">
-                                        <span className="min-w-[120px] text-primary/60 font-bold opacity-60 group-hover:opacity-100 transition-opacity">{key}:</span>
-                                        <span className={val === null ? 'text-muted-foreground/30 italic uppercase text-[10px] font-black' : 'text-foreground/80'}>
+                                        <span className="min-w-[120px] text-primary font-bold opacity-70 group-hover:opacity-100 transition-opacity">{key}:</span>
+                                        <span className={val === null ? 'text-muted-foreground/50 italic uppercase text-[10px] font-black' : 'text-foreground/100'}>
                                             {val === null ? 'null' : (typeof val === 'object' ? JSON.stringify(val) : String(val))}
                                         </span>
                                     </div>
