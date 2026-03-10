@@ -45,6 +45,14 @@ function App() {
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+
+  const handleSelectConn = (conn: Connection) => {
+    if (conn.id !== selectedConn?.id || conn.database !== selectedConn?.database) {
+        setSelectedTable(null);
+    }
+    setSelectedConn(conn);
+  };
 
   const handleCreateAction = (conn: Connection, type: 'table' | 'db' = 'table') => {
     setSelectedConn(conn);
@@ -167,7 +175,9 @@ function App() {
                       conn={conn}
                       isActive={selectedConn?.id === conn.id}
                       activeDatabase={selectedConn?.id === conn.id ? selectedConn.database : undefined}
-                      onSelect={setSelectedConn}
+                      activeTable={selectedTable || undefined}
+                      onSelect={handleSelectConn}
+                      onSelectTable={setSelectedTable}
                       onEdit={handleEdit}
                       onDelete={confirmDelete}
                       onDisconnect={handleDisconnect}
@@ -197,6 +207,8 @@ function App() {
                 onDisconnect={() => setSelectedConn(null)}
                 openCreateOnMount={shouldOpenCreateModal}
                 openCreateDbOnMount={shouldOpenCreateDbModal}
+                selectedTable={selectedTable}
+                onTableSelected={setSelectedTable}
                 onModalOpened={() => {
                    setShouldOpenCreateModal(false);
                    setShouldOpenCreateDbModal(false);

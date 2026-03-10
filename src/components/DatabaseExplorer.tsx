@@ -14,10 +14,14 @@ import {
   Play,
   CheckCircle2,
   XCircle,
+  RefreshCw,
   History,
   Code as CodeIcon,
   Trash as TrashIcon,
-  Clock
+  Clock,
+  LayoutGrid,
+  Rows3,
+  ChevronRight as ChevronRightIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -25,6 +29,15 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { CreateTableModal } from "./CreateTableModal";
 import { CreateDatabaseModal } from "./CreateDatabaseModal";
+import { InsertDataModal } from "./InsertDataModal";
+
+interface ColumnInfo {
+  name: string;
+  type: string;
+  nullable: boolean;
+  defaultValue: any;
+  isPrimaryKey: boolean;
+}
 
 interface Props {
   connection: Connection;
@@ -32,6 +45,8 @@ interface Props {
   openCreateOnMount?: boolean;
   openCreateDbOnMount?: boolean;
   onModalOpened?: () => void;
+  selectedTable?: string | null;
+  onTableSelected?: (tableName: string | null) => void;
 }
 
 interface HistoryEntry {
@@ -43,7 +58,15 @@ interface HistoryEntry {
   timestamp: Date;
 }
 
-export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, openCreateDbOnMount, onModalOpened }: Props) {
+export function DatabaseExplorer({ 
+    connection, 
+    onDisconnect, 
+    openCreateOnMount, 
+    openCreateDbOnMount, 
+    onModalOpened,
+    selectedTable,
+    onTableSelected
+}: Props) {
   const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +78,13 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
   const [execResult, setExecResult] = useState<{ success: boolean, message: string } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tableData, setTableData] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
+  const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
+  const [columns, setColumns] = useState<ColumnInfo[]>([]);
 
   const addHistory = (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
     setHistory(prev => [{
@@ -121,7 +151,8 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
 
   const fetchTables = async () => {
     try {
-      setLoading(true);
+      if (isFirstLoad) setLoading(true);
+      setRefreshing(true);
       setError(null);
       
       let connStr = getConnectionString();
@@ -144,10 +175,12 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
 
       setTables(names as string[]);
       await db.close();
+      setIsFirstLoad(false);
     } catch (err: any) {
       setError(err.message || "Failed to connect to database");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -181,9 +214,111 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
     }
   };
 
+  const fetchTableData = async () => {
+    if (!selectedTable) return;
+    try {
+      setDataLoading(true);
+      const db = await Database.load(getConnectionString());
+      const result = await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
+      setTableData(result);
+      await db.close();
+    } catch (err: any) {
+      console.error("Failed to fetch table data:", err);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const fetchColumns = async () => {
+    if (!selectedTable) return;
+    try {
+      const db = await Database.load(getConnectionString());
+      let query = "";
+      const type = connection.type;
+      
+      if (type === 'postgres') {
+        const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+        query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
+                 FROM information_schema.columns 
+                 WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
+                 ORDER BY ordinal_position`;
+      } else if (type === 'mysql') {
+        query = `DESCRIBE ${selectedTable}`;
+      } else if (type === 'sqlite') {
+        query = `PRAGMA table_info(${selectedTable})`;
+      } else if (type === 'sqlserver') {
+        const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
+        query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
+                 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
+      }
+
+      const result = await db.select<any[]>(query);
+      const mapped = result.map(r => {
+        const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
+        const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
+        
+        // Basic PK detection that won't hide everything by mistake
+        const isPK = (
+            r.pk === 1 || 
+            r.Key === 'PRI' || 
+            r.is_identity === 1 ||
+            (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
+        );
+        
+        return {
+          name,
+          type: rawType,
+          nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
+          defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
+          isPrimaryKey: !!isPK
+        };
+      });
+      
+      setColumns(mapped);
+      await db.close();
+    } catch (err) {
+      console.error("Failed to fetch columns:", err);
+    }
+  };
+
+  const handleInsertData = async (data: Record<string, any>) => {
+    try {
+      const keys = Object.keys(data);
+      const values = Object.values(data).map(v => typeof v === 'string' ? `'${v}'` : v);
+      const query = `INSERT INTO ${selectedTable} (${keys.join(', ')}) VALUES (${values.join(', ')})`;
+      
+      const db = await Database.load(getConnectionString());
+      await db.execute(query);
+      await db.close();
+      
+      const msg = "Record inserted successfully!";
+      setExecResult({ success: true, message: msg });
+      addHistory({ action: 'Insert Data', query, status: 'success', message: msg });
+      fetchTableData();
+    } catch (err: any) {
+      const msg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+      setExecResult({ success: false, message: msg });
+      addHistory({ action: 'Insert Data', status: 'error', message: msg });
+      throw err;
+    }
+  };
+
   useEffect(() => {
+    if (selectedTable) {
+        fetchTableData();
+        fetchColumns();
+    }
+  }, [selectedTable, connection.database]);
+
+  useEffect(() => {
+    // If it's the same connection but different database, don't show full loader
     fetchTables();
   }, [connection.id, connection.database]);
+
+  useEffect(() => {
+    // Reset first load state when connection changes
+    setIsFirstLoad(true);
+  }, [connection.id]);
 
   if (loading) {
     return (
@@ -222,10 +357,37 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
           </div>
         </div>
         <div className="flex gap-2">
-          <div className="px-4 py-2 rounded-xl bg-card border border-border/5 shadow-sm">
-            <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">Tables: </span>
-            <span className="text-xs font-bold tabular-nums">{tables.length}</span>
+          <div className="px-4 py-2 rounded-xl bg-card border border-border/5 shadow-sm flex items-center gap-2">
+            <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">{selectedTable ? 'Records' : 'Tables'}: </span>
+            <span className="text-xs font-bold tabular-nums">{selectedTable ? tableData.length : tables.length}</span>
+            {(refreshing || dataLoading) && <RefreshCw size={10} className="animate-spin text-primary ml-1" />}
           </div>
+
+          {selectedTable && (
+            <>
+                <Separator orientation="vertical" className="h-10 mx-2 opacity-10" />
+                <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-xl">
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${viewMode === 'table' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
+                        onClick={() => setViewMode('table')}
+                    >
+                        <Rows3 size={12} className="mr-2" />
+                        Table
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${viewMode === 'json' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
+                        onClick={() => setViewMode('json')}
+                    >
+                        <LayoutGrid size={12} className="mr-2" />
+                        JSON
+                    </Button>
+                </div>
+            </>
+          )}
 
           <Separator orientation="vertical" className="h-10 mx-2 opacity-10" />
 
@@ -238,25 +400,6 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
             Console
           </Button>
 
-          {connection.type !== 'sqlite' && (
-            <Button 
-                variant="ghost" 
-                className="h-10 px-4 rounded-xl gap-2 font-black uppercase text-[10px] tracking-widest bg-muted/20 hover:bg-muted/40 transition-all opacity-60 hover:opacity-100"
-                onClick={() => setIsCreateDbModalOpen(true)}
-            >
-                <PlusIcon size={14} />
-                New DB
-            </Button>
-          )}
-
-          <Button 
-            variant="ghost" 
-            className="h-10 px-4 rounded-xl gap-2 font-black uppercase text-[10px] tracking-widest bg-primary/5 text-primary hover:bg-primary/10 transition-all"
-            onClick={() => setIsCreateModalOpen(true)}
-          >
-            <PlusIcon size={14} />
-            New Table
-          </Button>
 
           <Button variant="ghost" size="icon" className="size-10 rounded-xl opacity-20 hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive group" onClick={onDisconnect}>
             <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
@@ -275,6 +418,14 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
         isOpen={isCreateDbModalOpen}
         onClose={() => setIsCreateDbModalOpen(false)}
         onCreate={handleCreateDatabase}
+      />
+
+      <InsertDataModal
+        isOpen={isInsertModalOpen}
+        onClose={() => setIsInsertModalOpen(false)}
+        tableName={selectedTable || ""}
+        columns={columns}
+        onInsert={handleInsertData}
       />
 
       <AnimatePresence>
@@ -404,27 +555,120 @@ export function DatabaseExplorer({ connection, onDisconnect, openCreateOnMount, 
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tables.map((table, i) => (
-          <div key={i} className="group p-5 rounded-2xl bg-card border border-border/5 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 cursor-pointer transition-all">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="size-10 rounded-xl bg-muted/30 flex items-center justify-center text-muted-foreground/40 group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                <TableIcon size={20} />
-              </div>
-              <span className="font-bold text-sm tracking-tight truncate group-hover:text-foreground transition-colors uppercase">{table}</span>
+      {selectedTable ? (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 text-[10px] font-black uppercase tracking-widest bg-muted/20 opacity-40 hover:opacity-100"
+                    onClick={() => onTableSelected?.(null)}
+                >
+                    <ChevronRightIcon size={14} className="rotate-180 mr-1" />
+                    Back to Grid
+                </Button>
+                <Separator orientation="vertical" className="h-4 mx-2" />
+                <div className="flex items-center gap-2">
+                    <TableIcon size={16} className="text-primary" />
+                    <span className="text-sm font-black uppercase italic tracking-tight">{selectedTable}</span>
+                </div>
+                <Button 
+                    size="sm" 
+                    className="ml-auto h-8 px-4 text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/10 rounded-xl"
+                    onClick={() => setIsInsertModalOpen(true)}
+                >
+                    <PlusIcon size={12} className="mr-2" />
+                    Add Document
+                </Button>
             </div>
-            <div className="flex gap-1.5 opacity-20 group-hover:opacity-60 transition-opacity">
-              <Hash size={12} /> <Type size={12} /> <Calendar size={12} />
-              <span className="ml-auto text-[9px] font-black uppercase tracking-widest">Explore</span>
+
+            {dataLoading ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-20">
+                    <RefreshCw size={32} className="animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Fetching records...</span>
+                </div>
+            ) : tableData.length === 0 ? (
+                <div className="py-20 text-center opacity-20 border-2 border-dashed border-border/10 rounded-3xl">
+                    <p className="text-[10px] font-black uppercase tracking-widest">No data found in this collection</p>
+                </div>
+            ) : viewMode === 'table' ? (
+                <div className="rounded-3xl border border-border/10 bg-card/30 backdrop-blur-xl overflow-hidden shadow-2xl">
+                    <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-border/10 bg-muted/5">
+                                    {Object.keys(tableData[0]).map(col => (
+                                        <th key={col} className="px-6 py-4 text-[10px] font-black uppercase tracking-widest opacity-40 whitespace-nowrap">
+                                            {col}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {tableData.map((row, idx) => (
+                                    <tr key={idx} className="border-b border-border/5 hover:bg-white/5 transition-colors group">
+                                        {Object.values(row).map((val: any, vidx) => (
+                                            <td key={vidx} className="px-6 py-4 text-[11px] font-medium whitespace-nowrap">
+                                                <span className="opacity-80 group-hover:opacity-100 transition-opacity">
+                                                    {val === null ? <span className="text-[9px] font-black uppercase opacity-20 italic">NULL</span> : String(val)}
+                                                </span>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {tableData.map((row, idx) => (
+                        <div key={idx} className="p-6 rounded-3xl bg-card/30 border border-border/10 backdrop-blur-xl hover:border-primary/20 transition-all group shadow-sm hover:shadow-xl hover:shadow-primary/5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-20 group-hover:opacity-100 transition-opacity">Row #{idx + 1}</span>
+                            </div>
+                            <div className="space-y-2">
+                                {Object.entries(row).map(([key, val]) => (
+                                    <div key={key} className="flex items-start gap-4 font-mono text-xs">
+                                        <span className="min-w-[120px] text-primary/60 font-bold opacity-60 group-hover:opacity-100 transition-opacity">{key}:</span>
+                                        <span className={val === null ? 'text-muted-foreground/30 italic uppercase text-[10px] font-black' : 'text-foreground/80'}>
+                                            {val === null ? 'null' : (typeof val === 'object' ? JSON.stringify(val) : String(val))}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tables.map((table, i) => (
+            <div 
+                key={i} 
+                className="group p-5 rounded-2xl bg-card border border-border/5 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 cursor-pointer transition-all"
+                onClick={() => onTableSelected?.(table)}
+            >
+                <div className="flex items-center gap-4 mb-4">
+                <div className="size-10 rounded-xl bg-muted/30 flex items-center justify-center text-muted-foreground/40 group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                    <TableIcon size={20} />
+                </div>
+                <span className="font-bold text-sm tracking-tight truncate group-hover:text-foreground transition-colors uppercase">{table}</span>
+                </div>
+                <div className="flex gap-1.5 opacity-20 group-hover:opacity-60 transition-opacity">
+                <Hash size={12} /> <Type size={12} /> <Calendar size={12} />
+                <span className="ml-auto text-[9px] font-black uppercase tracking-widest">Explore</span>
+                </div>
             </div>
-          </div>
-        ))}
-        {tables.length === 0 && !loading && !error && (
-            <div className="col-span-full py-12 text-center opacity-30">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em]">No collections found in this database.</p>
-            </div>
-        )}
-      </div>
+            ))}
+            {tables.length === 0 && !loading && !error && (
+                <div className="col-span-full py-12 text-center opacity-30">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em]">No collections found in this database.</p>
+                </div>
+            )}
+        </div>
+      )}
     </motion.div>
   );
 }
