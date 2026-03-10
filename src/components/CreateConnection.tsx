@@ -153,14 +153,14 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[720px] gap-0 p-0 overflow-hidden border-none shadow-2xl ring-1 ring-border/10">
+      <DialogContent className="sm:max-w-[720px] gap-0 p-0 overflow-hidden border-none shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] ring-1 ring-white/10 bg-zinc-950/95 backdrop-blur-xl">
         <DialogHeader className="p-8 pb-2">
           <div className="flex items-center gap-4">
             <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
               <Database className="size-5" />
             </div>
             <div className="grid gap-0.5">
-              <DialogTitle className="text-lg font-bold tracking-tight uppercase italic">{t('modal.new_connection')}</DialogTitle>
+              <DialogTitle className="text-2xl font-black tracking-tight uppercase italic">{t('modal.new_connection')}</DialogTitle>
               <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-40">{t('modal.init_node')}</DialogDescription>
             </div>
           </div>
@@ -169,20 +169,20 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
         <form onSubmit={handleSubmit(onSubmit)}>
           <Tabs defaultValue="general" className="w-full">
             <div className="px-8 py-2">
-              <TabsList className="grid w-full grid-cols-5 h-11 p-1.5 bg-muted/30 rounded-xl">
-                <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <TabsList className="grid w-full grid-cols-5 h-12 p-1.5 bg-muted/30 rounded-xl">
+                <TabsTrigger value="general" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
                   {t('modal.tabs.general')}
                 </TabsTrigger>
-                <TabsTrigger value="connection" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <TabsTrigger value="connection" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
                   {t('modal.tabs.connection')}
                 </TabsTrigger>
-                <TabsTrigger value="ssl" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <TabsTrigger value="ssl" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
                   {t('modal.tabs.ssl')}
                 </TabsTrigger>
-                <TabsTrigger value="ssh" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <TabsTrigger value="ssh" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
                   {t('modal.tabs.ssh_tunnel')}
                 </TabsTrigger>
-                <TabsTrigger value="params" className="text-[10px] font-bold uppercase tracking-widest rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <TabsTrigger value="params" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
                   {t('modal.tabs.parameters')}
                 </TabsTrigger>
               </TabsList>
@@ -193,7 +193,7 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
                 <TabsContent value="general" className="space-y-6 mt-0">
                   <div className="grid gap-4">
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.name')}</Label>
+                      <Label className="text-[11px] uppercase tracking-widest font-black opacity-60">{t('modal.general.name')}</Label>
                       <Input {...register("name")} placeholder="My Primary DB" />
                     </div>
                     <div className="space-y-2">
@@ -213,7 +213,7 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
                     <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
                       <div className="flex items-center gap-2 mb-1">
                         <RefreshCw size={14} className="text-primary opacity-60" />
-                        <Label className="text-[10px] uppercase tracking-widest font-black text-primary">{t('modal.connection.magic_url')}</Label>
+                        <Label className="text-[11px] uppercase tracking-widest font-black text-primary">{t('modal.connection.magic_url')}</Label>
                       </div>
                       <Input 
                         {...register("connectionUrl")} 
@@ -225,7 +225,7 @@ export function CreateConnectionModal({ isOpen, onClose }: Props) {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.engine')}</Label>
+                        <Label className="text-[11px] uppercase tracking-widest font-black opacity-60">{t('modal.engine')}</Label>
                         <Controller
                           name="type"
                           control={control}
