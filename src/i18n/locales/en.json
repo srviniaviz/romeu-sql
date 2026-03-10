@@ -53,7 +53,6 @@
       "user": "Username",
       "password": "Password",
       "save_password": "Save password in settings",
-      "role": "Role",
       "ssl_mode": "SSL Mode",
       "magic_url": "Magic URL (Auto-fill)"
     },
