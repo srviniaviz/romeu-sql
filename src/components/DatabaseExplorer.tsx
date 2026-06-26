@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, Terminal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CreateDatabaseModal } from "./CreateDatabaseModal";
 import { CreateTableModal } from "./CreateTableModal";
@@ -12,14 +12,22 @@ import { TableBrowser } from "./explorer/TableBrowser";
 import { DataPreview } from "./explorer/DataPreview";
 import { Connection } from "../lib/useConnections";
 import {
+  countRows,
   createDatabase,
   createTable,
+  deleteRow,
   executeSql,
+  explainRows,
   insertRow,
   listColumns,
+  listIndexes,
   listTables,
-  selectRows,
+  listTableStats,
+  selectQuery,
+  selectRowsPage,
+  updateRow,
 } from "@/domain/database/service";
+import type { DataViewMode } from "./explorer/DataPreview";
 
 interface Props {
   connection: Connection;
@@ -59,7 +67,12 @@ export function DatabaseExplorer({
   const [execResult, setExecResult] = useState<{ success: boolean; message: string } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeTab, setActiveTab] = useState<"editor" | "history">("editor");
-  const [viewMode, setViewMode] = useState<"table" | "json">("table");
+  const [viewMode, setViewMode] = useState<DataViewMode>("list");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [whereClause, setWhereClause] = useState("");
+  const [queryRows, setQueryRows] = useState<Record<string, unknown>[]>([]);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -74,6 +87,11 @@ export function DatabaseExplorer({
   useEffect(() => {
     onModalOpened?.();
   }, [isCreateModalOpen, isCreateDbModalOpen, isInsertModalOpen, onModalOpened]);
+
+  useEffect(() => {
+    setPage(0);
+    setWhereClause("");
+  }, [selectedTable, connection.id, connection.database]);
 
   const addHistory = (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
     setHistory((prev) => [
@@ -98,15 +116,38 @@ export function DatabaseExplorer({
     enabled: !!connection.id,
   });
 
-  const { data: tableData = [], isLoading: loadingRows } = useQuery({
-    queryKey: ["tableData", connection.id, connection.database, selectedTable],
-    queryFn: () => (selectedTable ? selectRows(connection, selectedTable) : []),
+  const { data: tableStats = [] } = useQuery({
+    queryKey: ["tableStats", connection.id, connection.database],
+    queryFn: () => listTableStats(connection),
+    enabled: !!connection.id,
+  });
+
+  const { data: totalRows = 0, isFetching: countingRows } = useQuery({
+    queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable, whereClause],
+    queryFn: () => (selectedTable ? countRows(connection, selectedTable, whereClause) : 0),
+    enabled: !!selectedTable,
+  });
+
+  const {
+    data: tableData = [],
+    isLoading: loadingRows,
+    isFetching: fetchingRows,
+    refetch: refetchRows,
+  } = useQuery({
+    queryKey: ["tableData", connection.id, connection.database, selectedTable, page, pageSize, whereClause],
+    queryFn: () => (selectedTable ? selectRowsPage(connection, selectedTable, pageSize, page * pageSize, whereClause) : []),
     enabled: !!selectedTable,
   });
 
   const { data: columns = [] } = useQuery({
     queryKey: ["columns", connection.id, connection.database, selectedTable],
     queryFn: () => (selectedTable ? listColumns(connection, selectedTable) : []),
+    enabled: !!selectedTable,
+  });
+
+  const { data: indexes = [] } = useQuery({
+    queryKey: ["indexes", connection.id, connection.database, selectedTable],
+    queryFn: () => (selectedTable ? listIndexes(connection, selectedTable) : []),
     enabled: !!selectedTable,
   });
 
@@ -118,6 +159,7 @@ export function DatabaseExplorer({
       addHistory({ action: t("explorer.sql_editor"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
+      queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
     onError: (err: unknown, query) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
@@ -136,11 +178,65 @@ export function DatabaseExplorer({
       setExecResult({ success: true, message: msg });
       addHistory({ action: t("explorer.add_document"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
+      queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setExecResult({ success: false, message: msg });
       addHistory({ action: t("explorer.add_document"), status: "error", message: msg });
+    },
+  });
+
+  const queryMutation = useMutation({
+    mutationFn: (query: string) => selectQuery(connection, query),
+    onSuccess: (rows, query) => {
+      setQueryRows(rows);
+      setQueryError(null);
+      addHistory({ action: "Query", query, status: "success", message: `${rows.length} rows returned` });
+    },
+    onError: (err: unknown, query) => {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setQueryRows([]);
+      setQueryError(msg);
+      addHistory({ action: "Query", query, status: "error", message: msg });
+    },
+  });
+
+  const updateRowMutation = useMutation({
+    mutationFn: ({ original, next }: { original: Record<string, unknown>; next: Record<string, unknown> }) => {
+      if (!selectedTable) throw new Error("No table selected");
+      return updateRow(connection, selectedTable, original, next);
+    },
+    onSuccess: (res) => {
+      const msg = t("explorer.sync_success");
+      setExecResult({ success: true, message: msg });
+      addHistory({ action: "Update row", query: res.query, status: "success", message: msg });
+      queryClient.invalidateQueries({ queryKey: ["tableData"] });
+      queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setExecResult({ success: false, message: msg });
+      addHistory({ action: "Update row", status: "error", message: msg });
+    },
+  });
+
+  const deleteRowMutation = useMutation({
+    mutationFn: (row: Record<string, unknown>) => {
+      if (!selectedTable) throw new Error("No table selected");
+      return deleteRow(connection, selectedTable, row);
+    },
+    onSuccess: (res) => {
+      const msg = t("explorer.sync_success");
+      setExecResult({ success: true, message: msg });
+      addHistory({ action: "Delete row", query: res.query, status: "success", message: msg });
+      queryClient.invalidateQueries({ queryKey: ["tableData"] });
+      queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setExecResult({ success: false, message: msg });
+      addHistory({ action: "Delete row", status: "error", message: msg });
     },
   });
 
@@ -194,22 +290,70 @@ export function DatabaseExplorer({
   }
 
   return (
-    <div className="min-h-full bg-background">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
       <ExplorerHeader
         connection={connection}
         selectedTable={selectedTable}
         tableCount={tables.length}
-        rowCount={tableData.length}
-        refreshing={refreshingTables || loadingRows}
-        viewMode={viewMode}
-        consoleOpen={isConsoleOpen}
-        onViewModeChange={setViewMode}
-        onToggleConsole={() => setIsConsoleOpen((open) => !open)}
+        rowCount={totalRows}
+        refreshing={refreshingTables || fetchingRows || countingRows}
         onDisconnect={onDisconnect}
       />
 
-      <div className="space-y-4 p-5">
-        {isConsoleOpen && (
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-5">
+        {selectedTable ? (
+          <DataPreview
+            selectedTable={selectedTable}
+            rows={tableData}
+            loading={loadingRows}
+            viewMode={viewMode}
+            page={page}
+            pageSize={pageSize}
+            totalRows={totalRows}
+            columnCount={columns.length}
+            columns={columns}
+            indexes={indexes}
+            refreshing={fetchingRows || countingRows}
+            whereClause={whereClause}
+            queryRows={queryRows}
+            queryLoading={queryMutation.isPending}
+            queryError={queryError}
+            onBack={() => onTableSelected?.(null)}
+            onInsert={() => setIsInsertModalOpen(true)}
+            onFilterApply={(nextWhereClause) => {
+              setWhereClause(nextWhereClause);
+              setPage(0);
+            }}
+            onFilterReset={() => {
+              setWhereClause("");
+              setPage(0);
+            }}
+            onExplainFilter={async (nextWhereClause) => {
+              if (!selectedTable) return "No table selected";
+              const rows = await explainRows(connection, selectedTable, nextWhereClause);
+              return JSON.stringify(rows, null, 2);
+            }}
+            onRunQuery={(query) => queryMutation.mutateAsync(query)}
+            onUpdateRow={(original, next) => updateRowMutation.mutateAsync({ original, next })}
+            onDeleteRow={(row) => deleteRowMutation.mutateAsync(row)}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable] });
+              refetchRows();
+            }}
+            onViewModeChange={setViewMode}
+            onPageChange={setPage}
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize);
+              setPage(0);
+            }}
+          />
+        ) : (
+          <TableBrowser tables={tables} tableStats={tableStats} onSelectTable={(table) => onTableSelected?.(table)} />
+        )}
+      </div>
+
+      {isConsoleOpen && (
+        <div className="shrink-0">
           <SqlConsole
             sqlQuery={sqlQuery}
             onSqlQueryChange={setSqlQuery}
@@ -222,21 +366,33 @@ export function DatabaseExplorer({
             onClearHistory={() => setHistory([])}
             onClearEditor={() => setSqlQuery("")}
           />
-        )}
+        </div>
+      )}
 
-        {selectedTable ? (
-          <DataPreview
-            selectedTable={selectedTable}
-            rows={tableData}
-            loading={loadingRows}
-            viewMode={viewMode}
-            onBack={() => onTableSelected?.(null)}
-            onInsert={() => setIsInsertModalOpen(true)}
-          />
-        ) : (
-          <TableBrowser tables={tables} onSelectTable={(table) => onTableSelected?.(table)} />
-        )}
-      </div>
+      <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border/30 bg-background px-3 text-[11px] text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{connection.database || connection.name}</span>
+          <span className="text-muted-foreground/40">•</span>
+          <span>{connection.type}</span>
+          {execResult && (
+            <>
+              <span className="text-muted-foreground/40">•</span>
+              <span className={execResult.success ? "text-primary" : "text-destructive"}>
+                {execResult.success ? "Last command ok" : "Last command failed"}
+              </span>
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsConsoleOpen((open) => !open)}
+          className="inline-flex h-5 items-center gap-1.5 rounded px-2 font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {isConsoleOpen ? <X size={13} /> : <Terminal size={13} />}
+          Console
+          {history.length > 0 && <span className="rounded bg-muted px-1 text-[10px]">{history.length}</span>}
+        </button>
+      </footer>
 
       <CreateTableModal
         isOpen={isCreateModalOpen}

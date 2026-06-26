@@ -26,21 +26,21 @@ export function WorkspacePanel({
 }: WorkspacePanelProps) {
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-background">
-      <ScrollArea className="min-h-0 flex-1">
-        {selectedConn ? (
-          <DatabaseExplorer
-            connection={selectedConn}
-            onDisconnect={onDisconnect}
-            openCreateOnMount={openCreateTable}
-            openCreateDbOnMount={openCreateDatabase}
-            selectedTable={selectedTable}
-            onTableSelected={onTableSelected}
-            onModalOpened={onModalOpened}
-          />
-        ) : (
+      {selectedConn ? (
+        <DatabaseExplorer
+          connection={selectedConn}
+          onDisconnect={onDisconnect}
+          openCreateOnMount={openCreateTable}
+          openCreateDbOnMount={openCreateDatabase}
+          selectedTable={selectedTable}
+          onTableSelected={onTableSelected}
+          onModalOpened={onModalOpened}
+        />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
           <EmptyWorkspace onCreateConnection={onCreateConnection} />
-        )}
-      </ScrollArea>
+        </ScrollArea>
+      )}
     </section>
   );
 }

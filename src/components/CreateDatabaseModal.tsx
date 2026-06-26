@@ -43,31 +43,31 @@ export function CreateDatabaseModal({ isOpen, onClose, onCreate }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
-            <DatabaseIcon size={24} />
-          </div>
-          <DialogTitle className="text-lg font-semibold tracking-tight">{t('modal_create_db.title')}</DialogTitle>
-          <DialogDescription className="text-[13px] text-muted-foreground">
+      <DialogContent className="max-w-md overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border/50 px-6 py-5">
+          <DialogTitle className="flex items-center gap-2 text-[16px] font-semibold tracking-tight">
+            <DatabaseIcon size={17} className="text-primary" />
+            {t('modal_create_db.title')}
+          </DialogTitle>
+          <DialogDescription className="text-[12px] text-muted-foreground">
             {t('modal_create_db.description')}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>{t('modal_create_db.field_label')}</Label>
+        <div className="space-y-4 px-6 py-5">
+          <div className="space-y-1.5">
+            <Label className="text-[12px] font-medium normal-case tracking-normal text-muted-foreground">{t('modal_create_db.field_label')}</Label>
             <Input 
               value={dbName}
               onChange={(e) => setDbName(e.target.value)}
               placeholder={t('modal_create_db.placeholder')}
-              className="h-10 bg-background"
+              className="h-9 border-border/70 bg-background text-[13px] focus-visible:ring-1 focus-visible:ring-primary/25"
               autoFocus
             />
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-2 text-destructive animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-destructive animate-in fade-in slide-in-from-top-1">
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p className="text-[12px] font-medium">Engine error</p>
@@ -77,11 +77,11 @@ export function CreateDatabaseModal({ isOpen, onClose, onCreate }: Props) {
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={loading} className="text-[13px] font-medium text-muted-foreground">
+        <DialogFooter className="border-t border-border/50 bg-muted/15 px-6 py-4">
+          <Button variant="ghost" onClick={onClose} disabled={loading} className="h-9 rounded-md px-4 text-[12px] font-medium text-muted-foreground">
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleCreate} disabled={loading || !dbName.trim()} className="px-8 text-[13px] font-medium">
+          <Button onClick={handleCreate} disabled={loading || !dbName.trim()} className="h-9 rounded-md px-5 text-[12px] font-medium">
             {loading ? <Loader2 className="animate-spin" size={14} /> : t('modal_create_db.submit')}
           </Button>
         </DialogFooter>

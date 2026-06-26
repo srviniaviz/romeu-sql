@@ -46,8 +46,8 @@ export function AppSidebar({
   onCreateDatabase,
 }: AppSidebarProps) {
   return (
-    <aside className="hidden w-[300px] shrink-0 border-r border-border bg-muted/35 lg:flex lg:flex-col">
-      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+    <aside className="hidden w-[300px] shrink-0 border-r border-border/40 bg-muted/25 lg:flex lg:flex-col">
+      <div className="flex h-16 items-center justify-between px-4">
         <div>
           <h1 className="text-[18px] font-semibold tracking-tight">Workspace</h1>
           <p className="text-[11px] text-muted-foreground">Connections and schema browser</p>
@@ -55,12 +55,12 @@ export function AppSidebar({
         <Database size={18} className="text-primary" />
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex items-center justify-between px-4 pb-3 pt-1">
         <div className="flex items-center gap-2">
           <span className="text-[12px] font-medium text-foreground">
             Connections
           </span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          <span className="rounded bg-background/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
             {connections.length}
           </span>
         </div>
@@ -82,7 +82,7 @@ export function AppSidebar({
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="Search connections"
-              className="h-9 rounded-md bg-background pl-8 text-[13px] shadow-none focus-visible:ring-1 focus-visible:ring-primary"
+              className="h-9 rounded-md border-border/60 bg-background/80 pl-8 text-[13px] shadow-none focus-visible:ring-1 focus-visible:ring-primary"
             />
           </div>
         </div>
@@ -97,7 +97,7 @@ export function AppSidebar({
             </div>
           ) : connections.length === 0 ? (
             <button
-              className="mx-2 flex w-[calc(100%-1rem)] flex-col items-start rounded-md border border-dashed border-border bg-background px-3 py-4 text-left text-muted-foreground hover:border-primary hover:text-foreground"
+              className="mx-2 flex w-[calc(100%-1rem)] flex-col items-start rounded-md bg-background/60 px-3 py-4 text-left text-muted-foreground hover:text-foreground"
               onClick={onCreateConnection}
             >
               <span className="text-[13px] font-semibold">No connections</span>

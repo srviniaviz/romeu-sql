@@ -1,13 +1,406 @@
-import { ChevronLeft, Plus, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Braces,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Database,
+  Download,
+  Edit3,
+  Filter,
+  List,
+  Plus,
+  RefreshCw,
+  Search,
+  Table2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { ColumnInfo, IndexInfo } from "@/domain/database/types";
+
+export type DataViewMode = "list" | "json" | "table";
+type DataTab = "rows" | "query" | "schema" | "indexes";
 
 interface DataPreviewProps {
   selectedTable: string;
   rows: Record<string, unknown>[];
   loading: boolean;
-  viewMode: "table" | "json";
+  viewMode: DataViewMode;
+  page: number;
+  pageSize: number;
+  totalRows: number;
+  columnCount?: number;
+  columns?: ColumnInfo[];
+  indexes?: IndexInfo[];
+  refreshing: boolean;
+  whereClause: string;
+  queryRows: Record<string, unknown>[];
+  queryLoading: boolean;
+  queryError: string | null;
   onBack: () => void;
   onInsert: () => void;
+  onRefresh: () => void;
+  onViewModeChange: (mode: DataViewMode) => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onFilterApply: (whereClause: string) => void;
+  onFilterReset: () => void;
+  onExplainFilter: (whereClause: string) => Promise<string>;
+  onRunQuery: (query: string) => Promise<unknown>;
+  onUpdateRow: (original: Record<string, unknown>, next: Record<string, unknown>) => Promise<unknown>;
+  onDeleteRow: (row: Record<string, unknown>) => Promise<unknown>;
+}
+
+const CARD_FIELD_LIMIT = 8;
+
+function looksLikeDate(value: string, fieldName?: string) {
+  const nameHint = fieldName ? /(date|time|created|updated|deleted|at)$/i.test(fieldName) : false;
+  return nameHint && !Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}/.test(value);
+}
+
+function looksLikeUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function stringKind(value: string, fieldName?: string) {
+  if (looksLikeDate(value, fieldName)) return "date";
+  if (looksLikeUuid(value)) return "id";
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "email";
+  if (/^https?:\/\//i.test(value)) return "url";
+  if (fieldName && /(status|state|type|method)$/i.test(fieldName)) return "enum";
+  if (fieldName && /(amount|price|cost|total|subtotal|tax|discount|shipping|unitprice)$/i.test(fieldName)) return "money";
+  return "text";
+}
+
+function FieldValue({ value, fieldName }: { value: unknown; fieldName?: string }) {
+  if (value === null) return <span className="text-slate-400">null</span>;
+  if (value === undefined) return <span className="text-slate-400">undefined</span>;
+  if (typeof value === "boolean") {
+    return <span className={cn("font-semibold", value ? "text-blue-700" : "text-slate-500")}>{String(value)}</span>;
+  }
+  if (typeof value === "number") {
+    const isMoney = fieldName && /(amount|price|cost|total|subtotal|tax|discount|shipping|unitprice)$/i.test(fieldName);
+    return <span className={cn("tabular-nums", isMoney ? "text-blue-700" : "text-indigo-700")}>{isMoney ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}</span>;
+  }
+  if (typeof value === "string") {
+    const kind = stringKind(value, fieldName);
+    if (kind === "date") return <span className="text-sky-700">{value}</span>;
+    if (kind === "id") return <span className="text-slate-600">"{value}"</span>;
+    if (kind === "email") return <span className="text-cyan-700">"{value}"</span>;
+    if (kind === "url") return <span className="text-cyan-700">"{value}"</span>;
+    if (kind === "enum") return <span className="rounded bg-blue-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-blue-700">{value}</span>;
+    if (kind === "money") return <span className="text-blue-700">"{value}"</span>;
+    return <span className="text-emerald-700">"{value}"</span>;
+  }
+  if (Array.isArray(value)) return <span className="text-amber-700">Array({value.length})</span>;
+  return <span className="text-amber-700">{JSON.stringify(value)}</span>;
+}
+
+function serializeValue(value: unknown) {
+  if (value === null) return "null";
+  if (value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function downloadFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows: Record<string, unknown>[]) {
+  if (!rows.length) return "";
+  const columns = Object.keys(rows[0]);
+  const escape = (value: unknown) => `"${serializeValue(value).replace(/"/g, '""')}"`;
+  return [
+    columns.map(escape).join(","),
+    ...rows.map((row) => columns.map((column) => escape(row[column])).join(",")),
+  ].join("\n");
+}
+
+function ToolbarButton({
+  children,
+  primary,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  primary?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-slate-50 text-slate-800 hover:bg-slate-100"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function IconButton({
+  title,
+  children,
+  active,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  children: React.ReactNode;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded-md bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40",
+        active && "bg-slate-900 text-white hover:bg-slate-900 hover:text-white"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode: DataViewMode) => void }) {
+  const items: Array<{ value: DataViewMode; title: string; icon: typeof List }> = [
+    { value: "list", title: "Document list", icon: List },
+    { value: "json", title: "JSON", icon: Braces },
+    { value: "table", title: "Table", icon: Table2 },
+  ];
+
+  return (
+    <div className="inline-flex h-7 items-center rounded-md bg-slate-50 p-0.5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            title={item.title}
+            onClick={() => onChange(item.value)}
+            className={cn(
+              "flex size-6 items-center justify-center rounded text-slate-600 hover:bg-slate-100",
+              value === item.value && "bg-slate-900 text-white hover:bg-slate-900"
+            )}
+          >
+            <Icon size={13} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RowActions({
+  row,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  row: Record<string, unknown>;
+  busy: boolean;
+  onEdit: (row: Record<string, unknown>) => void;
+  onDelete: (row: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100">
+      <IconButton title="Edit row" disabled={busy} onClick={() => onEdit(row)}>
+        <Edit3 size={12} />
+      </IconButton>
+      <IconButton title="Copy JSON" onClick={() => navigator.clipboard?.writeText(JSON.stringify(row, null, 2))}>
+        <Copy size={12} />
+      </IconButton>
+      <IconButton title="Delete row" disabled={busy} onClick={() => onDelete(row)}>
+        <Trash2 size={12} />
+      </IconButton>
+    </div>
+  );
+}
+
+function DocumentRow({
+  row,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  row: Record<string, unknown>;
+  busy: boolean;
+  onEdit: (row: Record<string, unknown>) => void;
+  onDelete: (row: Record<string, unknown>) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const entries = Object.entries(row);
+  const hiddenCount = Math.max(0, entries.length - CARD_FIELD_LIMIT);
+  const visibleEntries = expanded ? entries : entries.slice(0, CARD_FIELD_LIMIT);
+
+  return (
+    <article className="group/row relative overflow-hidden rounded-md bg-slate-50/70 hover:bg-slate-100/70">
+      <div className="absolute right-3 top-3 z-10">
+        <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
+      </div>
+
+      <div className="overflow-auto px-3 py-2 font-mono text-[12px] leading-[1.45]">
+        <div className="flex">
+          <button
+            type="button"
+            disabled={hiddenCount === 0}
+            onClick={() => setExpanded((value) => !value)}
+            className="mr-3 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 disabled:opacity-0"
+          >
+            <ChevronRight size={12} className={cn("transition-transform", expanded && "rotate-90")} />
+          </button>
+          <div className="min-w-0 flex-1 pr-28">
+            {visibleEntries.map(([key, value], index) => (
+              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", index === 2 && "bg-slate-100")}>
+                <span className="shrink-0 font-semibold text-slate-700">{key}</span>
+                <span className="shrink-0 text-slate-500">:</span>
+                <span className="min-w-0 truncate">
+                  <FieldValue value={value} fieldName={key} />
+                </span>
+              </div>
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setExpanded((value) => !value)}
+                className="mt-1 px-1 text-[12px] font-medium text-primary hover:underline"
+              >
+                {expanded ? `Hide ${hiddenCount} fields` : `Show ${hiddenCount} more fields`}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RowsTable({
+  rows,
+  page,
+  pageSize,
+  busy,
+  readOnly,
+  onEdit,
+  onDelete,
+}: {
+  rows: Record<string, unknown>[];
+  page: number;
+  pageSize: number;
+  busy: boolean;
+  readOnly?: boolean;
+  onEdit: (row: Record<string, unknown>) => void;
+  onDelete: (row: Record<string, unknown>) => void;
+}) {
+  const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
+  return (
+    <div className="max-h-[calc(100vh-310px)] w-full max-w-full overflow-auto rounded-md bg-background">
+      <table className="min-w-max border-collapse text-left text-[12px]">
+        <thead className="sticky top-0 z-10 bg-slate-50">
+          <tr>
+            <th className="w-10 min-w-10 px-2 py-2 text-slate-500">#</th>
+            {columns.map((column) => (
+              <th key={column} className="min-w-[150px] max-w-[260px] px-3 py-2 font-medium text-slate-700">
+                {column}
+              </th>
+            ))}
+            {!readOnly && <th className="w-[116px] min-w-[116px] px-2 py-2" />}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="group/row hover:bg-slate-50">
+              <td className="px-2 py-1.5 font-mono text-slate-500">{page * pageSize + rowIndex + 1}</td>
+              {columns.map((column) => (
+                <td key={column} className="max-w-[260px] truncate px-3 py-1.5 font-mono">
+                  <FieldValue value={row[column]} fieldName={column} />
+                </td>
+              ))}
+              {!readOnly && (
+                <td className="px-2 py-1.5">
+                  <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RowEditor({
+  row,
+  saving,
+  onClose,
+  onSave,
+}: {
+  row: Record<string, unknown>;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (next: Record<string, unknown>) => Promise<void>;
+}) {
+  const [value, setValue] = useState(() => JSON.stringify(row, null, 2));
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Row must be a JSON object.");
+      setError(null);
+      await onSave(parsed as Record<string, unknown>);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
+      <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-background shadow-xl">
+        <div className="flex h-12 items-center justify-between px-4">
+          <div>
+            <h2 className="text-[14px] font-semibold text-slate-950">Edit row</h2>
+            <p className="text-[12px] text-slate-500">Update the JSON object and save.</p>
+          </div>
+          <IconButton title="Close" disabled={saving} onClick={onClose}>
+            <X size={14} />
+          </IconButton>
+        </div>
+        <div className="p-4">
+          <textarea
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            spellCheck={false}
+            className="h-[360px] w-full resize-none rounded-md bg-slate-50 p-3 font-mono text-[12px] leading-5 outline-none focus:ring-2 focus:ring-primary/15"
+          />
+          {error && <p className="mt-2 text-[12px] text-destructive">{error}</p>}
+        </div>
+        <div className="flex h-14 items-center justify-end gap-2 px-4">
+          <ToolbarButton disabled={saving} onClick={onClose}>Cancel</ToolbarButton>
+          <ToolbarButton primary disabled={saving} onClick={handleSave}>{saving ? "Saving..." : "Save"}</ToolbarButton>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DataPreview({
@@ -15,69 +408,270 @@ export function DataPreview({
   rows,
   loading,
   viewMode,
+  page,
+  pageSize,
+  totalRows,
+  columnCount = 0,
+  columns: schemaColumns = [],
+  indexes = [],
+  refreshing,
+  whereClause,
+  queryRows,
+  queryLoading,
+  queryError,
   onBack,
   onInsert,
+  onRefresh,
+  onViewModeChange,
+  onPageChange,
+  onPageSizeChange,
+  onFilterApply,
+  onFilterReset,
+  onExplainFilter,
+  onRunQuery,
+  onUpdateRow,
+  onDeleteRow,
 }: DataPreviewProps) {
+  const [query, setQuery] = useState(whereClause);
+  const [message, setMessage] = useState<string | null>(null);
+  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
+  const [activeTab, setActiveTab] = useState<DataTab>("rows");
+  const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
+  const [busy, setBusy] = useState(false);
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const startRow = totalRows === 0 ? 0 : page * pageSize + 1;
+  const endRow = Math.min(totalRows, (page + 1) * pageSize);
+  const hasQuery = query.trim().length > 0;
+
+  useEffect(() => setQuery(whereClause), [whereClause]);
+  useEffect(() => setSql(`SELECT * FROM ${selectedTable} LIMIT 100`), [selectedTable]);
+
+  async function runAction(action: () => Promise<unknown>) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await action();
+      setMessage("Done.");
+      return true;
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : String(err));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleDelete(row: Record<string, unknown>) {
+    if (!window.confirm("Delete this row?")) return;
+    void runAction(() => onDeleteRow(row));
+  }
+
+  const tabs: Array<{ id: DataTab; label: string; count?: number }> = [
+    { id: "rows", label: "Rows", count: totalRows },
+    { id: "query", label: "Query" },
+    { id: "schema", label: "Schema", count: columnCount },
+    { id: "indexes", label: "Indexes", count: indexes.length },
+  ];
+
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="h-8 rounded-md text-[12px] text-muted-foreground" onClick={onBack}>
-          <ChevronLeft size={14} className="mr-1" />
-          Tables
-        </Button>
-        <span className="text-[14px] font-semibold text-foreground">{selectedTable}</span>
-        <Button size="sm" className="ml-auto h-8 rounded-md bg-primary px-3 text-[12px] text-primary-foreground hover:bg-primary/90" onClick={onInsert}>
-          <Plus size={13} className="mr-1.5" />
-          Add row
-        </Button>
+    <section className="overflow-hidden rounded-lg bg-background">
+      <div className="flex h-10 items-center gap-2 px-5">
+        <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-900">
+          <ChevronLeft size={14} />
+        </button>
+        <Database size={15} className="text-slate-700" />
+        <span className="font-mono text-[13px] font-semibold text-slate-950">{selectedTable}</span>
       </div>
 
-      {loading ? (
-        <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-lg border border-border text-muted-foreground">
-          <RefreshCw size={24} className="animate-spin" />
-          <span className="text-[12px]">Fetching rows</span>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 py-20 text-center text-[13px] text-muted-foreground">
-          No rows found
-        </div>
-      ) : viewMode === "table" ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full table-fixed border-collapse text-left">
+      <div className="flex h-11 items-end gap-7 px-5">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "h-11 border-b-2 px-0 text-[13px] font-semibold",
+              activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-slate-600"
+            )}
+          >
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{tab.count}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "rows" && (
+        <>
+          <div className="space-y-2 px-5 py-2">
+            <div className="flex min-h-8 items-center gap-3">
+              <div className="flex h-8 flex-1 items-center rounded-md bg-slate-50 px-2 text-[12px]">
+                <Search size={14} className="mr-2 text-slate-500" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && onFilterApply(query.trim())}
+                  placeholder="Type a SQL WHERE clause preview, e.g. price > 100"
+                  className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
+                />
+                <Filter size={13} className="ml-2 text-slate-400" />
+              </div>
+              <ToolbarButton disabled={!hasQuery || busy} onClick={() => void runAction(async () => setMessage(await onExplainFilter(query.trim())))}>Explain</ToolbarButton>
+              <ToolbarButton disabled={(!hasQuery && !whereClause) || busy} onClick={() => { setQuery(""); setMessage(null); onFilterReset(); }}>Reset</ToolbarButton>
+              <ToolbarButton primary disabled={busy} onClick={() => { onFilterApply(query.trim()); setMessage(null); }}>Find</ToolbarButton>
+            </div>
+            {message && <pre className="max-h-32 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-4 text-slate-700">{message}</pre>}
+          </div>
+
+          <div className="flex h-11 items-center justify-between px-5">
+            <div className="flex items-center gap-2">
+              <ToolbarButton primary disabled={busy} onClick={onInsert}>
+                <Plus size={13} />
+                Add row
+                <ChevronDown size={12} />
+              </ToolbarButton>
+              <ToolbarButton onClick={() => downloadFile(`${selectedTable}-page-${page + 1}.csv`, toCsv(rows), "text/csv")} disabled={!rows.length}>
+                <Download size={13} />
+                Export CSV
+              </ToolbarButton>
+              <ToolbarButton onClick={() => downloadFile(`${selectedTable}-page-${page + 1}.json`, JSON.stringify(rows, null, 2), "application/json")} disabled={!rows.length}>
+                <Download size={13} />
+                Export JSON
+              </ToolbarButton>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-slate-50 px-2 text-[12px] outline-none">
+                {[25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+              <span className="min-w-[104px] text-right text-[12px] text-slate-700">{startRow} - {endRow} of {totalRows}</span>
+              <button type="button" onClick={onRefresh} disabled={refreshing} className="text-slate-600 disabled:opacity-40">
+                <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
+              </button>
+              <button type="button" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)} className="text-slate-600 disabled:opacity-35">
+                <ChevronLeft size={16} />
+              </button>
+              <button type="button" disabled={page >= totalPages - 1 || loading} onClick={() => onPageChange(page + 1)} className="text-slate-600 disabled:opacity-35">
+                <ChevronRight size={16} />
+              </button>
+              <ViewToggle value={viewMode} onChange={onViewModeChange} />
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="p-3">
+        {activeTab === "query" ? (
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+            <div className="rounded-md bg-slate-50 p-3">
+              <textarea
+                value={sql}
+                onChange={(event) => setSql(event.target.value)}
+                spellCheck={false}
+                className="h-80 w-full resize-none bg-transparent font-mono text-[12px] leading-5 outline-none"
+              />
+              <div className="mt-3 flex justify-end">
+                <ToolbarButton primary disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
+                  {queryLoading ? "Running..." : "Run query"}
+                </ToolbarButton>
+              </div>
+            </div>
+            <div className="min-h-80 rounded-md bg-slate-50 p-3">
+              <div className="mb-2 text-[12px] font-semibold text-slate-800">Result preview</div>
+              {queryError ? (
+                <p className="text-[12px] text-destructive">{queryError}</p>
+              ) : queryRows.length ? (
+                <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly onEdit={setEditingRow} onDelete={handleDelete} />
+              ) : (
+                <p className="py-10 text-center text-[12px] text-muted-foreground">Run a SELECT query to preview rows.</p>
+              )}
+            </div>
+          </div>
+        ) : activeTab === "schema" ? (
+          <div className="rounded-md bg-slate-50/70 p-2">
+            <table className="w-full text-left text-[12px]">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  {Object.keys(rows[0]).map((column) => (
-                    <th key={column} className="border-r border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0">
-                      <span className="block truncate">{column}</span>
-                    </th>
-                  ))}
+                <tr className="text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Column</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
+                  <th className="px-3 py-2 font-medium">Nullable</th>
+                  <th className="px-3 py-2 font-medium">Default</th>
+                  <th className="px-3 py-2 font-medium">Key</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((row, rowIndex) => (
-                  <tr key={rowIndex} className="hover:bg-primary/5">
-                    {Object.values(row).map((value, valueIndex) => (
-                      <td key={valueIndex} className="border-r border-border px-3 py-2 text-[12px] text-foreground last:border-r-0">
-                        <span className="block truncate">
-                          {value === null ? <span className="text-muted-foreground/45">NULL</span> : String(value)}
-                        </span>
-                      </td>
-                    ))}
+              <tbody>
+                {schemaColumns.map((column) => (
+                  <tr key={column.name} className="hover:bg-background">
+                    <td className="px-3 py-2 font-mono font-semibold text-slate-800">{column.name}</td>
+                    <td className="px-3 py-2 font-mono text-slate-600">{column.type}</td>
+                    <td className="px-3 py-2 text-slate-600">{column.nullable ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 font-mono text-slate-500">{column.defaultValue == null ? "-" : String(column.defaultValue)}</td>
+                    <td className="px-3 py-2 text-slate-600">{column.isPrimaryKey ? "Primary" : "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {rows.map((row, rowIndex) => (
-            <pre key={rowIndex} className="overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-4 font-mono text-[12px] leading-5 text-slate-100">
-              {JSON.stringify(row, null, 2)}
-            </pre>
-          ))}
-        </div>
+        ) : activeTab === "indexes" ? (
+          <div className="rounded-md bg-slate-50/70 p-2">
+            {indexes.length ? (
+              <table className="w-full text-left text-[12px]">
+                <thead>
+                  <tr className="text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">Index</th>
+                    <th className="px-3 py-2 font-medium">Columns</th>
+                    <th className="px-3 py-2 font-medium">Unique</th>
+                    <th className="px-3 py-2 font-medium">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {indexes.map((index) => (
+                    <tr key={`${index.name}-${index.columns}`} className="hover:bg-background">
+                      <td className="px-3 py-2 font-mono font-semibold">{index.name}</td>
+                      <td className="px-3 py-2 font-mono text-slate-600">{index.columns || "-"}</td>
+                      <td className="px-3 py-2 text-slate-600">{index.unique ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2 text-slate-600">{index.type}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="py-16 text-center text-[12px] text-muted-foreground">No indexes found.</p>
+            )}
+          </div>
+        ) : loading ? (
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md text-slate-500">
+            <RefreshCw size={24} className="animate-spin" />
+            <span className="text-[12px]">Fetching rows</span>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-md bg-slate-50 py-20 text-center text-[13px] text-slate-500">No rows found</div>
+        ) : viewMode === "table" ? (
+          <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
+        ) : viewMode === "json" ? (
+          <div className="rounded-md bg-slate-50">
+            <pre className="max-h-[calc(100vh-300px)] overflow-auto p-3 font-mono text-[12px] leading-5 text-slate-800">{JSON.stringify(rows, null, 2)}</pre>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {rows.map((row, rowIndex) => (
+              <DocumentRow key={rowIndex} row={row} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editingRow && (
+        <RowEditor
+          row={editingRow}
+          saving={busy}
+          onClose={() => setEditingRow(null)}
+          onSave={async (next) => {
+            const saved = await runAction(() => onUpdateRow(editingRow, next));
+            if (saved) setEditingRow(null);
+          }}
+        />
       )}
     </section>
   );

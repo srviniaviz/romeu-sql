@@ -72,15 +72,13 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px] p-0 overflow-hidden max-h-[90vh] flex flex-col">
-        <DialogHeader className="p-6 pb-2">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl sm:max-w-[920px]">
+        <DialogHeader className="border-b border-border/50 px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <TableIcon size={20} />
-            </div>
+            <TableIcon size={17} className="text-primary" />
             <div>
-              <DialogTitle>{t('modal_create_table.title')}</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-[16px] font-semibold tracking-tight">{t('modal_create_table.title')}</DialogTitle>
+              <DialogDescription className="text-[12px]">
                 {t('modal_create_table.description', { dbType: dbType.toUpperCase() })}
               </DialogDescription>
             </div>
@@ -90,20 +88,20 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
         <div className="flex-1 flex overflow-hidden">
           {/* Main Designer */}
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="p-6 pb-2 shrink-0">
-              <div className="grid gap-2">
-                <Label htmlFor="tableName">{t('modal_create_table.field_label')}</Label>
+            <div className="shrink-0 px-6 py-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="tableName" className="text-[12px] font-medium normal-case tracking-normal text-muted-foreground">{t('modal_create_table.field_label')}</Label>
                 <Input 
                   id="tableName"
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
                   placeholder={t('modal_create_table.placeholder')} 
-                  className="h-9"
+                  className="h-9 border-border/70 text-[13px] focus-visible:ring-1 focus-visible:ring-primary/25"
                 />
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-6 py-1 custom-scrollbar">
               <div className="space-y-4 pb-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-[12px] font-medium text-muted-foreground">{t('modal_create_table.columns_label')}</h4>
@@ -111,7 +109,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                     variant="outline" 
                     size="sm" 
                     onClick={addColumn}
-                    className="h-8 gap-2 text-xs"
+                    className="h-8 gap-2 rounded-md border-border/70 text-xs"
                   >
                     <Plus size={14} /> {t('modal_create_table.add_column')}
                   </Button>
@@ -125,7 +123,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                         initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.98 }}
-                        className="flex flex-col gap-3 p-4 rounded-xl border border-muted bg-muted/20 hover:bg-muted/30 hover:border-primary/20 transition-all relative group"
+                        className="group relative flex flex-col gap-3 rounded-md bg-muted/25 p-3 transition-all hover:bg-muted/35"
                       >
                         <div className="flex items-center gap-2">
                           <div className="grid grid-cols-[1fr,160px] gap-2 flex-1">
@@ -133,11 +131,11 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                               value={col.name}
                               onChange={(e) => updateColumn(col.id, { name: e.target.value })}
                               placeholder={t('modal_create_table.column_name_placeholder')}
-                              className="h-9 bg-background/50 border-muted"
+                              className="h-9 border-border/60 bg-background/80 text-[13px] focus-visible:ring-1 focus-visible:ring-primary/25"
                             />
 
                             <Select value={col.type} onValueChange={(val) => updateColumn(col.id, { type: val })}>
-                              <SelectTrigger className="h-9 text-xs bg-background/50 border-muted">
+                              <SelectTrigger className="h-9 border-border/60 bg-background/80 text-xs">
                                 <SelectValue placeholder={t('modal_create_table.column_type_placeholder')} />
                               </SelectTrigger>
                               <SelectContent>
@@ -160,7 +158,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-4 px-3 h-9 border border-muted rounded-md bg-background/40">
+                          <div className="flex h-9 items-center gap-4 rounded-md bg-background/70 px-3">
                             <div className="flex items-center gap-2" title="Primary Key">
                               <Checkbox 
                                 id={`pk-${col.id}`}
@@ -171,7 +169,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                               <Label htmlFor={`pk-${col.id}`} className="cursor-pointer transition-colors group-hover:text-foreground">{t('modal_create_table.column_primary')}</Label>
                             </div>
                             
-                            <Separator orientation="vertical" className="h-4 bg-muted" />
+                            <Separator orientation="vertical" className="h-4 bg-border/50" />
 
                             <div className="flex items-center gap-2" title="Nullable">
                               <Checkbox 
@@ -189,7 +187,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                             value={col.defaultValue}
                             onChange={(e) => updateColumn(col.id, { defaultValue: e.target.value })}
                             placeholder={t('modal_create_table.column_default_placeholder')}
-                            className="h-9 text-xs font-mono flex-1 bg-background/40 border-muted"
+                            className="h-9 flex-1 border-border/60 bg-background/70 font-mono text-xs focus-visible:ring-1 focus-visible:ring-primary/25"
                           />
                         </div>
                       </motion.div>
@@ -198,7 +196,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                 </div>
 
                 {error && (
-                    <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-destructive animate-in fade-in slide-in-from-top-1">
+                    <div className="flex items-start gap-3 rounded-md bg-destructive/10 p-3 text-destructive animate-in fade-in slide-in-from-top-1">
                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
                         <div className="space-y-1">
                             <p className="text-[12px] font-medium">Engine error</p>
@@ -211,17 +209,17 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           </div>
 
           {/* SQL Preview Sidebar */}
-          <div className="w-[300px] bg-muted/10 flex flex-col p-6 border-l shrink-0">
+          <div className="flex w-[300px] shrink-0 flex-col bg-muted/20 p-5">
             <div className="flex items-center gap-2 mb-4 opacity-70">
               <FileCode size={16} />
               <span className="text-[12px] font-medium text-muted-foreground">{t('modal_create_table.sql_preview')}</span>
             </div>
 
-            <div className="flex-1 rounded-lg border bg-muted/20 p-4 font-mono text-[10px] text-muted-foreground overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-y-auto rounded-md bg-background/70 p-4 font-mono text-[10px] text-muted-foreground custom-scrollbar ring-1 ring-border/40">
               <pre className="whitespace-pre-wrap">{generatedSql}</pre>
             </div>
 
-            <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 flex gap-2 shrink-0">
+            <div className="mt-4 flex shrink-0 gap-2 rounded-md bg-amber-500/5 p-3">
               <AlertCircle size={14} className="text-amber-500 shrink-0" />
               <p className="text-[10px] text-amber-500/80 leading-snug">
                 {t('modal_create_table.warn_modification')}
@@ -230,12 +228,12 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           </div>
         </div>
 
-        <DialogFooter className="p-6">
-          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <DialogFooter className="border-t border-border/50 bg-muted/15 px-6 py-4">
+          <Button variant="ghost" onClick={onClose} className="h-9 rounded-md px-4 text-[12px] font-medium text-muted-foreground">{t('common.cancel')}</Button>
           <Button 
             onClick={handleCreate}
             disabled={!tableName || columns.some(c => !c.name) || loading}
-            className="min-w-[120px]"
+            className="h-9 min-w-[120px] rounded-md text-[12px] font-medium"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : t('modal_create_table.submit')}
           </Button>

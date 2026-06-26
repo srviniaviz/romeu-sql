@@ -33,11 +33,59 @@ export async function listTables(connection: Connection) {
   return dialect.normalizeTables(rows);
 }
 
+export async function listTableStats(connection: Connection) {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  const rows = await withDatabase(connection, (db) =>
+    db.select<Record<string, unknown>[]>(dialect.listTableStats())
+  );
+  return dialect.normalizeTableStats(rows);
+}
+
 export async function selectRows(connection: Connection, tableName: string, limit = 100) {
   ensurePasswordAvailable(connection);
   const dialect = getDialect(connection.type);
   return withDatabase(connection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit))
+    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, 0))
+  );
+}
+
+export async function selectRowsPage(
+  connection: Connection,
+  tableName: string,
+  limit: number,
+  offset: number,
+  whereClause = ""
+) {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  return withDatabase(connection, (db) =>
+    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, offset, whereClause))
+  );
+}
+
+export async function countRows(connection: Connection, tableName: string, whereClause = "") {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  const rows = await withDatabase(connection, (db) =>
+    db.select<Record<string, unknown>[]>(dialect.countRows(tableName, whereClause))
+  );
+  const firstRow = rows[0] || {};
+  const value =
+    firstRow.count ??
+    firstRow.COUNT ??
+    firstRow["COUNT(*)"] ??
+    Object.values(firstRow)[0] ??
+    0;
+
+  return Number(value) || 0;
+}
+
+export async function explainRows(connection: Connection, tableName: string, whereClause = "") {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  return withDatabase(connection, (db) =>
+    db.select<Record<string, unknown>[]>(dialect.explainRows(tableName, whereClause))
   );
 }
 
@@ -50,10 +98,28 @@ export async function listColumns(connection: Connection, tableName: string) {
   return dialect.normalizeColumns(rows);
 }
 
+export async function listIndexes(connection: Connection, tableName: string) {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  const rows = await withDatabase(connection, (db) =>
+    db.select<Record<string, unknown>[]>(dialect.listIndexes(tableName))
+  );
+  return dialect.normalizeIndexes(rows);
+}
+
 export async function executeSql(connection: Connection, query: string) {
   ensurePasswordAvailable(connection);
   await withDatabase(connection, (db) => db.execute(query));
   return { query };
+}
+
+export async function selectQuery(connection: Connection, query: string) {
+  ensurePasswordAvailable(connection);
+  const trimmed = query.trim();
+  if (!/^(select|with)\b/i.test(trimmed)) {
+    throw new Error("Query tab only runs SELECT/WITH statements.");
+  }
+  return withDatabase(connection, (db) => db.select<Record<string, unknown>[]>(trimmed));
 }
 
 export async function insertRow(
@@ -64,6 +130,31 @@ export async function insertRow(
   ensurePasswordAvailable(connection);
   const dialect = getDialect(connection.type);
   const { sql, values } = dialect.insertRow(tableName, data);
+  await withDatabase(connection, (db) => db.execute(sql, values));
+  return { query: sql };
+}
+
+export async function updateRow(
+  connection: Connection,
+  tableName: string,
+  original: Record<string, unknown>,
+  next: Record<string, unknown>
+) {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  const { sql, values } = dialect.updateRow(tableName, original, next);
+  await withDatabase(connection, (db) => db.execute(sql, values));
+  return { query: sql };
+}
+
+export async function deleteRow(
+  connection: Connection,
+  tableName: string,
+  row: Record<string, unknown>
+) {
+  ensurePasswordAvailable(connection);
+  const dialect = getDialect(connection.type);
+  const { sql, values } = dialect.deleteRow(tableName, row);
   await withDatabase(connection, (db) => db.execute(sql, values));
   return { query: sql };
 }

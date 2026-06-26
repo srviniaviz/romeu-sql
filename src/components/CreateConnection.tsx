@@ -260,8 +260,8 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[720px] gap-0 overflow-hidden rounded-lg border-border bg-background p-0 text-foreground shadow-2xl">
-        <DialogHeader className="border-b border-border p-6 pb-4">
+      <DialogContent className="gap-0 overflow-hidden rounded-lg border-border/60 bg-background p-0 text-foreground shadow-2xl sm:max-w-[720px]">
+        <DialogHeader className="border-b border-border/50 px-6 py-5">
           <div className="flex items-center gap-4">
             <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Database className="size-5" />
@@ -278,7 +278,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
         <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="px-6 py-4">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-2 border-border/50 bg-muted/35">
                 <TabsTrigger value="general">
                   {t('modal.tabs.general')}
                 </TabsTrigger>
@@ -317,7 +317,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                 <TabsContent value="connection" className="space-y-6 mt-0">
                   <div className="grid gap-5">
                     {/* Magic URL Field */}
-                    <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                    <div className="space-y-2 rounded-md bg-primary/5 p-4">
                       <div className="flex items-center gap-2 mb-1">
                         <RefreshCw size={14} className="text-primary opacity-60" />
                         <Label className="text-primary">{t('modal.connection.magic_url')}</Label>
@@ -325,7 +325,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                       <Input 
                         {...register("connectionUrl")} 
                         placeholder="postgresql://user:password@localhost:5432/database" 
-                        className="bg-background/80 border-primary/10 focus-visible:ring-primary/20"
+                        className="border-primary/20 bg-background/80 focus-visible:ring-primary/20"
                       />
                       <p className="text-[12px] text-muted-foreground">Pasting a URL will automatically fill all fields below</p>
                     </div>
@@ -483,7 +483,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
 
                 <TabsContent value="ssh" className="space-y-6 mt-0">
                   <div className="space-y-5">
-                    <div className="flex items-center justify-between p-5 rounded-xl bg-muted/20 border border-border/10">
+                    <div className="flex items-center justify-between rounded-md bg-muted/20 p-4">
                       <div className="space-y-0.5">
                         <Label className="text-foreground">{t('modal.ssh.use_tunnel')}</Label>
                         <p className="text-[12px] text-muted-foreground">Connect via Bastion Host</p>
@@ -590,7 +590,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
               </div>
             </ScrollArea>
 
-            <DialogFooter className="flex w-full items-center justify-between border-t border-border px-6 py-4">
+            <DialogFooter className="flex w-full items-center justify-between border-t border-border/50 bg-muted/15 px-6 py-4">
               <div className="flex items-center gap-3">
                 <Button 
                   type="button" 

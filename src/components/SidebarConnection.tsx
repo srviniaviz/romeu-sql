@@ -47,16 +47,10 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
     }
   }, [isExpanded]);
 
-  useEffect(() => {
-    if (!isCurrentDb && isExpanded) {
-        setIsExpanded(false);
-    }
-  }, [isCurrentDb]);
-
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group/db-item flex items-center justify-between rounded-md px-2 py-1 hover:bg-muted cursor-pointer group/item transition-all ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+        className={`group/db-item flex items-center justify-between rounded-md px-2 py-1 cursor-pointer group/item transition-all hover:bg-background/70 ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={(e) => {
           e.stopPropagation();
           onSelect({ ...conn, database: dbName });
@@ -100,7 +94,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="ml-4 mt-0.5 flex flex-col gap-0.5 overflow-hidden border-l border-border pl-2"
+            className="ml-4 mt-0.5 flex flex-col gap-0.5 overflow-hidden pl-2"
           >
             {loading ? (
               <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-muted-foreground">
@@ -111,7 +105,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
               tables.map(table => (
                 <div 
                   key={table}
-                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 hover:bg-muted cursor-pointer group/table transition-all ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isCurrentDb) onSelect({ ...conn, database: dbName });
@@ -176,7 +170,7 @@ export function SidebarConnection({
   };
 
   const fetchDatabases = async () => {
-    if (databases.length > 0 && !isActive) return;
+    if (databases.length > 0) return;
     try {
       setLoading(true);
       setDatabases(await listDatabases(conn));
@@ -193,16 +187,10 @@ export function SidebarConnection({
     }
   }, [isActive, isExpanded]);
 
-  useEffect(() => {
-    if (!isActive && isExpanded) {
-        setIsExpanded(false);
-    }
-  }, [isActive]);
-
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 transition-all hover:bg-muted ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+        className={`group flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 transition-all hover:bg-background/70 ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={() => {
           onSelect(conn);
           setIsExpanded(!isExpanded);
@@ -221,7 +209,7 @@ export function SidebarConnection({
                   layoutId="active-dot" 
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full border border-background bg-primary" 
+                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full bg-primary" 
                 />
               )}
             </div>
@@ -232,7 +220,7 @@ export function SidebarConnection({
         </div>
 
         <div className={`flex items-center transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <div className="flex items-center rounded-md bg-background/80 p-0.5 ring-1 ring-border">
+          <div className="flex items-center rounded-md bg-background/70 p-0.5 shadow-sm">
                 {isActive && (
                     <Button
                     variant="ghost"
@@ -270,7 +258,7 @@ export function SidebarConnection({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
                     onClick={(e) => onEdit(conn, e)}
                 >
                     <Pencil size={12} />

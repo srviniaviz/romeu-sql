@@ -21,20 +21,20 @@ export function DeleteConnectionDialog({
 }: DeleteConnectionDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-lg">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold text-foreground">
+      <DialogContent className="max-w-sm overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border/50 px-6 py-5">
+          <DialogTitle className="text-[16px] font-semibold tracking-tight text-foreground">
             Delete connection?
           </DialogTitle>
-          <DialogDescription className="text-[13px] leading-5 text-muted-foreground">
+          <DialogDescription className="text-[12px] leading-5 text-muted-foreground">
             This removes the saved connection profile and its stored password.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-md">
+        <DialogFooter className="border-t border-border/50 bg-muted/15 px-6 py-4">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-9 rounded-md px-4 text-[12px] font-medium text-muted-foreground">
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirm} className="rounded-md">
+          <Button variant="destructive" onClick={onConfirm} className="h-9 rounded-md px-5 text-[12px] font-medium">
             Delete
           </Button>
         </DialogFooter>
