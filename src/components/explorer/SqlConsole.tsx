@@ -78,8 +78,9 @@ export function SqlConsole({
               value={sqlQuery}
               onChange={onSqlQueryChange}
               placeholder="SELECT * FROM table_name LIMIT 100;"
-              minHeight="min-h-20"
-              className="bg-slate-950 text-slate-100 shadow-inner [&_textarea]:text-slate-100"
+              minHeight="96px"
+              dark
+              className="bg-slate-950 shadow-inner"
             />
             {execResult && (
               <div className={`flex items-start gap-2 rounded-md p-2.5 text-[12px] ${execResult.success ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>

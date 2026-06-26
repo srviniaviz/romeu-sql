@@ -1,4 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { autocompletion, CompletionContext } from "@codemirror/autocomplete";
+import { sql } from "@codemirror/lang-sql";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView } from "@codemirror/view";
 import { cn } from "@/lib/utils";
 
 const SQL_KEYWORDS = [
@@ -31,12 +35,6 @@ const SQL_KEYWORDS = [
   "DESC",
 ];
 
-function currentToken(value: string, cursor: number) {
-  const before = value.slice(0, cursor);
-  const match = before.match(/[a-zA-Z0-9_.*]+$/);
-  return match?.[0] || "";
-}
-
 interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -44,6 +42,7 @@ interface SqlEditorProps {
   className?: string;
   minHeight?: string;
   completions?: string[];
+  dark?: boolean;
 }
 
 export function SqlEditor({
@@ -51,85 +50,79 @@ export function SqlEditor({
   onChange,
   placeholder,
   className,
-  minHeight = "min-h-32",
+  minHeight = "160px",
   completions = [],
+  dark = false,
 }: SqlEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [cursor, setCursor] = useState(0);
-  const [open, setOpen] = useState(false);
-  const token = currentToken(value, cursor);
+  const completionSource = (context: CompletionContext) => {
+    const word = context.matchBefore(/[\w.]+/);
+    if (!word || (word.from === word.to && !context.explicit)) return null;
 
-  const suggestions = useMemo(() => {
-    if (!token || token.length < 1) return [];
-    const all = Array.from(new Set([...SQL_KEYWORDS, ...completions]));
-    return all
-      .filter((item) => item.toLowerCase().startsWith(token.toLowerCase()) && item.toLowerCase() !== token.toLowerCase())
-      .slice(0, 8);
-  }, [completions, token]);
+    const custom = completions.map((item) => ({
+      label: item,
+      type: "variable",
+      detail: item.includes(".") ? "field" : "object",
+    }));
 
-  function insertSuggestion(suggestion: string) {
-    const start = cursor - token.length;
-    const next = `${value.slice(0, start)}${suggestion}${value.slice(cursor)}`;
-    const nextCursor = start + suggestion.length;
-    onChange(next);
-    setOpen(false);
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
-      setCursor(nextCursor);
-    });
-  }
+    return {
+      from: word.from,
+      options: [
+        ...SQL_KEYWORDS.map((label) => ({ label, type: "keyword" })),
+        ...custom,
+      ],
+    };
+  };
 
   return (
-    <div className={cn("relative rounded-md bg-slate-50", className)}>
-      <textarea
-        ref={textareaRef}
+    <div className={cn("overflow-hidden rounded-md bg-slate-50 text-[12px]", className)}>
+      <CodeMirror
         value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          setCursor(event.target.selectionStart);
-          setOpen(true);
-        }}
-        onClick={(event) => setCursor(event.currentTarget.selectionStart)}
-        onKeyUp={(event) => {
-          setCursor(event.currentTarget.selectionStart);
-          if (event.key.length === 1 || event.key === "Backspace") setOpen(true);
-          if (event.key === "Escape") setOpen(false);
-        }}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === " ") {
-            event.preventDefault();
-            setOpen(true);
-          }
-          if (event.key === "Tab" && open && suggestions[0]) {
-            event.preventDefault();
-            insertSuggestion(suggestions[0]);
-          }
-        }}
-        spellCheck={false}
+        height="100%"
+        minHeight={minHeight}
         placeholder={placeholder}
-        className={cn(
-          "w-full resize-none bg-transparent p-3 font-mono text-[12px] leading-5 outline-none placeholder:text-slate-400",
-          minHeight
-        )}
+        theme={dark ? oneDark : undefined}
+        basicSetup={{
+          lineNumbers: true,
+          foldGutter: true,
+          highlightActiveLine: true,
+          highlightSelectionMatches: true,
+          autocompletion: false,
+          closeBrackets: true,
+          bracketMatching: true,
+        }}
+        extensions={[
+          sql(),
+          autocompletion({
+            override: [completionSource],
+            activateOnTyping: true,
+            maxRenderedOptions: 14,
+          }),
+          EditorView.theme({
+            "&": {
+              fontSize: "12px",
+              height: "100%",
+            },
+            ".cm-editor": {
+              height: "100%",
+              backgroundColor: "transparent",
+            },
+            ".cm-scroller": {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            },
+            ".cm-tooltip": {
+              borderRadius: "6px",
+              border: "1px solid rgb(226 232 240)",
+              boxShadow: "0 16px 32px rgba(15, 23, 42, 0.16)",
+              overflow: "hidden",
+            },
+            ".cm-tooltip-autocomplete ul li[aria-selected]": {
+              backgroundColor: "rgb(226 232 240)",
+              color: "rgb(15 23 42)",
+            },
+          }),
+        ]}
+        onChange={onChange}
       />
-      {open && suggestions.length > 0 && (
-        <div className="absolute left-3 top-10 z-20 w-56 overflow-hidden rounded-md bg-background shadow-xl ring-1 ring-border/60">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                insertSuggestion(suggestion);
-              }}
-              className="block w-full px-3 py-1.5 text-left font-mono text-[12px] text-slate-700 hover:bg-slate-50"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

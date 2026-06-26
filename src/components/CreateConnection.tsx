@@ -39,6 +39,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { testConnection as testDatabaseConnection } from "@/domain/database/service";
+import { hydrateConnectionSecrets } from "@/domain/connections/repository";
 
 /**
  * Define the schema for connection settings.
@@ -129,25 +130,34 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
     }
   });
 
-  // Handle Edit Mode Reset
   useEffect(() => {
-    if (connectionToEdit && isOpen) {
+    let cancelled = false;
+
+    async function resetEditForm(connection: Connection) {
+      const hydratedConnection = await hydrateConnectionSecrets(connection);
+      if (cancelled) return;
+
       reset({
-        name: connectionToEdit.name,
-        type: connectionToEdit.type as any,
-        host: connectionToEdit.host,
-        port: connectionToEdit.port,
-        database: connectionToEdit.database,
-        username: connectionToEdit.username,
-        password: connectionToEdit.password || "",
-        group: connectionToEdit.group || "Default",
-        savePassword: true,
+        name: hydratedConnection.name,
+        type: hydratedConnection.type as any,
+        host: hydratedConnection.host,
+        port: hydratedConnection.port,
+        database: hydratedConnection.database,
+        username: hydratedConnection.username,
+        password: hydratedConnection.password || "",
+        group: hydratedConnection.group || "Default",
+        savePassword: hydratedConnection.savePassword !== false,
         sshEnabled: false,
         sshAuthMethod: "password",
-        sslMode: "disable",
+        sslMode: hydratedConnection.sslMode as any || "disable",
         connectionUrl: "",
         connectTimeout: "10",
       });
+      setActiveTab("connection");
+    }
+
+    if (connectionToEdit && isOpen) {
+      void resetEditForm(connectionToEdit);
     } else if (isOpen) {
       reset({
         name: "",
@@ -167,6 +177,10 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
       setActiveTab("connection");
     }
     setSaveError(null);
+
+    return () => {
+      cancelled = true;
+    };
   }, [connectionToEdit, reset, isOpen]);
 
   const sshEnabled = watch("sshEnabled");

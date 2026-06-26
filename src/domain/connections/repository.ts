@@ -48,19 +48,24 @@ export async function listConnections(): Promise<Connection[]> {
     await persistProfiles(hydrated);
   }
 
-  return Promise.all(
-    hydrated.map(async (profile) => {
-      const password = profile.hasSavedPassword
-        ? await getConnectionPassword(profile.id)
-        : undefined;
+  return hydrated.map((profile) => ({
+    ...profile,
+    hasSavedPassword: !!profile.hasSavedPassword,
+    password: undefined,
+  }));
+}
 
-      return {
-        ...profile,
-        hasSavedPassword: !!password,
-        password,
-      };
-    })
-  );
+export async function hydrateConnectionSecrets(connection: Connection): Promise<Connection> {
+  if (connection.type === "sqlite" || connection.password || !connection.hasSavedPassword) {
+    return connection;
+  }
+
+  const password = await getConnectionPassword(connection.id);
+  return {
+    ...connection,
+    hasSavedPassword: !!password,
+    password,
+  };
 }
 
 export async function addConnection(conn: NewConnection): Promise<Connection> {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Loader2, Terminal, X } from "lucide-react";
@@ -75,6 +75,7 @@ export function DatabaseExplorer({
   const [queryRows, setQueryRows] = useState<Record<string, unknown>[]>([]);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<string | null>(null);
+  const emptyRowsRecoveryKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -141,6 +142,40 @@ export function DatabaseExplorer({
     queryFn: () => (selectedTable ? selectRowsPage(connection, selectedTable, pageSize, page * pageSize, whereClause, rowOptions) : []),
     enabled: !!selectedTable,
   });
+
+  useEffect(() => {
+    const hasOptions = Boolean(rowOptions.project || rowOptions.sort || rowOptions.skip || rowOptions.limit);
+    const recoveryKey = `${connection.id}:${connection.database}:${selectedTable}:${page}:${pageSize}:${whereClause}:${JSON.stringify(rowOptions)}`;
+    if (
+      selectedTable &&
+      page === 0 &&
+      totalRows > 0 &&
+      tableData.length === 0 &&
+      !loadingRows &&
+      !fetchingRows &&
+      !countingRows &&
+      !whereClause &&
+      !hasOptions &&
+      emptyRowsRecoveryKey.current !== recoveryKey
+    ) {
+      emptyRowsRecoveryKey.current = recoveryKey;
+      refetchRows();
+    }
+  }, [
+    connection.database,
+    connection.id,
+    countingRows,
+    fetchingRows,
+    loadingRows,
+    page,
+    pageSize,
+    refetchRows,
+    rowOptions,
+    selectedTable,
+    tableData.length,
+    totalRows,
+    whereClause,
+  ]);
 
   const { data: columns = [] } = useQuery({
     queryKey: ["columns", connection.id, connection.database, selectedTable],

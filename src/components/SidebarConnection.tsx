@@ -234,7 +234,7 @@ export function SidebarConnection({
         </div>
 
         <div className={`flex items-center transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <div className="flex items-center rounded-md bg-background/70 p-0.5 shadow-sm">
+          <div className="flex items-center rounded-md">
                 {isActive && (
                     <Button
                     variant="ghost"

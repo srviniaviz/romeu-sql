@@ -8,7 +8,6 @@ import {
   Database,
   Download,
   Edit3,
-  Filter,
   List,
   Plus,
   RefreshCw,
@@ -440,7 +439,7 @@ function ExportModal({
             value={query}
             onChange={setQuery}
             placeholder="SELECT * FROM table_name LIMIT 1000"
-            minHeight="min-h-44"
+            minHeight="176px"
             completions={completions}
           />
           <label className="flex items-center gap-2 text-[12px] font-medium text-slate-700">
@@ -637,20 +636,19 @@ export function DataPreview({
               <div className="flex min-h-8 items-center gap-3">
                 <div className="flex h-8 flex-1 items-center rounded-md bg-slate-50 px-2 text-[12px]">
                   <Search size={14} className="mr-2 text-slate-500" />
+                  <span className="mr-2 font-semibold text-slate-700">WHERE</span>
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => event.key === "Enter" && applyRows()}
-                    placeholder="Type a SQL WHERE clause preview, e.g. price > 100"
+                    placeholder="id = 1"
                     className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
                   />
                   {query || whereClause || project || sort || skip || limit ? (
                     <button type="button" title="Reset" onClick={resetRows} className="ml-2 text-slate-400 hover:text-slate-700">
                       <X size={13} />
                     </button>
-                  ) : (
-                    <Filter size={13} className="ml-2 text-slate-400" />
-                  )}
+                  ) : null}
                 </div>
                 <ToolbarButton primary disabled={busy} onClick={applyRows}>Find</ToolbarButton>
                 <ToolbarButton disabled={busy} onClick={() => setOptionsOpen((open) => !open)}>
@@ -658,24 +656,25 @@ export function DataPreview({
                   <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />
                 </ToolbarButton>
               </div>
+              <div className="flex h-8 items-center rounded-md bg-slate-50 px-2 text-[12px]">
+                <span className="mr-2 font-semibold text-slate-700">ORDER BY</span>
+                <input
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && applyRows()}
+                  placeholder="createdAt desc"
+                  className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
+                />
+              </div>
               {message && <pre className="max-h-32 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-4 text-slate-700">{message}</pre>}
               {optionsOpen && (
-                <div className="grid gap-3 rounded-md bg-slate-50 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 rounded-md bg-slate-50 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
                   <label className="space-y-1">
                     <span className="font-medium text-slate-700">Project</span>
                     <input
                       value={project}
                       onChange={(event) => setProject(event.target.value)}
                       placeholder="id, name, createdAt"
-                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="font-medium text-slate-700">Sort</span>
-                    <input
-                      value={sort}
-                      onChange={(event) => setSort(event.target.value)}
-                      placeholder="createdAt desc"
                       className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
                     />
                   </label>
@@ -742,7 +741,7 @@ export function DataPreview({
               <SqlEditor
                 value={sql}
                 onChange={setSql}
-                minHeight="min-h-full"
+                minHeight="100%"
                 className="min-h-0 flex-1"
                 completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
               />
@@ -822,13 +821,22 @@ export function DataPreview({
             <RefreshCw size={24} className="animate-spin" />
             <span className="text-[12px]">Fetching rows</span>
           </div>
+        ) : rows.length === 0 && totalRows > 0 && refreshing ? (
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md bg-slate-50 text-slate-500">
+            <RefreshCw size={24} className="animate-spin" />
+            <span className="text-[12px]">Syncing rows</span>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-md bg-slate-50 py-20 text-center text-[13px] text-slate-500">No rows found</div>
         ) : viewMode === "table" ? (
           <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
         ) : viewMode === "json" ? (
-          <div className="rounded-md bg-slate-50">
-            <pre className="max-h-[calc(100vh-300px)] overflow-auto p-3 font-mono text-[12px] leading-5 text-slate-800">{JSON.stringify(rows, null, 2)}</pre>
+          <div className="space-y-2 overflow-auto">
+            {rows.map((row, rowIndex) => (
+              <pre key={rowIndex} className="rounded-md bg-slate-50 p-3 font-mono text-[12px] leading-5 text-slate-800">
+                {JSON.stringify(row, null, 2)}
+              </pre>
+            ))}
           </div>
         ) : (
           <div className="space-y-1">
