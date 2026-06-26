@@ -24,6 +24,19 @@ export interface TableInfo {
   totalBytes: number | null;
 }
 
+export interface ClusterUserInfo {
+  name: string;
+  role: string;
+  canLogin: boolean;
+  isAdmin: boolean;
+}
+
+export interface ClusterPermissionInfo {
+  principal: string;
+  objectName: string;
+  privilege: string;
+}
+
 export interface RowQueryOptions {
   project?: string;
   sort?: string;
@@ -37,6 +50,8 @@ export interface Dialect {
   listColumns(tableName: string): string;
   listIndexes(tableName: string): string;
   listTableStats(): string;
+  listClusterUsers(): string;
+  listClusterPermissions(): string;
   createDatabase(name: string): string;
   countRows(tableName: string, whereClause?: string): string;
   selectRows(tableName: string, limit: number, offset: number, whereClause?: string, options?: RowQueryOptions): string;
@@ -58,5 +73,7 @@ export interface Dialect {
   normalizeColumns(rows: Record<string, unknown>[]): ColumnInfo[];
   normalizeIndexes(rows: Record<string, unknown>[]): IndexInfo[];
   normalizeTableStats(rows: Record<string, unknown>[]): TableInfo[];
+  normalizeClusterUsers(rows: Record<string, unknown>[]): ClusterUserInfo[];
+  normalizeClusterPermissions(rows: Record<string, unknown>[]): ClusterPermissionInfo[];
   quoteIdentifier(identifier: string): string;
 }

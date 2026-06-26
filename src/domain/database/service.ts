@@ -1,8 +1,14 @@
-import { Connection } from "../connections/types";
+import { invoke } from "@tauri-apps/api/core";
 import { hydrateConnectionSecrets } from "../connections/repository";
-import { withDatabase } from "./client";
-import { getDialect } from "./dialects";
-import type { RowQueryOptions } from "./types";
+import { Connection } from "../connections/types";
+import type {
+  ClusterPermissionInfo,
+  ClusterUserInfo,
+  ColumnInfo,
+  IndexInfo,
+  RowQueryOptions,
+  TableInfo,
+} from "./types";
 
 async function prepareConnection(connection: Connection) {
   const hydrated = await hydrateConnectionSecrets(connection);
@@ -12,46 +18,40 @@ async function prepareConnection(connection: Connection) {
   return hydrated;
 }
 
-export async function testConnection(connection: Connection) {
+async function dbInvoke<T>(command: string, connection: Connection, args: Record<string, unknown> = {}) {
   const readyConnection = await prepareConnection(connection);
-  await withDatabase(readyConnection, async () => undefined);
+  return invoke<T>(command, {
+    connection: readyConnection,
+    ...args,
+  });
+}
+
+export async function testConnection(connection: Connection) {
+  await dbInvoke<void>("db_test_connection", connection);
 }
 
 export async function listDatabases(connection: Connection) {
-  if (connection.type === "sqlite") return [connection.database || "main"];
-  const readyConnection = await prepareConnection(connection);
-
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.listDatabases(readyConnection))
-  );
-  return dialect.normalizeDatabases(rows, readyConnection.database);
+  return dbInvoke<string[]>("db_list_databases", connection);
 }
 
 export async function listTables(connection: Connection) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.listTables(readyConnection))
-  );
-  return dialect.normalizeTables(rows);
+  return dbInvoke<string[]>("db_list_tables", connection);
 }
 
 export async function listTableStats(connection: Connection) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.listTableStats())
-  );
-  return dialect.normalizeTableStats(rows);
+  return dbInvoke<TableInfo[]>("db_list_table_stats", connection);
+}
+
+export async function listClusterUsers(connection: Connection) {
+  return dbInvoke<ClusterUserInfo[]>("db_list_cluster_users", connection);
+}
+
+export async function listClusterPermissions(connection: Connection) {
+  return dbInvoke<ClusterPermissionInfo[]>("db_list_cluster_permissions", connection);
 }
 
 export async function selectRows(connection: Connection, tableName: string, limit = 100) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  return withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, 0))
-  );
+  return selectRowsPage(connection, tableName, limit, 0);
 }
 
 export async function selectRowsPage(
@@ -62,69 +62,38 @@ export async function selectRowsPage(
   whereClause = "",
   options?: RowQueryOptions
 ) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  return withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, offset, whereClause, options))
-  );
+  return dbInvoke<Record<string, unknown>[]>("db_select_rows_page", connection, {
+    tableName,
+    limit,
+    offset,
+    whereClause,
+    options,
+  });
 }
 
 export async function countRows(connection: Connection, tableName: string, whereClause = "") {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.countRows(tableName, whereClause))
-  );
-  const firstRow = rows[0] || {};
-  const value =
-    firstRow.count ??
-    firstRow.COUNT ??
-    firstRow["COUNT(*)"] ??
-    Object.values(firstRow)[0] ??
-    0;
-
-  return Number(value) || 0;
+  return dbInvoke<number>("db_count_rows", connection, { tableName, whereClause });
 }
 
 export async function explainRows(connection: Connection, tableName: string, whereClause = "") {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  return withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.explainRows(tableName, whereClause))
-  );
+  return dbInvoke<Record<string, unknown>[]>("db_explain_rows", connection, { tableName, whereClause });
 }
 
 export async function listColumns(connection: Connection, tableName: string) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.listColumns(tableName))
-  );
-  return dialect.normalizeColumns(rows);
+  return dbInvoke<ColumnInfo[]>("db_list_columns", connection, { tableName });
 }
 
 export async function listIndexes(connection: Connection, tableName: string) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const rows = await withDatabase(readyConnection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.listIndexes(tableName))
-  );
-  return dialect.normalizeIndexes(rows);
+  return dbInvoke<IndexInfo[]>("db_list_indexes", connection, { tableName });
 }
 
 export async function executeSql(connection: Connection, query: string) {
-  const readyConnection = await prepareConnection(connection);
-  await withDatabase(readyConnection, (db) => db.execute(query));
-  return { query };
+  const executedQuery = await dbInvoke<string>("db_execute_sql", connection, { query });
+  return { query: executedQuery };
 }
 
 export async function selectQuery(connection: Connection, query: string) {
-  const readyConnection = await prepareConnection(connection);
-  const trimmed = query.trim();
-  if (!/^(select|with)\b/i.test(trimmed)) {
-    throw new Error("Query tab only runs SELECT/WITH statements.");
-  }
-  return withDatabase(readyConnection, (db) => db.select<Record<string, unknown>[]>(trimmed));
+  return dbInvoke<Record<string, unknown>[]>("db_select_query", connection, { query });
 }
 
 export async function insertRow(
@@ -132,11 +101,8 @@ export async function insertRow(
   tableName: string,
   data: Record<string, unknown>
 ) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const { sql, values } = dialect.insertRow(tableName, data);
-  await withDatabase(readyConnection, (db) => db.execute(sql, values));
-  return { query: sql };
+  const query = await dbInvoke<string>("db_insert_row", connection, { tableName, data });
+  return { query };
 }
 
 export async function updateRow(
@@ -145,11 +111,8 @@ export async function updateRow(
   original: Record<string, unknown>,
   next: Record<string, unknown>
 ) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const { sql, values } = dialect.updateRow(tableName, original, next);
-  await withDatabase(readyConnection, (db) => db.execute(sql, values));
-  return { query: sql };
+  const query = await dbInvoke<string>("db_update_row", connection, { tableName, original, next });
+  return { query };
 }
 
 export async function deleteRow(
@@ -157,20 +120,14 @@ export async function deleteRow(
   tableName: string,
   row: Record<string, unknown>
 ) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  const { sql, values } = dialect.deleteRow(tableName, row);
-  await withDatabase(readyConnection, (db) => db.execute(sql, values));
-  return { query: sql };
+  const query = await dbInvoke<string>("db_delete_row", connection, { tableName, row });
+  return { query };
 }
 
 export async function createTable(connection: Connection, query: string) {
-  const readyConnection = await prepareConnection(connection);
-  await withDatabase(readyConnection, (db) => db.execute(query));
+  await dbInvoke<void>("db_create_table", connection, { query });
 }
 
 export async function createDatabase(connection: Connection, name: string) {
-  const readyConnection = await prepareConnection(connection);
-  const dialect = getDialect(readyConnection.type);
-  await withDatabase(readyConnection, (db) => db.execute(dialect.createDatabase(name)));
+  await dbInvoke<void>("db_create_database", connection, { name });
 }

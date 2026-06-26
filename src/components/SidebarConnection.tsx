@@ -9,7 +9,8 @@ import {
   RefreshCw,
   Database as DatabaseIcon,
   Plus as PlusIcon,
-  Table as TableIcon
+  Table as TableIcon,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -144,6 +145,7 @@ interface Props {
   onDisconnect: (e: React.MouseEvent) => void;
   onCreateAction?: (conn: Connection) => void;
   onCreateDatabase?: (conn: Connection) => void;
+  onManage?: (conn: Connection, e: React.MouseEvent) => void;
   activeDatabase?: string;
   onSelectTable?: (tableName: string) => void;
   activeTable?: string;
@@ -158,6 +160,7 @@ export function SidebarConnection({
   onDisconnect,
   onCreateAction,
   onCreateDatabase,
+  onManage,
   activeDatabase,
   onSelectTable,
   activeTable
@@ -273,11 +276,11 @@ export function SidebarConnection({
                     className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     onClick={(e) => {
                         e.stopPropagation();
-                        onCreateAction?.(conn);
+                        onManage?.(conn, e);
                     }}
-                    title="New Table"
+                    title="Manager"
                 >
-                    <PlusIcon size={12} />
+                    <Shield size={12} />
                 </Button>
                 <Button
                     variant="ghost"

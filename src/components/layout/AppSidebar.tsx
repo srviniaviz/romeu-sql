@@ -26,6 +26,7 @@ interface AppSidebarProps {
   onDisconnect: (event: MouseEvent) => void;
   onCreateTable: (conn: Connection) => void;
   onCreateDatabase: (conn: Connection) => void;
+  onManageConnection: (conn: Connection, event: MouseEvent) => void;
 }
 
 export function AppSidebar({
@@ -44,6 +45,7 @@ export function AppSidebar({
   onDisconnect,
   onCreateTable,
   onCreateDatabase,
+  onManageConnection,
 }: AppSidebarProps) {
   return (
     <aside className="hidden w-[300px] shrink-0 border-r border-border/40 bg-muted/25 lg:flex lg:flex-col">
@@ -118,6 +120,7 @@ export function AppSidebar({
                 onDisconnect={onDisconnect}
                 onCreateAction={onCreateTable}
                 onCreateDatabase={onCreateDatabase}
+                onManage={onManageConnection}
               />
             ))
           )}

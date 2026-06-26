@@ -8,6 +8,7 @@ import {
 
 const store = new LazyStore("connections.json");
 const REGISTRY_KEY = "registry";
+const passwordCache = new Map<string, string | undefined>();
 
 function withoutPassword(conn: Connection): StoredConnection {
   const { password: _password, ...profile } = conn;
@@ -60,7 +61,12 @@ export async function hydrateConnectionSecrets(connection: Connection): Promise<
     return connection;
   }
 
-  const password = await getConnectionPassword(connection.id);
+  let password = passwordCache.get(connection.id);
+  if (!passwordCache.has(connection.id)) {
+    password = await getConnectionPassword(connection.id);
+    passwordCache.set(connection.id, password);
+  }
+
   return {
     ...connection,
     hasSavedPassword: !!password,
@@ -75,6 +81,7 @@ export async function addConnection(conn: NewConnection): Promise<Connection> {
 
   if (conn.password && conn.savePassword !== false) {
     await setConnectionPassword(id, conn.password);
+    passwordCache.set(id, conn.password);
   }
 
   const next = [...current.filter((item) => item.id !== id), newConn].map(withoutPassword);
@@ -92,8 +99,10 @@ export async function updateConnection(id: string, updates: Partial<Connection>)
 
   if (shouldSavePassword) {
     await setConnectionPassword(id, updated.password || "");
+    passwordCache.set(id, updated.password || "");
   } else {
     await removeConnectionPassword(id);
+    passwordCache.delete(id);
   }
 
   const next = current.map((conn) => (conn.id === id ? updated : conn)).map(withoutPassword);
@@ -104,4 +113,5 @@ export async function removeConnection(id: string) {
   const current = await readProfiles();
   await persistProfiles(current.filter((conn) => conn.id !== id).map(withoutPassword));
   await removeConnectionPassword(id);
+  passwordCache.delete(id);
 }

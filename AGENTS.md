@@ -17,7 +17,7 @@ This is not a web SaaS project. Treat it as a local desktop app: window controls
 - Desktop shell: Tauri v2
 - Local profile storage: `@tauri-apps/plugin-store`
 - Secret storage: `@tauri-apps/plugin-stronghold`
-- SQL access: `@tauri-apps/plugin-sql`
+- SQL access: Rust `sqlx` commands under `src-tauri/src/db`
 - i18n: `react-i18next`, locale files in `src/i18n/locales`
 
 ## Important Commands
@@ -47,7 +47,7 @@ Use `npm run build` for frontend/type validation. Use `cargo check` after changi
   - `SqlConsole.tsx`
 - `src/components/ui`: reusable Radix/shadcn-style primitives.
 - `src/domain/connections`: connection profile persistence and secrets.
-- `src/domain/database`: SQL connection strings, dialects, and database service APIs.
+- `src/domain/database`: frontend-facing database API wrappers. These call Rust commands with `invoke`.
 - `src/lib/useConnections.ts`: compatibility re-export for the domain hook.
 - `src/context/ThemeContext.tsx`: light/dark theme state.
 - `src-tauri`: Tauri native app, capabilities, icons, Rust plugin setup.
@@ -68,11 +68,13 @@ Connection flow:
 Database flow:
 
 1. Components call `src/domain/database/service.ts`.
-2. `service.ts` delegates SQL construction to `dialects.ts`.
-3. `client.ts` opens a database handle using Tauri SQL.
-4. Results are normalized by dialect helpers before reaching the UI.
+2. `service.ts` hydrates saved passwords when needed and calls Rust commands with `invoke`.
+3. Rust commands live in `src-tauri/src/db/commands.rs`.
+4. SQL dialect construction lives in `src-tauri/src/db/dialect.rs`.
+5. Connection pools and row-to-JSON conversion live in `src-tauri/src/db/pool.rs`.
+6. Shared Rust DTOs live in `src-tauri/src/db/types.rs`.
 
-Keep database-specific SQL inside `dialects.ts`. Do not scatter SQL syntax differences through UI components.
+Keep database-specific SQL inside Rust `src-tauri/src/db/dialect.rs`. Do not scatter SQL syntax differences through UI components or frontend service code.
 
 ## Connection Secrets
 
@@ -101,7 +103,7 @@ The app uses a custom titlebar and undecorated window:
 
 If native code or Tauri plugin setup changes, hot reload is not enough. Restart `npm run tauri -- dev`.
 
-Capabilities currently include store, stronghold, SQL, opener, and window controls. If adding a Tauri API call, verify the capability permission is present.
+Capabilities currently include store, stronghold, dialog, fs, opener, and window controls. SQL no longer uses the Tauri SQL plugin or frontend plugin permissions.
 
 ## UI Guidelines
 
@@ -160,9 +162,9 @@ Supported engines:
 - SQLite
 - SQL Server enum exists in UI/types, but verify actual SQL plugin support before expanding behavior.
 
-Dialect-specific behavior belongs in `src/domain/database/dialects.ts`.
+Dialect-specific behavior belongs in `src-tauri/src/db/dialect.rs`.
 
-Use `service.ts` as the UI-facing API. Components should not build raw dialect-specific SQL except via user-entered SQL console content.
+Use frontend `src/domain/database/service.ts` as the UI-facing API. Components should not build raw dialect-specific SQL except via user-entered SQL console content. Database execution and pooling belong in Rust.
 
 ## Icons
 

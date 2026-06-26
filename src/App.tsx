@@ -3,6 +3,7 @@ import type { MouseEvent } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { CreateConnectionModal } from "./components/CreateConnection";
 import { AppSidebar } from "./components/layout/AppSidebar";
+import { ClusterManagerModal } from "./components/ClusterManagerModal";
 import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDialog";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
 import { useConnections, Connection } from "./lib/useConnections";
@@ -18,6 +19,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
+  const [managingConn, setManagingConn] = useState<Connection | null>(null);
 
   const filteredConnections = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -52,6 +54,12 @@ function App() {
   const openCreateDatabase = (conn: Connection) => {
     setSelectedConn(conn);
     setShouldOpenCreateDbModal(true);
+  };
+
+  const openClusterManager = (conn: Connection, event: MouseEvent) => {
+    event.stopPropagation();
+    setSelectedConn(conn);
+    setManagingConn(conn);
   };
 
   const editConnection = (conn: Connection, event: MouseEvent) => {
@@ -112,6 +120,7 @@ function App() {
           onDisconnect={disconnect}
           onCreateTable={openCreateTable}
           onCreateDatabase={openCreateDatabase}
+          onManageConnection={openClusterManager}
         />
 
         <WorkspacePanel
@@ -136,6 +145,14 @@ function App() {
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
         onConfirm={confirmDeleteConnection}
+      />
+
+      <ClusterManagerModal
+        connection={managingConn}
+        open={!!managingConn}
+        onOpenChange={(open) => {
+          if (!open) setManagingConn(null);
+        }}
       />
     </div>
   );

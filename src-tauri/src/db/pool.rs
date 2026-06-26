@@ -1,0 +1,251 @@
+use super::dialect::connection_string;
+use super::types::{ConnectionInput, DbEngine, JsonRow};
+use serde_json::{json, Value};
+use sqlx::mysql::{MySqlPoolOptions, MySqlRow};
+use sqlx::postgres::{PgPoolOptions, PgRow};
+use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
+use sqlx::{Column, MySqlPool, PgPool, Row, SqlitePool, TypeInfo, ValueRef};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tauri::async_runtime::RwLock;
+
+#[derive(Clone)]
+pub struct DbPoolState {
+    pools: Arc<RwLock<HashMap<String, DatabasePool>>>,
+}
+
+#[derive(Clone)]
+enum DatabasePool {
+    Postgres(PgPool),
+    Mysql(MySqlPool),
+    Sqlite(SqlitePool),
+}
+
+impl DbPoolState {
+    pub fn new() -> Self {
+        Self {
+            pools: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    async fn get(&self, connection: &ConnectionInput) -> Result<DatabasePool, String> {
+        let key = connection_string(connection)?;
+        if let Some(pool) = self.pools.read().await.get(&key).cloned() {
+            return Ok(pool);
+        }
+
+        let pool = match connection.engine {
+            DbEngine::Postgres => DatabasePool::Postgres(
+                PgPoolOptions::new()
+                    .max_connections(5)
+                    .connect(&key)
+                    .await
+                    .map_err(to_error)?,
+            ),
+            DbEngine::Mysql => DatabasePool::Mysql(
+                MySqlPoolOptions::new()
+                    .max_connections(5)
+                    .connect(&key)
+                    .await
+                    .map_err(to_error)?,
+            ),
+            DbEngine::Sqlite => DatabasePool::Sqlite(
+                SqlitePoolOptions::new()
+                    .max_connections(1)
+                    .connect(&key)
+                    .await
+                    .map_err(to_error)?,
+            ),
+            DbEngine::Sqlserver => {
+                return Err("SQL Server is not supported by the Rust database backend yet.".into())
+            }
+        };
+
+        self.pools.write().await.insert(key, pool.clone());
+        Ok(pool)
+    }
+
+    pub async fn select(&self, connection: &ConnectionInput, sql: &str) -> Result<Vec<JsonRow>, String> {
+        match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                rows.iter().map(pg_row_to_json).collect()
+            }
+            DatabasePool::Mysql(pool) => {
+                let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                rows.iter().map(mysql_row_to_json).collect()
+            }
+            DatabasePool::Sqlite(pool) => {
+                let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                rows.iter().map(sqlite_row_to_json).collect()
+            }
+        }
+    }
+
+    pub async fn execute(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+        values: &[Value],
+    ) -> Result<u64, String> {
+        match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_pg(query, value);
+                }
+                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+            }
+            DatabasePool::Mysql(pool) => {
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_mysql(query, value);
+                }
+                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+            }
+            DatabasePool::Sqlite(pool) => {
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_sqlite(query, value);
+                }
+                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+            }
+        }
+    }
+}
+
+fn to_error(error: sqlx::Error) -> String {
+    error.to_string()
+}
+
+fn bind_pg<'q>(
+    query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    value: &'q Value,
+) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
+    match value {
+        Value::Null => query.bind(Option::<String>::None),
+        Value::Bool(value) => query.bind(*value),
+        Value::Number(value) if value.is_i64() => query.bind(value.as_i64()),
+        Value::Number(value) if value.is_u64() => query.bind(value.as_u64().map(|v| v as i64)),
+        Value::Number(value) => query.bind(value.as_f64()),
+        Value::String(value) => query.bind(value),
+        other => query.bind(other.to_string()),
+    }
+}
+
+fn bind_mysql<'q>(
+    query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
+    value: &'q Value,
+) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
+    match value {
+        Value::Null => query.bind(Option::<String>::None),
+        Value::Bool(value) => query.bind(*value),
+        Value::Number(value) if value.is_i64() => query.bind(value.as_i64()),
+        Value::Number(value) if value.is_u64() => query.bind(value.as_u64().map(|v| v as i64)),
+        Value::Number(value) => query.bind(value.as_f64()),
+        Value::String(value) => query.bind(value),
+        other => query.bind(other.to_string()),
+    }
+}
+
+fn bind_sqlite<'q>(
+    query: sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>,
+    value: &'q Value,
+) -> sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+    match value {
+        Value::Null => query.bind(Option::<String>::None),
+        Value::Bool(value) => query.bind(*value),
+        Value::Number(value) if value.is_i64() => query.bind(value.as_i64()),
+        Value::Number(value) if value.is_u64() => query.bind(value.as_u64().map(|v| v as i64)),
+        Value::Number(value) => query.bind(value.as_f64()),
+        Value::String(value) => query.bind(value),
+        other => query.bind(other.to_string()),
+    }
+}
+
+fn pg_row_to_json(row: &PgRow) -> Result<JsonRow, String> {
+    let mut out = JsonRow::new();
+    for (index, column) in row.columns().iter().enumerate() {
+        out.insert(column.name().to_string(), pg_value(row, index)?);
+    }
+    Ok(out)
+}
+
+fn mysql_row_to_json(row: &MySqlRow) -> Result<JsonRow, String> {
+    let mut out = JsonRow::new();
+    for (index, column) in row.columns().iter().enumerate() {
+        out.insert(column.name().to_string(), mysql_value(row, index)?);
+    }
+    Ok(out)
+}
+
+fn sqlite_row_to_json(row: &SqliteRow) -> Result<JsonRow, String> {
+    let mut out = JsonRow::new();
+    for (index, column) in row.columns().iter().enumerate() {
+        out.insert(column.name().to_string(), sqlite_value(row, index)?);
+    }
+    Ok(out)
+}
+
+fn pg_value(row: &PgRow, index: usize) -> Result<Value, String> {
+    if row.try_get_raw(index).map_err(to_error)?.is_null() {
+        return Ok(Value::Null);
+    }
+    if let Ok(value) = row.try_get::<String, _>(index) {
+        return Ok(Value::String(value));
+    }
+    if let Ok(value) = row.try_get::<i64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<i32, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<f64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<bool, _>(index) {
+        return Ok(json!(value));
+    }
+    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+}
+
+fn mysql_value(row: &MySqlRow, index: usize) -> Result<Value, String> {
+    if row.try_get_raw(index).map_err(to_error)?.is_null() {
+        return Ok(Value::Null);
+    }
+    if let Ok(value) = row.try_get::<String, _>(index) {
+        return Ok(Value::String(value));
+    }
+    if let Ok(value) = row.try_get::<i64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<i32, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<f64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<bool, _>(index) {
+        return Ok(json!(value));
+    }
+    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+}
+
+fn sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, String> {
+    if row.try_get_raw(index).map_err(to_error)?.is_null() {
+        return Ok(Value::Null);
+    }
+    if let Ok(value) = row.try_get::<String, _>(index) {
+        return Ok(Value::String(value));
+    }
+    if let Ok(value) = row.try_get::<i64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<f64, _>(index) {
+        return Ok(json!(value));
+    }
+    if let Ok(value) = row.try_get::<bool, _>(index) {
+        return Ok(json!(value));
+    }
+    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+}
