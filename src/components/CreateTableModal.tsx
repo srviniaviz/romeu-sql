@@ -92,7 +92,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           <div className="flex-1 flex flex-col min-w-0">
             <div className="p-6 pb-2 shrink-0">
               <div className="grid gap-2">
-                <Label htmlFor="tableName" className="text-xs font-semibold opacity-60">{t('modal_create_table.field_label')}</Label>
+                <Label htmlFor="tableName">{t('modal_create_table.field_label')}</Label>
                 <Input 
                   id="tableName"
                   value={tableName}
@@ -106,7 +106,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
             <div className="flex-1 overflow-y-auto px-6 py-2 custom-scrollbar">
               <div className="space-y-4 pb-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-semibold opacity-60 uppercase tracking-wider">{t('modal_create_table.columns_label')}</h4>
+                  <h4 className="text-[12px] font-medium text-muted-foreground">{t('modal_create_table.columns_label')}</h4>
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -133,7 +133,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                               value={col.name}
                               onChange={(e) => updateColumn(col.id, { name: e.target.value })}
                               placeholder={t('modal_create_table.column_name_placeholder')}
-                              className="h-9 font-bold tracking-tight bg-background/50 border-muted"
+                              className="h-9 bg-background/50 border-muted"
                             />
 
                             <Select value={col.type} onValueChange={(val) => updateColumn(col.id, { type: val })}>
@@ -168,7 +168,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                                 onCheckedChange={(val) => updateColumn(col.id, { isPrimary: !!val, isNullable: !val })} 
                                 className="size-4 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                               />
-                              <Label htmlFor={`pk-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">{t('modal_create_table.column_primary')}</Label>
+                              <Label htmlFor={`pk-${col.id}`} className="cursor-pointer transition-colors group-hover:text-foreground">{t('modal_create_table.column_primary')}</Label>
                             </div>
                             
                             <Separator orientation="vertical" className="h-4 bg-muted" />
@@ -181,7 +181,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                                 disabled={col.isPrimary}
                                 className="size-4 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                               />
-                              <Label htmlFor={`null-${col.id}`} className="text-[10px] font-black uppercase tracking-widest cursor-pointer opacity-40 group-hover:opacity-100 transition-opacity">{t('modal_create_table.column_nullable')}</Label>
+                              <Label htmlFor={`null-${col.id}`} className="cursor-pointer transition-colors group-hover:text-foreground">{t('modal_create_table.column_nullable')}</Label>
                             </div>
                           </div>
 
@@ -201,8 +201,8 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                     <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 text-destructive animate-in fade-in slide-in-from-top-1">
                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Engine Error</p>
-                            <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap">{error}</p>
+                            <p className="text-[12px] font-medium">Engine error</p>
+                            <p className="text-[12px] leading-relaxed whitespace-pre-wrap">{error}</p>
                         </div>
                     </div>
                 )}
@@ -214,7 +214,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
           <div className="w-[300px] bg-muted/10 flex flex-col p-6 border-l shrink-0">
             <div className="flex items-center gap-2 mb-4 opacity-70">
               <FileCode size={16} />
-              <span className="text-xs font-semibold uppercase tracking-wider">{t('modal_create_table.sql_preview')}</span>
+              <span className="text-[12px] font-medium text-muted-foreground">{t('modal_create_table.sql_preview')}</span>
             </div>
 
             <div className="flex-1 rounded-lg border bg-muted/20 p-4 font-mono text-[10px] text-muted-foreground overflow-y-auto custom-scrollbar">

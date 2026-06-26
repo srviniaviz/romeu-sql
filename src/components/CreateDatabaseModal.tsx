@@ -48,20 +48,20 @@ export function CreateDatabaseModal({ isOpen, onClose, onCreate }: Props) {
           <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
             <DatabaseIcon size={24} />
           </div>
-          <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter">{t('modal_create_db.title')}</DialogTitle>
-          <DialogDescription className="text-xs font-medium opacity-60">
+          <DialogTitle className="text-lg font-semibold tracking-tight">{t('modal_create_db.title')}</DialogTitle>
+          <DialogDescription className="text-[13px] text-muted-foreground">
             {t('modal_create_db.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">{t('modal_create_db.field_label')}</Label>
+            <Label>{t('modal_create_db.field_label')}</Label>
             <Input 
               value={dbName}
               onChange={(e) => setDbName(e.target.value)}
               placeholder={t('modal_create_db.placeholder')}
-              className="h-11 font-bold tracking-tight bg-muted/20 border-border/5"
+              className="h-10 bg-background"
               autoFocus
             />
           </div>
@@ -70,18 +70,18 @@ export function CreateDatabaseModal({ isOpen, onClose, onCreate }: Props) {
             <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-2 text-destructive animate-in fade-in slide-in-from-top-1">
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Engine Error</p>
-                <p className="text-[11px] font-bold leading-relaxed whitespace-pre-wrap">{error}</p>
+                <p className="text-[12px] font-medium">Engine error</p>
+                <p className="text-[12px] leading-relaxed whitespace-pre-wrap">{error}</p>
               </div>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={loading} className="text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100">
+          <Button variant="ghost" onClick={onClose} disabled={loading} className="text-[13px] font-medium text-muted-foreground">
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleCreate} disabled={loading || !dbName.trim()} className="text-[10px] font-black uppercase tracking-widest px-8">
+          <Button onClick={handleCreate} disabled={loading || !dbName.trim()} className="px-8 text-[13px] font-medium">
             {loading ? <Loader2 className="animate-spin" size={14} /> : t('modal_create_db.submit')}
           </Button>
         </DialogFooter>

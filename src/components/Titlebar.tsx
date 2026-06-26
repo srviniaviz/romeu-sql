@@ -1,6 +1,6 @@
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "react-i18next";
-import { Minus, Square, X, Sun, Moon } from "lucide-react";
+import { Database, Minus, Moon, Square, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -29,12 +29,15 @@ export function Titlebar() {
   };
 
   return (
-    <div className="titlebar select-none z-50 flex items-center justify-between h-10 border-b border-border/10 bg-background/50 backdrop-blur-md">
+    <div className="titlebar select-none z-50 flex h-12 items-center justify-between border-b border-border bg-background text-foreground">
       <div 
         data-tauri-drag-region 
-        className="flex-1 h-full flex items-center px-4"
+        className="flex-1 h-full flex items-center gap-5 px-3"
       >
-        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground opacity-60">Romeu SQL</span>
+        <div className="flex items-center gap-2">
+          <Database size={16} className="text-primary" />
+          <span className="text-[13px] font-semibold">Romeu SQL</span>
+        </div>
       </div>
 
       <div className="flex h-full items-center px-1">
@@ -42,13 +45,13 @@ export function Titlebar() {
           variant="ghost" 
           size="sm"
           onClick={toggleLanguage}
-          className="h-8 w-8 p-0 font-bold text-[10px] uppercase tracking-tighter"
+          className="h-8 w-8 p-0 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
           title="Change Language"
         >
           {i18n.language.startsWith('en') ? 'PT' : 'EN'}
         </Button>
 
-        <Separator orientation="vertical" className="h-4 mx-1.5 opacity-20" />
+        <Separator orientation="vertical" className="h-4 mx-1.5" />
 
         <Button 
           variant="ghost" 
@@ -57,19 +60,19 @@ export function Titlebar() {
             e.stopPropagation();
             toggleTheme();
           }}
-          className="h-8 w-8 p-0"
+          className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
           title={theme === 'dark' ? "Switch to Light" : "Switch to Dark"}
         >
           {theme === 'dark' ? <Sun size={14} strokeWidth={2.5} /> : <Moon size={14} strokeWidth={2.5} />}
         </Button>
 
-        <Separator orientation="vertical" className="h-4 mx-1.5 opacity-20" />
+        <Separator orientation="vertical" className="h-4 mx-1.5" />
 
-        <Button variant="ghost" size="sm" onClick={minimize} className="h-8 w-8 p-0">
+        <Button variant="ghost" size="sm" onClick={minimize} className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground">
           <Minus size={14} strokeWidth={2.5} />
         </Button>
         
-        <Button variant="ghost" size="sm" onClick={toggleMaximize} className="h-8 w-8 p-0">
+        <Button variant="ghost" size="sm" onClick={toggleMaximize} className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground">
           <Square size={12} strokeWidth={2.5} />
         </Button>
         
@@ -77,7 +80,7 @@ export function Titlebar() {
           variant="ghost" 
           size="sm" 
           onClick={close} 
-          className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
         >
           <X size={14} strokeWidth={2.5} />
         </Button>

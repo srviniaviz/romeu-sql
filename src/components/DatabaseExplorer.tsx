@@ -1,38 +1,25 @@
-import { useEffect, useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import Database from "@tauri-apps/plugin-sql";
-import { Connection } from "../lib/useConnections";
-import { 
-  Table as TableIcon, 
-  Loader2, 
-  AlertCircle,
-  Hash,
-  Type,
-  Calendar,
-  LogOut,
-  Plus as PlusIcon,
-  Terminal,
-  Play,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
-  History,
-  Code as CodeIcon,
-  Trash as TrashIcon,
-  Clock,
-  LayoutGrid,
-  Rows3,
-  ChevronRight as ChevronRightIcon
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
-import { CreateTableModal } from "./CreateTableModal";
 import { CreateDatabaseModal } from "./CreateDatabaseModal";
+import { CreateTableModal } from "./CreateTableModal";
 import { InsertDataModal } from "./InsertDataModal";
-
+import { ExplorerHeader } from "./explorer/ExplorerHeader";
+import { SqlConsole } from "./explorer/SqlConsole";
+import { TableBrowser } from "./explorer/TableBrowser";
+import { DataPreview } from "./explorer/DataPreview";
+import { Connection } from "../lib/useConnections";
+import {
+  createDatabase,
+  createTable,
+  executeSql,
+  insertRow,
+  listColumns,
+  listTables,
+  selectRows,
+} from "@/domain/database/service";
 
 interface Props {
   connection: Connection;
@@ -44,54 +31,35 @@ interface Props {
   onTableSelected?: (tableName: string | null) => void;
 }
 
-interface HistoryEntry {
+export interface HistoryEntry {
   id: string;
   action: string;
   query?: string;
-  status: 'success' | 'error';
+  status: "success" | "error";
   message: string;
   timestamp: Date;
 }
 
-export function DatabaseExplorer({ 
-    connection, 
-    onDisconnect, 
-    openCreateOnMount, 
-    openCreateDbOnMount, 
-    onModalOpened,
-    selectedTable,
-    onTableSelected
+export function DatabaseExplorer({
+  connection,
+  onDisconnect,
+  openCreateOnMount,
+  openCreateDbOnMount,
+  onModalOpened,
+  selectedTable,
+  onTableSelected,
 }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
   const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
-  
   const [sqlQuery, setSqlQuery] = useState("");
-  const [execResult, setExecResult] = useState<{ success: boolean, message: string } | null>(null);
+  const [execResult, setExecResult] = useState<{ success: boolean; message: string } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
-  const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
-  
-  const getConnectionString = useMemo(() => {
-    const { type, host, port, username, password, database } = connection;
-    if (type === 'postgres') return `postgres://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'mysql') return `mysql://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'sqlite') return `sqlite:${host}`;
-    if (type === 'sqlserver') return `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
-    return "";
-  }, [connection]);
-
-  const addHistory = (entry: Omit<HistoryEntry, 'id' | 'timestamp'>) => {
-    setHistory(prev => [{
-        ...entry,
-        id: Math.random().toString(36).substring(7),
-        timestamp: new Date()
-    }, ...prev]);
-  };
+  const [activeTab, setActiveTab] = useState<"editor" | "history">("editor");
+  const [viewMode, setViewMode] = useState<"table" | "json">("table");
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -101,288 +69,186 @@ export function DatabaseExplorer({
       setIsCreateDbModalOpen(true);
       onModalOpened?.();
     }
-  }, [openCreateOnMount, openCreateDbOnMount]);
-
-  // --- QUERIES ---
-
-  const { data: tables = [], isLoading: loading, error: fetchError, refetch: refetchTables, isFetching: refreshing } = useQuery({
-    queryKey: ['tables', connection.id, connection.database],
-    queryFn: async () => {
-        const db = await Database.load(getConnectionString);
-        try {
-          let query = "";
-          const type = connection.type;
-          if (type === 'postgres') {
-            query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name ASC";
-          } else if (type === 'mysql') {
-            query = "SHOW TABLES";
-          } else if (type === 'sqlite') {
-            query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC";
-          } else if (type === 'sqlserver') {
-            query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME ASC";
-          }
-    
-          const result = await db.select<any[]>(query);
-          return result.map(r => String(r.table_name || r.name || r.TABLE_NAME || Object.values(r)[0]));
-        } finally {
-          await db.close();
-        }
-    },
-    enabled: !!connection.id
-  });
-
-  const { data: tableData = [], isLoading: dataLoading } = useQuery({
-    queryKey: ['tableData', connection.id, connection.database, selectedTable],
-    queryFn: async () => {
-        if (!selectedTable) return [];
-        const db = await Database.load(getConnectionString);
-        try {
-          return await db.select<any[]>(`SELECT * FROM ${selectedTable} LIMIT 100`);
-        } finally {
-          await db.close();
-        }
-    },
-    enabled: !!selectedTable
-  });
-
-  const { data: columns = [] } = useQuery({
-    queryKey: ['columns', connection.id, connection.database, selectedTable],
-    queryFn: async () => {
-        if (!selectedTable) return [];
-        const db = await Database.load(getConnectionString);
-        try {
-            let query = "";
-            const type = connection.type;
-            
-            if (type === 'postgres') {
-              const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-              query = `SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as "defaultValue" 
-                       FROM information_schema.columns 
-                       WHERE table_name = '${pureTable}' OR table_name = '${selectedTable}'
-                       ORDER BY ordinal_position`;
-            } else if (type === 'mysql') {
-              query = `DESCRIBE ${selectedTable}`;
-            } else if (type === 'sqlite') {
-              query = `PRAGMA table_info(${selectedTable})`;
-            } else if (type === 'sqlserver') {
-              const pureTable = selectedTable.replace(/['"`]/g, '').split('.').pop();
-              query = `SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue 
-                       FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '${pureTable}'`;
-            }
-  
-            const result = await db.select<any[]>(query);
-            return result.map(r => {
-              const name = r.name || r.column_name || r.Field || r.COLUMN_NAME;
-              const rawType = r.type || r.data_type || r.Type || r.DATA_TYPE;
-              
-              const isPK = (
-                  r.pk === 1 || 
-                  r.Key === 'PRI' || 
-                  r.is_identity === 1 ||
-                  (r.defaultValue && String(r.defaultValue).toLowerCase().includes('nextval'))
-              );
-              
-              return {
-                name,
-                type: rawType,
-                nullable: r.nullable === 'YES' || r.Null === 'YES' || r.IS_NULLABLE === 'YES' || r.notnull === 0 || r.pk === 0,
-                defaultValue: r.defaultValue || r.Default || r.COLUMN_DEFAULT,
-                isPrimaryKey: !!isPK
-              };
-            });
-        } finally {
-            await db.close();
-        }
-    },
-    enabled: !!selectedTable
-  });
-
-  // --- MUTATIONS ---
-
-  const executeMutation = useMutation({
-    mutationFn: async (query: string) => {
-        const db = await Database.load(getConnectionString);
-        try {
-            await db.execute(query);
-            return { query };
-        } finally {
-            await db.close();
-        }
-    },
-    onSuccess: (res) => {
-        const msg = t('explorer.sync_success');
-        setExecResult({ success: true, message: msg });
-        addHistory({ action: t('explorer.sql_editor'), query: res.query, status: 'success', message: msg });
-        queryClient.invalidateQueries({ queryKey: ['tables'] });
-    },
-    onError: (err: any, query) => {
-        const msg = err.message || JSON.stringify(err);
-        addHistory({ action: t('explorer.sql_editor'), query, status: 'error', message: msg });
-        setExecResult({ success: false, message: msg });
-    }
-  });
-
-  const insertMutation = useMutation({
-    mutationFn: async (data: Record<string, any>) => {
-        const keys = Object.keys(data);
-        const values = Object.values(data).map(v => typeof v === 'string' ? `'${v}'` : v);
-        const query = `INSERT INTO ${selectedTable} (${keys.join(', ')}) VALUES (${values.join(', ')})`;
-        
-        const db = await Database.load(getConnectionString);
-        try {
-            await db.execute(query);
-            return { query };
-        } finally {
-            await db.close();
-        }
-    },
-    onSuccess: (res) => {
-        setExecResult({ success: true, message: t('explorer.sync_success') });
-        addHistory({ action: t('explorer.add_document'), query: res.query, status: 'success', message: t('explorer.sync_success') });
-        queryClient.invalidateQueries({ queryKey: ['tableData'] });
-    },
-    onError: (err: any) => {
-        const msg = err.message || JSON.stringify(err);
-        setExecResult({ success: false, message: msg });
-        addHistory({ action: t('explorer.add_document'), status: 'error', message: msg });
-    }
-  });
-
-  const createTableMutation = useMutation({
-    mutationFn: async (query: string) => {
-        const db = await Database.load(getConnectionString);
-        try {
-            await db.execute(query);
-        } finally {
-            await db.close();
-        }
-    },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['tables'] });
-        setIsCreateModalOpen(false);
-    }
-  });
-
-  const createDbMutation = useMutation({
-    mutationFn: async (name: string) => {
-        const query = connection.type === 'sqlserver' ? `CREATE SCHEMA ${name}` : `CREATE DATABASE ${name}`;
-        const db = await Database.load(getConnectionString);
-        try {
-            await db.execute(query);
-        } finally {
-            await db.close();
-        }
-    },
-    onSuccess: () => {
-        setIsCreateDbModalOpen(false);
-        queryClient.invalidateQueries({ queryKey: ['tables'] });
-    }
-  });
+  }, [openCreateOnMount, openCreateDbOnMount, onModalOpened]);
 
   useEffect(() => {
     onModalOpened?.();
-  }, [isCreateModalOpen, isCreateDbModalOpen, isInsertModalOpen]);
+  }, [isCreateModalOpen, isCreateDbModalOpen, isInsertModalOpen, onModalOpened]);
 
-  const error = fetchError ? (fetchError as any).message || String(fetchError) : null;
-  const executing = executeMutation.isPending;
+  const addHistory = (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
+    setHistory((prev) => [
+      {
+        ...entry,
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+      },
+      ...prev,
+    ]);
+  };
 
-  if (loading) {
+  const {
+    data: tables = [],
+    isLoading: loadingTables,
+    error: fetchError,
+    refetch: refetchTables,
+    isFetching: refreshingTables,
+  } = useQuery({
+    queryKey: ["tables", connection.id, connection.database],
+    queryFn: () => listTables(connection),
+    enabled: !!connection.id,
+  });
+
+  const { data: tableData = [], isLoading: loadingRows } = useQuery({
+    queryKey: ["tableData", connection.id, connection.database, selectedTable],
+    queryFn: () => (selectedTable ? selectRows(connection, selectedTable) : []),
+    enabled: !!selectedTable,
+  });
+
+  const { data: columns = [] } = useQuery({
+    queryKey: ["columns", connection.id, connection.database, selectedTable],
+    queryFn: () => (selectedTable ? listColumns(connection, selectedTable) : []),
+    enabled: !!selectedTable,
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: (query: string) => executeSql(connection, query),
+    onSuccess: (res) => {
+      const msg = t("explorer.sync_success");
+      setExecResult({ success: true, message: msg });
+      addHistory({ action: t("explorer.sql_editor"), query: res.query, status: "success", message: msg });
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.invalidateQueries({ queryKey: ["tableData"] });
+    },
+    onError: (err: unknown, query) => {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setExecResult({ success: false, message: msg });
+      addHistory({ action: t("explorer.sql_editor"), query, status: "error", message: msg });
+    },
+  });
+
+  const insertMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) => {
+      if (!selectedTable) throw new Error("No table selected");
+      return insertRow(connection, selectedTable, data);
+    },
+    onSuccess: (res) => {
+      const msg = t("explorer.sync_success");
+      setExecResult({ success: true, message: msg });
+      addHistory({ action: t("explorer.add_document"), query: res.query, status: "success", message: msg });
+      queryClient.invalidateQueries({ queryKey: ["tableData"] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      setExecResult({ success: false, message: msg });
+      addHistory({ action: t("explorer.add_document"), status: "error", message: msg });
+    },
+  });
+
+  const createTableMutation = useMutation({
+    mutationFn: (query: string) => createTable(connection, query),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      setIsCreateModalOpen(false);
+    },
+  });
+
+  const createDbMutation = useMutation({
+    mutationFn: (name: string) => createDatabase(connection, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tables"] });
+      setIsCreateDbModalOpen(false);
+    },
+  });
+
+  const error = fetchError instanceof Error ? fetchError.message : fetchError ? String(fetchError) : null;
+
+  if (loadingTables) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 opacity-40">
-        <Loader2 className="animate-spin" size={32} />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">{t('explorer.connecting')}</span>
+      <div className="flex h-[calc(100vh-6rem)] flex-col items-center justify-center gap-3 text-muted-foreground">
+        <Loader2 className="animate-spin" size={26} />
+        <span className="text-[12px] font-medium">Connecting to {connection.name}</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8 rounded-2xl bg-destructive/5 border border-destructive/10 flex flex-col gap-4">
-        <div className="flex items-center gap-3 text-destructive">
-          <AlertCircle size={20} />
-          <span className="font-bold uppercase tracking-widest text-xs">{t('explorer.connection_failed')}</span>
-        </div>
-        <p className="text-sm font-medium opacity-60 leading-relaxed">{error}</p>
-        <div className="flex gap-3">
-          <Button onClick={() => refetchTables()} className="w-fit text-[10px] font-black uppercase tracking-widest" variant="destructive">{t('explorer.try_again')}</Button>
-          <Button onClick={onDisconnect} className="w-fit text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100" variant="ghost">{t('explorer.disconnect')}</Button>
+      <div className="p-6">
+        <div className="max-w-xl rounded-lg border border-destructive/20 bg-destructive/10 p-5 text-destructive">
+          <div className="mb-3 flex items-center gap-2 font-semibold">
+            <AlertCircle size={18} />
+            {t("explorer.connection_failed")}
+          </div>
+          <p className="text-[13px] leading-5">{error}</p>
+          <div className="mt-4 flex gap-2">
+            <Button variant="destructive" className="h-8 rounded-md text-[12px]" onClick={() => refetchTables()}>
+              {t("explorer.try_again")}
+            </Button>
+            <Button variant="ghost" className="h-8 rounded-md text-[12px]" onClick={onDisconnect}>
+              {t("explorer.disconnect")}
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-black italic uppercase tracking-tighter">{connection.database}</h2>
-          <div className="flex items-center gap-2 opacity-40">
-            <span className="text-[10px] font-bold uppercase tracking-widest">{connection.host}:{connection.port}</span>
-            <span className="text-[10px]">•</span>
-            <span className="text-[10px] font-bold uppercase tracking-widest">{connection.type}</span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <div className="px-4 py-2 rounded-xl bg-card border border-border/5 shadow-sm flex items-center gap-2">
-            <span className="text-[10px] font-black tracking-widest text-muted-foreground opacity-40 uppercase">{selectedTable ? t('explorer.records') : t('explorer.tables')}: </span>
-            <span className="text-xs font-bold tabular-nums">{selectedTable ? tableData.length : tables.length}</span>
-            {(refreshing || dataLoading) && <RefreshCw size={10} className="animate-spin text-primary ml-1" />}
-          </div>
+    <div className="min-h-full bg-background">
+      <ExplorerHeader
+        connection={connection}
+        selectedTable={selectedTable}
+        tableCount={tables.length}
+        rowCount={tableData.length}
+        refreshing={refreshingTables || loadingRows}
+        viewMode={viewMode}
+        consoleOpen={isConsoleOpen}
+        onViewModeChange={setViewMode}
+        onToggleConsole={() => setIsConsoleOpen((open) => !open)}
+        onDisconnect={onDisconnect}
+      />
 
-          {selectedTable && (
-            <>
-                <Separator orientation="vertical" className="h-10 mx-2 opacity-10" />
-                <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-xl">
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${viewMode === 'table' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
-                        onClick={() => setViewMode('table')}
-                    >
-                        <Rows3 size={12} className="mr-2" />
-                        {t('explorer.table_view')}
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={`h-8 px-3 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${viewMode === 'json' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
-                        onClick={() => setViewMode('json')}
-                    >
-                        <LayoutGrid size={12} className="mr-2" />
-                        {t('explorer.json_view')}
-                    </Button>
-                </div>
-            </>
-          )}
+      <div className="space-y-4 p-5">
+        {isConsoleOpen && (
+          <SqlConsole
+            sqlQuery={sqlQuery}
+            onSqlQueryChange={setSqlQuery}
+            executing={executeMutation.isPending}
+            onExecute={() => executeMutation.mutate(sqlQuery)}
+            execResult={execResult}
+            history={history}
+            activeTab={activeTab}
+            onActiveTabChange={setActiveTab}
+            onClearHistory={() => setHistory([])}
+            onClearEditor={() => setSqlQuery("")}
+          />
+        )}
 
-          <Separator orientation="vertical" className="h-10 mx-2 opacity-10" />
-
-          <Button 
-            variant="ghost" 
-            className={`h-10 px-4 rounded-xl gap-2 font-black uppercase text-[10px] tracking-widest transition-all hover:bg-primary/5 group ${isConsoleOpen ? 'bg-primary/10 text-primary opacity-100' : 'opacity-40'}`}
-            onClick={() => setIsConsoleOpen(!isConsoleOpen)}
-          >
-            <Terminal size={14} className={isConsoleOpen ? 'text-primary' : 'group-hover:text-primary'} />
-            {t('explorer.console')}
-          </Button>
-
-          <Button variant="ghost" size="icon" className="size-10 rounded-xl opacity-20 hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive group" onClick={onDisconnect}>
-            <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
-          </Button>
-        </div>
+        {selectedTable ? (
+          <DataPreview
+            selectedTable={selectedTable}
+            rows={tableData}
+            loading={loadingRows}
+            viewMode={viewMode}
+            onBack={() => onTableSelected?.(null)}
+            onInsert={() => setIsInsertModalOpen(true)}
+          />
+        ) : (
+          <TableBrowser tables={tables} onSelectTable={(table) => onTableSelected?.(table)} />
+        )}
       </div>
 
-      <CreateTableModal 
+      <CreateTableModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         dbType={connection.type}
-        onCreate={async (q) => { await createTableMutation.mutateAsync(q); }}
+        onCreate={(query) => createTableMutation.mutateAsync(query)}
       />
 
       <CreateDatabaseModal
         isOpen={isCreateDbModalOpen}
         onClose={() => setIsCreateDbModalOpen(false)}
-        onCreate={async (n) => { await createDbMutation.mutateAsync(n); }}
+        onCreate={(name) => createDbMutation.mutateAsync(name)}
       />
 
       <InsertDataModal
@@ -390,250 +256,10 @@ export function DatabaseExplorer({
         onClose={() => setIsInsertModalOpen(false)}
         tableName={selectedTable || ""}
         columns={columns}
-        onInsert={async (d) => { await insertMutation.mutateAsync(d); }}
+        onInsert={async (data) => {
+          await insertMutation.mutateAsync(data);
+        }}
       />
-
-      <AnimatePresence>
-        {isConsoleOpen && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border border-border/5 rounded-3xl bg-card/30 backdrop-blur-xl"
-          >
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-border/5 px-6 py-3">
-                <div className="flex items-center gap-1 bg-muted/20 p-1 rounded-xl">
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={`h-8 px-4 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'editor' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
-                        onClick={() => setActiveTab('editor')}
-                    >
-                        <CodeIcon size={12} className="mr-2" />
-                        {t('explorer.sql_editor')}
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={`h-8 px-4 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'history' ? 'bg-background shadow-sm text-primary opacity-100' : 'opacity-40 hover:opacity-100'}`}
-                        onClick={() => setActiveTab('history')}
-                    >
-                        <History size={12} className="mr-2" />
-                        {t('explorer.activity_log')}
-                        {history.length > 0 && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary tabular-nums">({history.length})</span>
-                        )}
-                    </Button>
-                </div>
-                
-                {activeTab === 'editor' ? (
-                    <div className="flex gap-2">
-                        <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="h-8 text-[9px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100"
-                            onClick={() => setSqlQuery("")}
-                        >{t('explorer.clear')}</Button>
-                        <Button 
-                            size="sm" 
-                            className={`h-8 px-4 text-[9px] font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 transition-all ${executing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onClick={() => executeMutation.mutate(sqlQuery)}
-                            disabled={executing}
-                        >
-                            {executing ? <Loader2 size={12} className="animate-spin mr-2" /> : <Play size={10} className="mr-2 fill-current" />}
-                            {t('explorer.run_script')}
-                        </Button>
-                    </div>
-                ) : (
-                    <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-8 text-[9px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 hover:text-destructive"
-                        onClick={() => setHistory([])}
-                    >
-                        <TrashIcon size={12} className="mr-2" />
-                        {t('explorer.clear_history')}
-                    </Button>
-                )}
-              </div>
-
-              <div className="p-6">
-                {activeTab === 'editor' ? (
-                  <div className="space-y-4">
-                    <Textarea 
-                value={sqlQuery}
-                onChange={(e) => setSqlQuery(e.target.value)}
-                placeholder={t('explorer.placeholder_sql')} 
-                className="min-h-32 bg-black/40 border-border/10 font-mono text-[13px] leading-relaxed selection:bg-primary/30"
-              />
-
-              {execResult && (
-                <div className={`p-4 rounded-xl flex items-start gap-3 border transition-all animate-in fade-in slide-in-from-top-2 ${execResult.success ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-500' : 'bg-destructive/10 border-destructive/20 text-destructive'}`}>
-                  {execResult.success ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <XCircle size={16} className="mt-0.5 shrink-0" />}
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                      {execResult.success ? t('explorer.sync_success') : t('explorer.engine_fault')}
-                    </p>
-                    <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap">{execResult.message}</p>
-                  </div>
-                </div>
-              )}
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
-                    {history.length === 0 ? (
-                        <div className="py-12 text-center opacity-20 flex flex-col items-center gap-3">
-                            <Clock size={32} />
-                            <span className="text-[10px] font-black uppercase tracking-widest">{t('explorer.no_activity')}</span>
-                        </div>
-                    ) : history.map((entry) => (
-                        <div key={entry.id} className="p-4 rounded-2xl bg-muted/10 border border-border/5 flex flex-col gap-3 group/entry hover:bg-muted/20 transition-all">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className={`size-2 rounded-full ${entry.status === 'success' ? 'bg-emerald-500' : 'bg-destructive'}`} />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">{entry.action}</span>
-                                    <span className="text-[10px] font-bold opacity-20 tabular-nums lowercase">{entry.timestamp.toLocaleTimeString()}</span>
-                                </div>
-                                {entry.status === 'error' && (
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-destructive px-2 py-0.5 rounded bg-destructive/10">{t('explorer.engine_fault')}</span>
-                                )}
-                            </div>
-                            
-                            {entry.query && (
-                                <code className="block p-3 rounded-lg bg-black/40 font-mono text-[11px] text-muted-foreground group-hover/entry:text-foreground transition-colors truncate">
-                                    {entry.query}
-                                </code>
-                            )}
-
-                            <div className={`flex items-start gap-2 text-xs font-medium ${entry.status === 'success' ? 'text-foreground/60' : 'text-destructive/80'}`}>
-                                {entry.status === 'error' && <AlertCircle size={12} className="mt-0.5" />}
-                                <p className="leading-relaxed whitespace-pre-wrap break-all">{entry.message}</p>
-                            </div>
-                        </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {selectedTable ? (
-        <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-8 text-[10px] font-black uppercase tracking-widest bg-muted/20 opacity-40 hover:opacity-100"
-                    onClick={() => onTableSelected?.(null)}
-                >
-                    <ChevronRightIcon size={14} className="rotate-180 mr-1" />
-                    {t('explorer.back_to_grid')}
-                </Button>
-                <Separator orientation="vertical" className="h-4 mx-2" />
-                <div className="flex items-center gap-2">
-                    <TableIcon size={16} className="text-primary" />
-                    <span className="text-sm font-black uppercase italic tracking-tight">{selectedTable}</span>
-                </div>
-                <Button 
-                    size="sm" 
-                    className="ml-auto h-8 px-4 text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/10 rounded-xl"
-                    onClick={() => setIsInsertModalOpen(true)}
-                >
-                    <PlusIcon size={12} className="mr-2" />
-                    {t('explorer.add_document')}
-                </Button>
-            </div>
-
-            {dataLoading ? (
-                <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-20">
-                    <RefreshCw size={32} className="animate-spin" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{t('explorer.fetching_records')}</span>
-                </div>
-            ) : tableData.length === 0 ? (
-                <div className="py-20 text-center opacity-20 border-2 border-dashed border-border/10 rounded-3xl">
-                    <p className="text-[10px] font-black uppercase tracking-widest">{t('explorer.no_data')}</p>
-                </div>
-            ) : viewMode === 'table' ? (
-                <div className="rounded-xl border border-border/20 bg-background overflow-hidden relative shadow-sm">
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse table-fixed min-w-full">
-                            <thead>
-                                <tr className="border-b border-border/20 bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
-                                    {Object.keys(tableData[0]).map(col => (
-                                        <th key={col} className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-foreground/60 border-r border-border/10 last:border-0 whitespace-nowrap overflow-hidden text-ellipsis">
-                                            {col}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/10">
-                                {tableData.map((row, idx) => (
-                                    <tr key={idx} className="hover:bg-primary/[0.04] transition-colors group">
-                                        {Object.values(row).map((val: any, vidx) => (
-                                            <td key={vidx} className="px-5 py-3 text-[11px] font-medium border-r border-border/10 last:border-0 whitespace-nowrap overflow-hidden text-ellipsis">
-                                                <span className="opacity-90 group-hover:opacity-100 transition-opacity">
-                                                    {val === null ? <span className="text-[9px] font-black uppercase opacity-30 italic">NULL</span> : String(val)}
-                                                </span>
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {tableData.map((row, idx) => (
-                        <div key={idx} className="p-6 rounded-3xl bg-card/60 border border-border/20 backdrop-blur-xl hover:border-primary/40 transition-all group shadow-sm hover:shadow-xl hover:shadow-primary/5">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="text-[10px] font-black uppercase tracking-widest opacity-40 group-hover:opacity-100 transition-opacity">Record #{idx + 1}</span>
-                            </div>
-                            <div className="space-y-2">
-                                {Object.entries(row).map(([key, val]) => (
-                                    <div key={key} className="flex items-start gap-4 font-mono text-xs">
-                                        <span className="min-w-[120px] text-primary font-bold opacity-70 group-hover:opacity-100 transition-opacity">{key}:</span>
-                                        <span className={val === null ? 'text-muted-foreground/50 italic uppercase text-[10px] font-black' : 'text-foreground/100'}>
-                                            {val === null ? 'null' : (typeof val === 'object' ? JSON.stringify(val) : String(val))}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tables.map((table, i) => (
-            <div 
-                key={i} 
-                className="group p-5 rounded-2xl bg-card border border-border/5 hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 cursor-pointer transition-all"
-                onClick={() => onTableSelected?.(table)}
-            >
-                <div className="flex items-center gap-4 mb-4">
-                <div className="size-10 rounded-xl bg-muted/30 flex items-center justify-center text-muted-foreground/40 group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                    <TableIcon size={20} />
-                </div>
-                <span className="font-bold text-sm tracking-tight truncate group-hover:text-foreground transition-colors uppercase">{table}</span>
-                </div>
-                <div className="flex gap-1.5 opacity-20 group-hover:opacity-60 transition-opacity">
-                <Hash size={12} /> <Type size={12} /> <Calendar size={12} />
-                <span className="ml-auto text-[9px] font-black uppercase tracking-widest">{t('explorer.explore')}</span>
-                </div>
-            </div>
-            ))}
-            {tables.length === 0 && !loading && !error && (
-                <div className="col-span-full py-12 text-center opacity-30">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em]">{t('explorer.no_collections')}</p>
-                </div>
-            )}
-        </div>
-      )}
-    </motion.div>
+    </div>
   );
 }

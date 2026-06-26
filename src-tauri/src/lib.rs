@@ -8,6 +8,14 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(
+            tauri_plugin_stronghold::Builder::new(|password| {
+                use sha2::{Digest, Sha256};
+
+                Sha256::digest(password.as_bytes()).to_vec()
+            })
+            .build(),
+        )
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet])

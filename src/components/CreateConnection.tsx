@@ -1,4 +1,4 @@
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
@@ -38,7 +38,7 @@ import {
   Check,
   AlertCircle
 } from "lucide-react";
-import SqlDatabase from "@tauri-apps/plugin-sql";
+import { testConnection as testDatabaseConnection } from "@/domain/database/service";
 
 /**
  * Define the schema for connection settings.
@@ -46,7 +46,7 @@ import SqlDatabase from "@tauri-apps/plugin-sql";
  */
 const connectionSchema = z.object({
   // General Tab
-  name: z.string().min(1, "Name is required"),
+  name: z.string().trim().optional().default(""),
   group: z.string().optional(),
   comment: z.string().optional(),
   
@@ -80,16 +80,28 @@ const connectionSchema = z.object({
   // Parameters Tab
   clientEncoding: z.string().optional(),
   appName: z.string().optional(),
-  connectTimeout: z.string()
+  connectTimeout: z.string().optional().default("10")
 });
 
 /**
  * Infer form values from the zod schema.
  * Using a partial or mapping specifically if needed, but infer is usually correct.
  */
-type ConnectionFormValues = z.infer<typeof connectionSchema>;
+type ConnectionFormInput = z.input<typeof connectionSchema>;
+type ConnectionFormValues = z.output<typeof connectionSchema>;
 
 import { useConnections, Connection } from "../lib/useConnections";
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string") return error;
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return fallback;
+  }
+}
 
 interface Props {
   isOpen: boolean;
@@ -100,8 +112,10 @@ interface Props {
 export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Props) {
   const { t } = useTranslation();
   const { addConnection, updateConnection } = useConnections();
+  const [activeTab, setActiveTab] = useState("general");
+  const [saveError, setSaveError] = useState<string | null>(null);
   
-  const { register, handleSubmit, control, watch, setValue, reset, formState: { isSubmitting, errors } } = useForm<ConnectionFormValues>({
+  const { register, handleSubmit, control, watch, setValue, reset, formState: { isSubmitting, errors } } = useForm<ConnectionFormInput, unknown, ConnectionFormValues>({
     resolver: zodResolver(connectionSchema),
     defaultValues: { 
       type: "postgres", 
@@ -131,6 +145,8 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
         sshEnabled: false,
         sshAuthMethod: "password",
         sslMode: "disable",
+        connectionUrl: "",
+        connectTimeout: "10",
       });
     } else if (isOpen) {
       reset({
@@ -145,8 +161,12 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
         sshEnabled: false,
         sshAuthMethod: "password",
         sslMode: "disable",
+        connectionUrl: "",
+        connectTimeout: "10",
       });
+      setActiveTab("connection");
     }
+    setSaveError(null);
   }, [connectionToEdit, reset, isOpen]);
 
   const sshEnabled = watch("sshEnabled");
@@ -186,24 +206,12 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
 
   const testConnection = async () => {
     const data = watch();
+    const connectionName = data.name || `${data.database || "database"}@${data.host || "host"}`;
     setTestingStatus('testing');
     setTestError(null);
 
     try {
-      // Construct connection string for testing
-      let connectionString = "";
-      if (data.type === 'postgres') {
-        connectionString = `postgres://${data.username}:${data.password}@${data.host}:${data.port}/${data.database}`;
-      } else if (data.type === 'mysql') {
-        connectionString = `mysql://${data.username}:${data.password}@${data.host}:${data.port}/${data.database}`;
-      } else if (data.type === 'sqlite') {
-        connectionString = `sqlite:${data.host}`;
-      } else if (data.type === 'sqlserver') {
-        connectionString = `sqlserver://${data.host}:${data.port};database=${data.database};user=${data.username};password=${data.password}`;
-      }
-
-      const db = await SqlDatabase.load(connectionString);
-      await db.close();
+      await testDatabaseConnection({ ...data, name: connectionName, id: connectionToEdit?.id || "test" });
       setTestingStatus('success');
       setTimeout(() => setTestingStatus('idle'), 3000);
     } catch (err: any) {
@@ -214,62 +222,78 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
     }
   };
 
+  const onInvalid = (formErrors: FieldErrors<ConnectionFormInput>) => {
+    const connectionFields: Array<keyof ConnectionFormInput> = [
+      "type",
+      "host",
+      "port",
+      "username",
+      "password",
+      "database",
+      "sslMode",
+    ];
+    setActiveTab(connectionFields.some((field) => formErrors[field]) ? "connection" : "general");
+    setSaveError("Review the highlighted fields before saving.");
+  };
+
   const onSubmit = async (data: ConnectionFormValues) => {
+    const connectionName = data.name || `${data.database}@${data.host}`;
+    const payload = {
+      ...data,
+      name: connectionName,
+    };
+
     try {
+      setSaveError(null);
       if (connectionToEdit) {
-        await updateConnection(connectionToEdit.id, data);
+        await updateConnection(connectionToEdit.id, payload);
       } else {
-        await addConnection(data);
+        await addConnection(payload);
       }
+      setTestingStatus("idle");
       onClose();
     } catch (error) {
       console.error("Failed to save connection:", error);
+      setSaveError(getErrorMessage(error, "Failed to save connection."));
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[720px] gap-0 p-0 overflow-hidden border-none shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] ring-1 ring-white/10 bg-zinc-950/95 backdrop-blur-xl">
-        <DialogHeader className="p-8 pb-2">
+      <DialogContent className="sm:max-w-[720px] gap-0 overflow-hidden rounded-lg border-border bg-background p-0 text-foreground shadow-2xl">
+        <DialogHeader className="border-b border-border p-6 pb-4">
           <div className="flex items-center gap-4">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
+            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Database className="size-5" />
             </div>
             <div className="grid gap-0.5">
-              <DialogTitle className="text-2xl font-black tracking-tight uppercase italic">{t('modal.new_connection')}</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-40">{t('modal.init_node')}</DialogDescription>
+              <DialogTitle className="text-lg font-semibold tracking-tight">
+                {connectionToEdit ? "Edit connection" : t('modal.new_connection')}
+              </DialogTitle>
+              <DialogDescription className="text-[12px] text-muted-foreground">{t('modal.init_node')}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <Tabs defaultValue="general" className="w-full">
-            <div className="px-8 py-2">
-              <TabsList className="grid w-full grid-cols-5 h-12 p-1.5 bg-muted/30 rounded-xl">
-                <TabsTrigger value="general" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
+        <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="px-6 py-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="general">
                   {t('modal.tabs.general')}
                 </TabsTrigger>
-                <TabsTrigger value="connection" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
+                <TabsTrigger value="connection">
                   {t('modal.tabs.connection')}
-                </TabsTrigger>
-                <TabsTrigger value="ssl" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
-                  {t('modal.tabs.ssl')}
-                </TabsTrigger>
-                <TabsTrigger value="ssh" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
-                  {t('modal.tabs.ssh_tunnel')}
-                </TabsTrigger>
-                <TabsTrigger value="params" className="text-[11px] font-black uppercase tracking-[0.15em] rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-md transition-all">
-                  {t('modal.tabs.parameters')}
                 </TabsTrigger>
               </TabsList>
             </div>
 
             <ScrollArea className="h-[480px]">
-              <div className="p-10 pb-16">
+              <div className="p-6 pb-10">
                 <TabsContent value="general" className="space-y-6 mt-0">
                   <div className="grid gap-4">
                     <div className="space-y-2">
-                      <Label className={cn("text-[11px] uppercase tracking-widest font-black opacity-60", errors.name && "text-red-500 opacity-100")}>
+                      <Label className={cn(errors.name && "text-destructive")}>
                         {t('modal.general.name')}
                       </Label>
                       <Input 
@@ -277,14 +301,14 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                         placeholder="My Primary DB" 
                         className={cn(errors.name && "border-red-500/50 focus-visible:ring-red-500/20")}
                       />
-                      {errors.name && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.name.message}</p>}
+                      {errors.name && <p className="text-[11px] font-medium text-destructive">{errors.name.message}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.group')}</Label>
+                      <Label>{t('modal.general.group')}</Label>
                       <Input {...register("group")} placeholder="Production" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.general.comment')}</Label>
+                      <Label>{t('modal.general.comment')}</Label>
                       <Textarea {...register("comment")} placeholder="Add notes here..." className="min-h-[140px] bg-muted/20 border-border/10 focus-visible:ring-1" />
                     </div>
                   </div>
@@ -296,19 +320,19 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                     <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
                       <div className="flex items-center gap-2 mb-1">
                         <RefreshCw size={14} className="text-primary opacity-60" />
-                        <Label className="text-[11px] uppercase tracking-widest font-black text-primary">{t('modal.connection.magic_url')}</Label>
+                        <Label className="text-primary">{t('modal.connection.magic_url')}</Label>
                       </div>
                       <Input 
                         {...register("connectionUrl")} 
                         placeholder="postgresql://user:password@localhost:5432/database" 
                         className="bg-background/80 border-primary/10 focus-visible:ring-primary/20"
                       />
-                      <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-tighter italic">Pasting a URL will automatically fill all fields below</p>
+                      <p className="text-[12px] text-muted-foreground">Pasting a URL will automatically fill all fields below</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-[11px] uppercase tracking-widest font-black opacity-60">{t('modal.engine')}</Label>
+                        <Label>{t('modal.engine')}</Label>
                         <Controller
                           name="type"
                           control={control}
@@ -328,7 +352,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.connection.ssl_mode')}</Label>
+                        <Label>{t('modal.connection.ssl_mode')}</Label>
                         <Controller
                           name="sslMode"
                           control={control}
@@ -353,7 +377,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
 
                     <div className="grid grid-cols-12 gap-4">
                       <div className="col-span-10 space-y-2">
-                        <Label className={cn("text-[10px] uppercase tracking-widest font-black opacity-60", errors.host && "text-red-500 opacity-100")}>
+                        <Label className={cn(errors.host && "text-destructive")}>
                           {t('modal.connection.host')}
                         </Label>
                         <div className="relative group">
@@ -363,22 +387,22 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                             className={cn("pl-9", errors.host && "border-red-500/50 focus-visible:ring-red-500/20")} 
                           />
                         </div>
-                        {errors.host && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.host.message}</p>}
+                        {errors.host && <p className="text-[12px] font-medium text-destructive">{errors.host.message}</p>}
                       </div>
                       <div className="col-span-2 space-y-2">
-                        <Label className={cn("text-[10px] uppercase tracking-widest font-black opacity-60", errors.port && "text-red-500 opacity-100")}>
+                        <Label className={cn(errors.port && "text-destructive")}>
                           {t('modal.connection.port')}
                         </Label>
                         <Input 
                           {...register("port")} 
                           className={cn("text-center font-bold", errors.port && "border-red-500/50 focus-visible:ring-red-500/20")} 
                         />
-                        {errors.port && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.port.message}</p>}
+                        {errors.port && <p className="text-[12px] font-medium text-destructive">{errors.port.message}</p>}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className={cn("text-[10px] uppercase tracking-widest font-black opacity-60", errors.database && "text-red-500 opacity-100")}>
+                      <Label className={cn(errors.database && "text-destructive")}>
                         {t('modal.connection.database')}
                       </Label>
                       <div className="relative group">
@@ -388,12 +412,12 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                           className={cn("pl-9", errors.database && "border-red-500/50 focus-visible:ring-red-500/20")} 
                         />
                       </div>
-                      {errors.database && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.database.message}</p>}
+                      {errors.database && <p className="text-[12px] font-medium text-destructive">{errors.database.message}</p>}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className={cn("text-[10px] uppercase tracking-widest font-black opacity-60", errors.username && "text-red-500 opacity-100")}>
+                        <Label className={cn(errors.username && "text-destructive")}>
                           {t('modal.connection.user')}
                         </Label>
                         <div className="relative group">
@@ -403,10 +427,10 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                             className={cn("pl-9", errors.username && "border-red-500/50 focus-visible:ring-red-500/20")} 
                           />
                         </div>
-                        {errors.username && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.username.message}</p>}
+                        {errors.username && <p className="text-[12px] font-medium text-destructive">{errors.username.message}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={cn("text-[10px] uppercase tracking-widest font-black opacity-60", errors.password && "text-red-500 opacity-100")}>
+                        <Label className={cn(errors.password && "text-destructive")}>
                           {t('modal.connection.password')}
                         </Label>
                         <div className="relative group">
@@ -417,7 +441,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                             className={cn("pl-9", errors.password && "border-red-500/50 focus-visible:ring-red-500/20")} 
                           />
                         </div>
-                        {errors.password && <p className="text-[9px] font-bold text-red-500 uppercase tracking-tighter italic">{errors.password.message}</p>}
+                        {errors.password && <p className="text-[12px] font-medium text-destructive">{errors.password.message}</p>}
                       </div>
                     </div>
 
@@ -433,7 +457,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                           />
                         )}
                       />
-                      <Label htmlFor="savePass" className="text-xs font-bold tracking-tight cursor-pointer">{t('modal.connection.save_password')}</Label>
+                      <Label htmlFor="savePass" className="cursor-pointer text-foreground">{t('modal.connection.save_password')}</Label>
                     </div>
                   </div>
                 </TabsContent>
@@ -442,13 +466,13 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                   <div className="grid gap-5">
                     {['sslRootCert', 'sslCert', 'sslKey', 'sslCrl'].map((cert) => (
                       <div key={cert} className="space-y-2">
-                        <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t(`modal.ssl.${cert.replace('ssl', '').toLowerCase()}`)}</Label>
+                        <Label>{t(`modal.ssl.${cert.replace('ssl', '').toLowerCase()}`)}</Label>
                         <div className="flex gap-2">
                           <div className="relative flex-1 group">
                             <FileCode className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40 group-focus-within:text-primary transition-colors" />
                             <Input {...register(cert as any)} className="pl-9" placeholder="/path/to/identity.key" />
                           </div>
-                          <Button type="button" variant="secondary" size="sm" className="h-9 px-4 font-bold text-[10px] uppercase tracking-widest">
+                          <Button type="button" variant="secondary" size="sm" className="h-9 px-4 text-[13px] font-medium">
                             <FolderOpen size={14} className="mr-2 opacity-60" />Browse
                           </Button>
                         </div>
@@ -461,8 +485,8 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                   <div className="space-y-5">
                     <div className="flex items-center justify-between p-5 rounded-xl bg-muted/20 border border-border/10">
                       <div className="space-y-0.5">
-                        <Label className="text-sm font-bold">{t('modal.ssh.use_tunnel')}</Label>
-                        <p className="text-[10px] text-muted-foreground opacity-60 uppercase tracking-widest font-semibold italic">Connect via Bastion Host</p>
+                        <Label className="text-foreground">{t('modal.ssh.use_tunnel')}</Label>
+                        <p className="text-[12px] text-muted-foreground">Connect via Bastion Host</p>
                       </div>
                       <Controller
                         name="sshEnabled"
@@ -477,22 +501,22 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                       <div className="grid gap-5 animate-in fade-in slide-in-from-top-2 duration-300">
                         <div className="grid grid-cols-12 gap-4">
                           <div className="col-span-10 space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.host')}</Label>
+                            <Label>{t('modal.ssh.host')}</Label>
                             <Input {...register("sshHost")} />
                           </div>
                           <div className="col-span-2 space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.port')}</Label>
+                            <Label>{t('modal.ssh.port')}</Label>
                             <Input {...register("sshPort")} placeholder="22" className="text-center font-bold" />
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.user')}</Label>
+                            <Label>{t('modal.ssh.user')}</Label>
                             <Input {...register("sshUser")} />
                           </div>
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.auth_method')}</Label>
+                            <Label>{t('modal.ssh.auth_method')}</Label>
                             <Controller
                               name="sshAuthMethod"
                               control={control}
@@ -513,15 +537,15 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
 
                         {sshAuthMethod === "password" ? (
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.password')}</Label>
+                            <Label>{t('modal.ssh.password')}</Label>
                             <Input {...register("sshPassword")} type="password" />
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.ssh.identity_file')}</Label>
+                            <Label>{t('modal.ssh.identity_file')}</Label>
                             <div className="flex gap-2">
                               <Input {...register("sshIdentityFile")} placeholder="/path/to/key" className="flex-1" />
-                              <Button type="button" variant="secondary" size="sm" className="h-9 font-bold text-[10px] uppercase tracking-widest">
+                              <Button type="button" variant="secondary" size="sm" className="h-9 text-[13px] font-medium">
                                 <FolderOpen size={14} className="mr-2 opacity-60" />Browse
                               </Button>
                             </div>
@@ -535,7 +559,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                 <TabsContent value="params" className="space-y-6 mt-0">
                   <div className="grid gap-5">
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.encoding')}</Label>
+                      <Label>{t('modal.params.encoding')}</Label>
                       <Controller
                         name="clientEncoding"
                         control={control}
@@ -554,11 +578,11 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.app_name')}</Label>
+                      <Label>{t('modal.params.app_name')}</Label>
                       <Input {...register("appName")} placeholder="Romeu SQL Client" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-[10px] uppercase tracking-widest font-black opacity-60">{t('modal.params.timeout')}</Label>
+                      <Label>{t('modal.params.timeout')}</Label>
                       <Input {...register("connectTimeout")} type="number" />
                     </div>
                   </div>
@@ -566,7 +590,7 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
               </div>
             </ScrollArea>
 
-            <DialogFooter className="px-10 pb-10 pt-4 flex items-center justify-between w-full">
+            <DialogFooter className="flex w-full items-center justify-between border-t border-border px-6 py-4">
               <div className="flex items-center gap-3">
                 <Button 
                   type="button" 
@@ -574,8 +598,8 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                   onClick={testConnection}
                   disabled={testingStatus === 'testing' || isSubmitting}
                   className={cn(
-                    "h-11 px-6 font-black uppercase tracking-[0.15em] text-[10px] transition-all",
-                    testingStatus === 'success' && "border-green-500/50 text-green-500 bg-green-500/5",
+                    "h-10 rounded-md px-4 text-[12px] font-medium transition-all",
+                    testingStatus === 'success' && "border-primary/50 text-primary bg-primary/5",
                     testingStatus === 'error' && "border-red-500/50 text-red-500 bg-red-500/5"
                   )}
                 >
@@ -589,19 +613,24 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                   {testingStatus === 'success' ? t('common.success') : testingStatus === 'error' ? t('common.error') : t('modal.test_connection')}
                 </Button>
                 {testError && (
-                  <p className="text-[10px] font-bold text-red-500/60 uppercase tracking-tighter animate-in fade-in slide-in-from-left-2">
+                  <p className="text-[12px] font-medium text-destructive animate-in fade-in slide-in-from-left-2">
                     {testError}
+                  </p>
+                )}
+                {saveError && !testError && (
+                  <p className="text-[12px] font-medium text-destructive animate-in fade-in slide-in-from-left-2">
+                    {saveError}
                   </p>
                 )}
               </div>
 
               <div className="flex items-center gap-3">
-                <Button type="button" variant="ghost" onClick={onClose} className="h-11 px-6 font-bold uppercase tracking-widest text-[11px] opacity-40 hover:opacity-100 hover:bg-white/5 transition-all">
+                <Button type="button" variant="ghost" onClick={onClose} className="h-10 rounded-md px-5 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
                   {t('common.cancel')}
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="h-11 px-12 font-bold uppercase tracking-widest text-[11px] bg-white text-black hover:bg-white/90 shadow-xl shadow-white/5 transition-all active:scale-[0.98]">
+                <Button type="submit" disabled={isSubmitting} className="h-10 rounded-md bg-primary px-8 text-[12px] font-semibold text-primary-foreground hover:bg-primary/90">
                   {isSubmitting ? <RefreshCw className="mr-2 size-3 animate-spin" /> : null}
-                  {t('modal.connect')}
+                  {connectionToEdit ? "Save changes" : t('modal.connect')}
                 </Button>
               </div>
             </DialogFooter>

@@ -69,13 +69,13 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md bg-card/95 backdrop-blur-2xl border-border/10 rounded-3xl shadow-2xl">
+      <DialogContent className="max-w-md bg-card border-border shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
             <Plus size={20} className="text-primary" />
             {t('modal_insert.title', { tableName })}
           </DialogTitle>
-          <DialogDescription className="text-[10px] font-bold uppercase tracking-widest opacity-40">
+          <DialogDescription className="text-[13px] text-muted-foreground">
             {t('modal_insert.description')}
           </DialogDescription>
         </DialogHeader>
@@ -85,17 +85,17 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
             {columns.filter(col => !col.isPrimaryKey).map((col) => (
               <div key={col.name} className="space-y-2">
                 <div className="flex justify-between items-center px-1">
-                    <Label htmlFor={col.name} className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                    <Label htmlFor={col.name}>
                     {col.name}
                     </Label>
-                    <span className="text-[9px] font-mono opacity-20 uppercase">{col.type}</span>
+                    <span className="text-[11px] font-mono text-muted-foreground">{col.type}</span>
                 </div>
                 <Input
                   id={col.name}
                   value={formData[col.name] || ""}
                   onChange={(e) => handleInputChange(col.name, e.target.value)}
                   placeholder={`Enter ${col.name.toLowerCase()}...`}
-                  className="bg-muted/20 border-border/5 rounded-xl h-10 text-xs font-medium focus:ring-primary/20"
+                  className="h-10 rounded-md bg-background text-[13px] focus:ring-primary/20"
                 />
               </div>
             ))}
@@ -103,7 +103,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
             {columns.filter(col => !col.isPrimaryKey).length === 0 && (
                 <div className="py-10 text-center opacity-20 flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{t('modal_insert.no_fields')}</span>
+                    <span className="text-[13px] font-medium">{t('modal_insert.no_fields')}</span>
                 </div>
             )}
           </div>
@@ -112,8 +112,8 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-[9px] font-black uppercase tracking-widest opacity-60 text-destructive">{t('explorer.engine_fault')}</p>
-                <p className="text-xs font-bold leading-relaxed">{error}</p>
+                <p className="text-[12px] font-medium text-destructive">{t('explorer.engine_fault')}</p>
+                <p className="text-[12px] leading-relaxed">{error}</p>
               </div>
             </div>
           )}
@@ -123,14 +123,14 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
               type="button"
               variant="ghost"
               onClick={onClose}
-              className="rounded-xl h-10 px-4 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100"
+              className="h-10 rounded-md px-4 text-[13px] font-medium text-muted-foreground"
             >
               {t('common.cancel')}
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="rounded-xl h-10 px-6 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 bg-primary"
+              className="h-10 rounded-md bg-primary px-6 text-[13px] font-medium shadow-sm"
             >
               {loading ? <Loader2 size={14} className="animate-spin mr-2" /> : <Plus size={14} className="mr-2" />}
               {t('modal_insert.submit')}

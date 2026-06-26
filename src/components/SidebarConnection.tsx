@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Connection } from "../lib/useConnections";
-import Database from "@tauri-apps/plugin-sql";
+import { listDatabases, listTables } from "@/domain/database/service";
 import { 
   ChevronRight, 
   Pencil, 
@@ -33,35 +33,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
     if (tables.length > 0) return;
     try {
       setLoading(true);
-      const connStr = { ...conn, database: dbName };
-      const getConnectionString = (c: Connection) => {
-        const { type, host, port, username, password, database } = c;
-        if (type === 'postgres') return `postgres://${username}:${password}@${host}:${port}/${database}`;
-        if (type === 'mysql') return `mysql://${username}:${password}@${host}:${port}/${database}`;
-        if (type === 'sqlite') return `sqlite:${host}`;
-        if (type === 'sqlserver') return `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
-        return "";
-      };
-
-      const db = await Database.load(getConnectionString(connStr));
-      
-      let query = "";
-      const type = conn.type;
-      if (type === 'postgres') {
-        query = "SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name ASC";
-      } else if (type === 'mysql') {
-        query = "SHOW TABLES";
-      } else if (type === 'sqlite') {
-        query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC";
-      } else if (type === 'sqlserver') {
-        query = "SELECT TABLE_NAME as name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME ASC";
-      }
-
-      const result = await db.select<any[]>(query);
-      const names = result.map(r => r.name || r.table_name || r.TABLE_NAME || Object.values(r)[0]);
-
-      setTables(names as string[]);
-      await db.close();
+      setTables(await listTables({ ...conn, database: dbName }));
     } catch (err) {
       console.error(`Failed to fetch tables for ${dbName}:`, err);
     } finally {
@@ -84,7 +56,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group/db-item flex items-center justify-between px-2 py-1 rounded-lg hover:bg-muted/50 cursor-pointer group/item transition-all ${isCurrentDb ? 'bg-primary/5 text-primary' : ''}`}
+        className={`group/db-item flex items-center justify-between rounded-md px-2 py-1 hover:bg-muted cursor-pointer group/item transition-all ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={(e) => {
           e.stopPropagation();
           onSelect({ ...conn, database: dbName });
@@ -95,14 +67,14 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
           <div className="size-4 flex items-center justify-center">
             <ChevronRight 
                 size={12} 
-                className={`opacity-20 transition-transform ${isExpanded ? 'rotate-90 opacity-60' : ''}`} 
+                className={`text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
             />
           </div>
           <DatabaseIcon 
             size={13} 
-            className={`opacity-20 transition-opacity ${isCurrentDb ? 'text-primary opacity-100' : 'group-hover/item:opacity-60'}`} 
+            className={`${isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} 
           />
-          <span className={`text-[10px] font-bold tracking-tight truncate uppercase ${isCurrentDb ? 'text-primary' : 'text-muted-foreground/50 group-hover/item:text-foreground'}`}>
+          <span className={`truncate text-[12px] font-medium ${isCurrentDb ? 'text-primary' : 'text-muted-foreground group-hover/item:text-foreground'}`}>
             {dbName}
           </span>
         </div>
@@ -110,7 +82,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
         <Button
           variant="ghost"
           size="icon"
-          className="size-5 rounded opacity-0 group-hover/db-item:opacity-40 hover:!opacity-100 transition-all hover:bg-primary/10 hover:text-primary"
+          className="size-5 rounded opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover/db-item:opacity-100"
           onClick={(e) => {
               e.stopPropagation();
               onSelect({ ...conn, database: dbName });
@@ -128,32 +100,32 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden ml-4 pl-2 border-l border-border/10 flex flex-col gap-0.5 mt-0.5"
+            className="ml-4 mt-0.5 flex flex-col gap-0.5 overflow-hidden border-l border-border pl-2"
           >
             {loading ? (
-              <div className="flex items-center gap-2 px-3 py-1 opacity-20">
+              <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-muted-foreground">
                 <RefreshCw size={10} className="animate-spin" />
-                <span className="text-[9px] font-black uppercase tracking-widest">Loading...</span>
+                <span>Loading</span>
               </div>
             ) : tables.length > 0 ? (
               tables.map(table => (
                 <div 
                   key={table}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-muted/30 cursor-pointer group/table transition-all ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 hover:bg-muted cursor-pointer group/table transition-all ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isCurrentDb) onSelect({ ...conn, database: dbName });
                     onSelectTable?.(table);
                   }}
                 >
-                  <TableIcon size={12} className={`opacity-10 group-hover/table:opacity-40 ${activeTable === table && isCurrentDb ? 'text-primary opacity-60' : 'text-muted-foreground'}`} />
-                  <span className={`text-[10px] font-bold tracking-tight truncate uppercase ${activeTable === table && isCurrentDb ? 'text-primary' : 'text-muted-foreground/40 group-hover/table:text-foreground'}`}>
+                  <TableIcon size={12} className={`${activeTable === table && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`truncate text-[12px] ${activeTable === table && isCurrentDb ? 'font-medium text-primary' : 'text-muted-foreground group-hover/table:text-foreground'}`}>
                     {table}
                   </span>
                 </div>
               ))
             ) : (
-              <span className="px-3 py-1 text-[9px] font-black uppercase tracking-widest opacity-10">No Tables</span>
+              <span className="px-3 py-1 text-[11px] text-muted-foreground">No tables</span>
             )}
           </motion.div>
         )}
@@ -195,48 +167,19 @@ export function SidebarConnection({
 
   const getEngineColor = (type: string) => {
     switch (type) {
-      case 'postgres': return 'bg-cyan-500';
-      case 'mysql': return 'bg-amber-500';
-      case 'sqlite': return 'bg-emerald-500';
-      case 'sqlserver': return 'bg-red-500';
+      case 'postgres': return 'bg-primary';
+      case 'mysql': return 'bg-primary';
+      case 'sqlite': return 'bg-primary';
+      case 'sqlserver': return 'bg-primary';
       default: return 'bg-primary';
     }
-  };
-
-  const getConnectionString = () => {
-    const { type, host, port, username, password, database } = conn;
-    if (type === 'postgres') return `postgres://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'mysql') return `mysql://${username}:${password}@${host}:${port}/${database}`;
-    if (type === 'sqlite') return `sqlite:${host}`;
-    if (type === 'sqlserver') return `sqlserver://${host}:${port};database=${database};user=${username};password=${password}`;
-    return "";
   };
 
   const fetchDatabases = async () => {
     if (databases.length > 0 && !isActive) return;
     try {
       setLoading(true);
-      const db = await Database.load(getConnectionString());
-      
-      let query = "";
-      const type = conn.type;
-      if (type === 'postgres') {
-        query = "SELECT datname as name FROM pg_database WHERE datistemplate = false ORDER BY datname ASC";
-      } else if (type === 'mysql') {
-        query = "SHOW DATABASES";
-      } else if (type === 'sqlite') {
-        setDatabases([conn.database || 'main']);
-        await db.close();
-        return;
-      } else if (type === 'sqlserver') {
-        query = "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb') ORDER BY name ASC";
-      }
-
-      const result = await db.select<any[]>(query);
-      const names = result.map(r => r.name || r.datname || r.Database || Object.values(r)[0]);
-
-      setDatabases(names as string[]);
-      await db.close();
+      setDatabases(await listDatabases(conn));
     } catch (err) {
       console.error("Failed to fetch databases for sidebar:", err);
     } finally {
@@ -259,7 +202,7 @@ export function SidebarConnection({
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group flex items-center h-9 px-3 gap-3 rounded-lg hover:bg-primary/5 cursor-pointer transition-all ${isActive ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(var(--primary),0.1)]' : ''}`}
+        className={`group flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 transition-all hover:bg-muted ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={() => {
           onSelect(conn);
           setIsExpanded(!isExpanded);
@@ -268,33 +211,33 @@ export function SidebarConnection({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <ChevronRight 
             size={14} 
-            className={`opacity-20 transition-transform ${isExpanded || isActive ? 'rotate-90 opacity-100 text-primary' : 'group-hover:opacity-40'}`} 
+            className={`text-muted-foreground transition-transform ${isExpanded || isActive ? 'rotate-90 text-primary' : ''}`} 
           />
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative flex items-center">
-              <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} opacity-80 group-hover:opacity-100 transition-opacity shadow-[0_0_8px_rgba(0,0,0,0.1)]`} />
+              <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} transition-opacity`} />
               {isActive && (
                 <motion.div 
                   layoutId="active-dot" 
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] border-[1.5px] border-background" 
+                  className="absolute -right-1.5 -bottom-0.5 size-1.5 rounded-full border border-background bg-primary" 
                 />
               )}
             </div>
-            <span className={`text-[11px] font-bold tracking-tight text-muted-foreground transition-colors truncate uppercase ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`}>
+            <span className={`truncate text-[12px] font-medium transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
               {conn.name}
             </span>
           </div>
         </div>
 
         <div className={`flex items-center transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          <div className="flex items-center bg-muted/20 p-0.5 rounded-lg border border-border/5">
+          <div className="flex items-center rounded-md bg-background/80 p-0.5 ring-1 ring-border">
                 {isActive && (
                     <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md text-primary hover:bg-primary/20 hover:text-primary transition-all"
+                    className="size-6 rounded-md text-primary hover:bg-primary/10"
                     onClick={(e) => onDisconnect(e)}
                     >
                     <LogOut size={12} />
@@ -303,7 +246,7 @@ export function SidebarConnection({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     onClick={(e) => {
                         e.stopPropagation();
                         onCreateDatabase?.(conn);
@@ -315,7 +258,7 @@ export function SidebarConnection({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     onClick={(e) => {
                         e.stopPropagation();
                         onCreateAction?.(conn);
@@ -327,7 +270,7 @@ export function SidebarConnection({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md opacity-40 hover:opacity-100 hover:bg-primary/10"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={(e) => onEdit(conn, e)}
                 >
                     <Pencil size={12} />
@@ -335,7 +278,7 @@ export function SidebarConnection({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-6 rounded-md opacity-40 hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     onClick={(e) => onDelete(conn.id, e)}
                 >
                     <Trash2 size={12} />
@@ -352,11 +295,11 @@ export function SidebarConnection({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="pl-6 pr-2 py-1 flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 py-1 pl-6 pr-2">
               {loading && databases.length === 0 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 opacity-20">
+                <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted-foreground">
                   <RefreshCw size={10} className="animate-spin" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest">Scanning...</span>
+                  <span>Scanning</span>
                 </div>
               )}
               
@@ -374,10 +317,10 @@ export function SidebarConnection({
               ))}
 
               {!loading && databases.length === 0 && (
-                <div className="px-3 py-2 flex items-center justify-between group/empty">
-                   <div className="flex items-center gap-2 opacity-20">
+                <div className="flex items-center justify-between px-3 py-2 group/empty">
+                   <div className="flex items-center gap-2 text-muted-foreground">
                     <DatabaseIcon size={10} />
-                    <span className="text-[9px] font-bold uppercase tracking-widest">Empty</span>
+                    <span className="text-[11px]">Empty</span>
                    </div>
                 </div>
               )}
