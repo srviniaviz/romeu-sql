@@ -1,8 +1,9 @@
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "react-i18next";
-import { Database, Minus, Moon, Square, Sun, X } from "lucide-react";
+import { Minus, Moon, Square, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import appIcon from "@/assets/icon.png";
 
 export function Titlebar() {
   const { theme, toggleTheme } = useTheme();
@@ -35,7 +36,7 @@ export function Titlebar() {
         className="flex-1 h-full flex items-center gap-5 px-3"
       >
         <div className="flex items-center gap-2">
-          <Database size={16} className="text-primary" />
+          <img src={appIcon} alt="" className="size-4 rounded-[3px]" draggable={false} />
           <span className="text-[13px] font-semibold">Romeu SQL</span>
         </div>
       </div>

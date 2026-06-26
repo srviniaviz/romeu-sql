@@ -17,7 +17,6 @@ import {
   createTable,
   deleteRow,
   executeSql,
-  explainRows,
   insertRow,
   listColumns,
   listIndexes,
@@ -28,6 +27,7 @@ import {
   updateRow,
 } from "@/domain/database/service";
 import type { DataViewMode } from "./explorer/DataPreview";
+import type { RowQueryOptions } from "@/domain/database/types";
 
 interface Props {
   connection: Connection;
@@ -69,10 +69,12 @@ export function DatabaseExplorer({
   const [activeTab, setActiveTab] = useState<"editor" | "history">("editor");
   const [viewMode, setViewMode] = useState<DataViewMode>("list");
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
   const [whereClause, setWhereClause] = useState("");
+  const [rowOptions, setRowOptions] = useState<RowQueryOptions>({});
   const [queryRows, setQueryRows] = useState<Record<string, unknown>[]>([]);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<string | null>(null);
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -91,6 +93,7 @@ export function DatabaseExplorer({
   useEffect(() => {
     setPage(0);
     setWhereClause("");
+    setRowOptions({});
   }, [selectedTable, connection.id, connection.database]);
 
   const addHistory = (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
@@ -134,8 +137,8 @@ export function DatabaseExplorer({
     isFetching: fetchingRows,
     refetch: refetchRows,
   } = useQuery({
-    queryKey: ["tableData", connection.id, connection.database, selectedTable, page, pageSize, whereClause],
-    queryFn: () => (selectedTable ? selectRowsPage(connection, selectedTable, pageSize, page * pageSize, whereClause) : []),
+    queryKey: ["tableData", connection.id, connection.database, selectedTable, page, pageSize, whereClause, rowOptions],
+    queryFn: () => (selectedTable ? selectRowsPage(connection, selectedTable, pageSize, page * pageSize, whereClause, rowOptions) : []),
     enabled: !!selectedTable,
   });
 
@@ -300,7 +303,7 @@ export function DatabaseExplorer({
         onDisconnect={onDisconnect}
       />
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-5">
+      <div className={selectedTable ? "min-h-0 flex-1 overflow-hidden p-5" : "min-h-0 flex-1 space-y-4 overflow-auto p-5"}>
         {selectedTable ? (
           <DataPreview
             selectedTable={selectedTable}
@@ -315,6 +318,7 @@ export function DatabaseExplorer({
             indexes={indexes}
             refreshing={fetchingRows || countingRows}
             whereClause={whereClause}
+            rowOptions={rowOptions}
             queryRows={queryRows}
             queryLoading={queryMutation.isPending}
             queryError={queryError}
@@ -326,14 +330,20 @@ export function DatabaseExplorer({
             }}
             onFilterReset={() => {
               setWhereClause("");
+              setRowOptions({});
               setPage(0);
             }}
-            onExplainFilter={async (nextWhereClause) => {
-              if (!selectedTable) return "No table selected";
-              const rows = await explainRows(connection, selectedTable, nextWhereClause);
-              return JSON.stringify(rows, null, 2);
+            onOptionsApply={(options) => {
+              setRowOptions(options);
+              setPage(0);
+            }}
+            onFind={() => {
+              queryClient.invalidateQueries({ queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable] });
+              queryClient.invalidateQueries({ queryKey: ["tableData", connection.id, connection.database, selectedTable] });
             }}
             onRunQuery={(query) => queryMutation.mutateAsync(query)}
+            onExportQuery={(query) => selectQuery(connection, query)}
+            onExportStatusChange={setActiveTask}
             onUpdateRow={(original, next) => updateRowMutation.mutateAsync({ original, next })}
             onDeleteRow={(row) => deleteRowMutation.mutateAsync(row)}
             onRefresh={() => {
@@ -374,7 +384,23 @@ export function DatabaseExplorer({
           <span className="truncate">{connection.database || connection.name}</span>
           <span className="text-muted-foreground/40">•</span>
           <span>{connection.type}</span>
-          {execResult && (
+          {(activeTask || executeMutation.isPending || queryMutation.isPending || insertMutation.isPending || updateRowMutation.isPending || deleteRowMutation.isPending || createTableMutation.isPending || createDbMutation.isPending || refreshingTables || fetchingRows || countingRows) ? (
+            <>
+              <span className="text-muted-foreground/40">•</span>
+              <span className="inline-flex items-center gap-1 text-primary">
+                <Loader2 size={10} className="animate-spin" />
+                {activeTask ||
+                  (executeMutation.isPending && "Running SQL") ||
+                  (queryMutation.isPending && "Running query") ||
+                  (insertMutation.isPending && "Saving row") ||
+                  (updateRowMutation.isPending && "Updating row") ||
+                  (deleteRowMutation.isPending && "Deleting row") ||
+                  (createTableMutation.isPending && "Creating table") ||
+                  (createDbMutation.isPending && "Creating database") ||
+                  "Syncing data"}
+              </span>
+            </>
+          ) : execResult && (
             <>
               <span className="text-muted-foreground/40">•</span>
               <span className={execResult.success ? "text-primary" : "text-destructive"}>

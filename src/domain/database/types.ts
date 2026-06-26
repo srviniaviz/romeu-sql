@@ -24,6 +24,13 @@ export interface TableInfo {
   totalBytes: number | null;
 }
 
+export interface RowQueryOptions {
+  project?: string;
+  sort?: string;
+  skip?: number;
+  limit?: number;
+}
+
 export interface Dialect {
   listDatabases(connection: Connection): string;
   listTables(connection: Connection): string;
@@ -32,7 +39,7 @@ export interface Dialect {
   listTableStats(): string;
   createDatabase(name: string): string;
   countRows(tableName: string, whereClause?: string): string;
-  selectRows(tableName: string, limit: number, offset: number, whereClause?: string): string;
+  selectRows(tableName: string, limit: number, offset: number, whereClause?: string, options?: RowQueryOptions): string;
   insertRow(tableName: string, data: Record<string, unknown>): {
     sql: string;
     values: unknown[];

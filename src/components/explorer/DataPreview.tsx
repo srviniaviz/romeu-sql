@@ -18,7 +18,9 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ColumnInfo, IndexInfo } from "@/domain/database/types";
+import type { ColumnInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
+import { saveTextFile } from "@/lib/exportFile";
+import { SqlEditor } from "@/components/ui/SqlEditor";
 
 export type DataViewMode = "list" | "json" | "table";
 type DataTab = "rows" | "query" | "schema" | "indexes";
@@ -36,6 +38,7 @@ interface DataPreviewProps {
   indexes?: IndexInfo[];
   refreshing: boolean;
   whereClause: string;
+  rowOptions: RowQueryOptions;
   queryRows: Record<string, unknown>[];
   queryLoading: boolean;
   queryError: string | null;
@@ -47,8 +50,11 @@ interface DataPreviewProps {
   onPageSizeChange: (pageSize: number) => void;
   onFilterApply: (whereClause: string) => void;
   onFilterReset: () => void;
-  onExplainFilter: (whereClause: string) => Promise<string>;
+  onOptionsApply: (options: RowQueryOptions) => void;
+  onFind: () => void;
   onRunQuery: (query: string) => Promise<unknown>;
+  onExportQuery: (query: string) => Promise<Record<string, unknown>[]>;
+  onExportStatusChange: (status: string | null) => void;
   onUpdateRow: (original: Record<string, unknown>, next: Record<string, unknown>) => Promise<unknown>;
   onDeleteRow: (row: Record<string, unknown>) => Promise<unknown>;
 }
@@ -103,16 +109,6 @@ function serializeValue(value: unknown) {
   if (value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
-}
-
-function downloadFile(filename: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function toCsv(rows: Record<string, unknown>[]) {
@@ -300,6 +296,7 @@ function RowsTable({
   pageSize,
   busy,
   readOnly,
+  fill,
   onEdit,
   onDelete,
 }: {
@@ -308,12 +305,13 @@ function RowsTable({
   pageSize: number;
   busy: boolean;
   readOnly?: boolean;
+  fill?: boolean;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
   const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
   return (
-    <div className="max-h-[calc(100vh-310px)] w-full max-w-full overflow-auto rounded-md bg-background">
+    <div className={cn("w-full max-w-full rounded-md bg-background", fill ? "h-full" : "h-full overflow-auto")}>
       <table className="min-w-max border-collapse text-left text-[12px]">
         <thead className="sticky top-0 z-10 bg-slate-50">
           <tr>
@@ -403,6 +401,73 @@ function RowEditor({
   );
 }
 
+function ExportModal({
+  tableName,
+  defaultQuery,
+  completions,
+  exporting,
+  error,
+  message,
+  onClose,
+  onExport,
+}: {
+  tableName: string;
+  defaultQuery: string;
+  completions: string[];
+  exporting: boolean;
+  error: string | null;
+  message: string | null;
+  onClose: () => void;
+  onExport: (query: string, format: "csv" | "json") => void;
+}) {
+  const [query, setQuery] = useState(defaultQuery);
+  const [format, setFormat] = useState<"csv" | "json">("csv");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
+      <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-background shadow-xl">
+        <div className="flex h-12 items-center justify-between px-4">
+          <div>
+            <h2 className="text-[14px] font-semibold text-slate-950">Export {tableName}</h2>
+            <p className="text-[12px] text-slate-500">Use a SELECT query or leave empty to export the current page.</p>
+          </div>
+          <IconButton title="Close" disabled={exporting} onClick={onClose}>
+            <X size={14} />
+          </IconButton>
+        </div>
+        <div className="space-y-3 p-4">
+          <SqlEditor
+            value={query}
+            onChange={setQuery}
+            placeholder="SELECT * FROM table_name LIMIT 1000"
+            minHeight="min-h-44"
+            completions={completions}
+          />
+          <label className="flex items-center gap-2 text-[12px] font-medium text-slate-700">
+            Format
+            <select
+              value={format}
+              onChange={(event) => setFormat(event.target.value as "csv" | "json")}
+              className="h-8 rounded-md bg-slate-50 px-2 text-[12px] outline-none"
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+          </label>
+          {error && <p className="text-[12px] text-destructive">{error}</p>}
+          {message && <p className="text-[12px] text-primary">{message}</p>}
+        </div>
+        <div className="flex h-14 items-center justify-end gap-2 px-4">
+          <ToolbarButton disabled={exporting} onClick={onClose}>Cancel</ToolbarButton>
+          <ToolbarButton primary disabled={exporting} onClick={() => onExport(query, format)}>
+            {exporting ? "Exporting..." : "Export"}
+          </ToolbarButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DataPreview({
   selectedTable,
   rows,
@@ -416,6 +481,7 @@ export function DataPreview({
   indexes = [],
   refreshing,
   whereClause,
+  rowOptions,
   queryRows,
   queryLoading,
   queryError,
@@ -427,12 +493,24 @@ export function DataPreview({
   onPageSizeChange,
   onFilterApply,
   onFilterReset,
-  onExplainFilter,
+  onOptionsApply,
+  onFind,
   onRunQuery,
+  onExportQuery,
+  onExportStatusChange,
   onUpdateRow,
   onDeleteRow,
 }: DataPreviewProps) {
   const [query, setQuery] = useState(whereClause);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [project, setProject] = useState(rowOptions.project || "");
+  const [sort, setSort] = useState(rowOptions.sort || "");
+  const [skip, setSkip] = useState(String(rowOptions.skip || ""));
+  const [limit, setLimit] = useState(String(rowOptions.limit || ""));
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DataTab>("rows");
@@ -441,10 +519,60 @@ export function DataPreview({
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const startRow = totalRows === 0 ? 0 : page * pageSize + 1;
   const endRow = Math.min(totalRows, (page + 1) * pageSize);
-  const hasQuery = query.trim().length > 0;
 
   useEffect(() => setQuery(whereClause), [whereClause]);
+  useEffect(() => {
+    setProject(rowOptions.project || "");
+    setSort(rowOptions.sort || "");
+    setSkip(String(rowOptions.skip || ""));
+    setLimit(String(rowOptions.limit || ""));
+  }, [rowOptions]);
   useEffect(() => setSql(`SELECT * FROM ${selectedTable} LIMIT 100`), [selectedTable]);
+
+  function applyRows() {
+    onOptionsApply({
+      project: project.trim() || undefined,
+      sort: sort.trim() || undefined,
+      skip: Number(skip) > 0 ? Number(skip) : undefined,
+      limit: Number(limit) > 0 ? Number(limit) : undefined,
+    });
+    onFilterApply(query.trim());
+    onFind();
+    setMessage(null);
+  }
+
+  function resetRows() {
+    setQuery("");
+    setProject("");
+    setSort("");
+    setSkip("");
+    setLimit("");
+    setMessage(null);
+    onFilterReset();
+    onFind();
+  }
+
+  async function handleExport(query: string, format: "csv" | "json") {
+    setExporting(true);
+    setExportError(null);
+    setExportMessage(null);
+    onExportStatusChange("Exporting data");
+    try {
+      const exportRows = query.trim() ? await onExportQuery(query) : rows;
+      const filename = `${selectedTable}-export.${format}`;
+      const saved = await saveTextFile({
+        defaultPath: filename,
+        contents: format === "csv" ? toCsv(exportRows) : JSON.stringify(exportRows, null, 2),
+        format,
+      });
+      setExportMessage(saved ? `Exported ${exportRows.length} rows as ${format.toUpperCase()}.` : "Export canceled.");
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+      onExportStatusChange(null);
+    }
+  }
 
   async function runAction(action: () => Promise<unknown>) {
     setBusy(true);
@@ -474,102 +602,149 @@ export function DataPreview({
   ];
 
   return (
-    <section className="overflow-hidden rounded-lg bg-background">
-      <div className="flex h-10 items-center gap-2 px-5">
-        <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-900">
-          <ChevronLeft size={14} />
-        </button>
-        <Database size={15} className="text-slate-700" />
-        <span className="font-mono text-[13px] font-semibold text-slate-950">{selectedTable}</span>
-      </div>
-
-      <div className="flex h-11 items-end gap-7 px-5">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "h-11 border-b-2 px-0 text-[13px] font-semibold",
-              activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-slate-600"
-            )}
-          >
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{tab.count}</span>
-            )}
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-background">
+      <div className="z-20 shrink-0 bg-background pb-1">
+        <div className="flex h-10 items-center gap-2 px-5">
+          <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-900">
+            <ChevronLeft size={14} />
           </button>
-        ))}
+          <Database size={15} className="text-slate-700" />
+          <span className="font-mono text-[13px] font-semibold text-slate-950">{selectedTable}</span>
+        </div>
+
+        <div className="flex h-11 items-end gap-7 px-5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "h-11 border-b-2 px-0 text-[13px] font-semibold",
+                activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-slate-600"
+              )}
+            >
+              {tab.label}
+              {tab.count !== undefined && (
+                <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "rows" && (
+          <>
+            <div className="space-y-2 px-5 py-2">
+              <div className="flex min-h-8 items-center gap-3">
+                <div className="flex h-8 flex-1 items-center rounded-md bg-slate-50 px-2 text-[12px]">
+                  <Search size={14} className="mr-2 text-slate-500" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => event.key === "Enter" && applyRows()}
+                    placeholder="Type a SQL WHERE clause preview, e.g. price > 100"
+                    className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
+                  />
+                  {query || whereClause || project || sort || skip || limit ? (
+                    <button type="button" title="Reset" onClick={resetRows} className="ml-2 text-slate-400 hover:text-slate-700">
+                      <X size={13} />
+                    </button>
+                  ) : (
+                    <Filter size={13} className="ml-2 text-slate-400" />
+                  )}
+                </div>
+                <ToolbarButton primary disabled={busy} onClick={applyRows}>Find</ToolbarButton>
+                <ToolbarButton disabled={busy} onClick={() => setOptionsOpen((open) => !open)}>
+                  Options
+                  <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />
+                </ToolbarButton>
+              </div>
+              {message && <pre className="max-h-32 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-4 text-slate-700">{message}</pre>}
+              {optionsOpen && (
+                <div className="grid gap-3 rounded-md bg-slate-50 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-4">
+                  <label className="space-y-1">
+                    <span className="font-medium text-slate-700">Project</span>
+                    <input
+                      value={project}
+                      onChange={(event) => setProject(event.target.value)}
+                      placeholder="id, name, createdAt"
+                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="font-medium text-slate-700">Sort</span>
+                    <input
+                      value={sort}
+                      onChange={(event) => setSort(event.target.value)}
+                      placeholder="createdAt desc"
+                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="font-medium text-slate-700">Skip</span>
+                    <input
+                      value={skip}
+                      onChange={(event) => setSkip(event.target.value.replace(/\D/g, ""))}
+                      placeholder="0"
+                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="font-medium text-slate-700">Limit</span>
+                    <input
+                      value={limit}
+                      onChange={(event) => setLimit(event.target.value.replace(/\D/g, ""))}
+                      placeholder="0"
+                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex h-11 items-center justify-between px-5">
+              <div className="flex items-center gap-2">
+                <ToolbarButton primary disabled={busy} onClick={onInsert}>
+                  <Plus size={13} />
+                  Add row
+                  <ChevronDown size={12} />
+                </ToolbarButton>
+                <ToolbarButton onClick={() => setExportOpen(true)} disabled={!rows.length}>
+                  <Download size={13} />
+                  Export
+                </ToolbarButton>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-slate-50 px-2 text-[12px] outline-none">
+                  {[10, 25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
+                </select>
+                <span className="min-w-[104px] text-right text-[12px] text-slate-700">{startRow} - {endRow} of {totalRows}</span>
+                <button type="button" onClick={onRefresh} disabled={refreshing} className="text-slate-600 disabled:opacity-40">
+                  <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
+                </button>
+                <button type="button" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)} className="text-slate-600 disabled:opacity-35">
+                  <ChevronLeft size={16} />
+                </button>
+                <button type="button" disabled={page >= totalPages - 1 || loading} onClick={() => onPageChange(page + 1)} className="text-slate-600 disabled:opacity-35">
+                  <ChevronRight size={16} />
+                </button>
+                <ViewToggle value={viewMode} onChange={onViewModeChange} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {activeTab === "rows" && (
-        <>
-          <div className="space-y-2 px-5 py-2">
-            <div className="flex min-h-8 items-center gap-3">
-              <div className="flex h-8 flex-1 items-center rounded-md bg-slate-50 px-2 text-[12px]">
-                <Search size={14} className="mr-2 text-slate-500" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => event.key === "Enter" && onFilterApply(query.trim())}
-                  placeholder="Type a SQL WHERE clause preview, e.g. price > 100"
-                  className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
-                />
-                <Filter size={13} className="ml-2 text-slate-400" />
-              </div>
-              <ToolbarButton disabled={!hasQuery || busy} onClick={() => void runAction(async () => setMessage(await onExplainFilter(query.trim())))}>Explain</ToolbarButton>
-              <ToolbarButton disabled={(!hasQuery && !whereClause) || busy} onClick={() => { setQuery(""); setMessage(null); onFilterReset(); }}>Reset</ToolbarButton>
-              <ToolbarButton primary disabled={busy} onClick={() => { onFilterApply(query.trim()); setMessage(null); }}>Find</ToolbarButton>
-            </div>
-            {message && <pre className="max-h-32 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-4 text-slate-700">{message}</pre>}
-          </div>
-
-          <div className="flex h-11 items-center justify-between px-5">
-            <div className="flex items-center gap-2">
-              <ToolbarButton primary disabled={busy} onClick={onInsert}>
-                <Plus size={13} />
-                Add row
-                <ChevronDown size={12} />
-              </ToolbarButton>
-              <ToolbarButton onClick={() => downloadFile(`${selectedTable}-page-${page + 1}.csv`, toCsv(rows), "text/csv")} disabled={!rows.length}>
-                <Download size={13} />
-                Export CSV
-              </ToolbarButton>
-              <ToolbarButton onClick={() => downloadFile(`${selectedTable}-page-${page + 1}.json`, JSON.stringify(rows, null, 2), "application/json")} disabled={!rows.length}>
-                <Download size={13} />
-                Export JSON
-              </ToolbarButton>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-slate-50 px-2 text-[12px] outline-none">
-                {[25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
-              </select>
-              <span className="min-w-[104px] text-right text-[12px] text-slate-700">{startRow} - {endRow} of {totalRows}</span>
-              <button type="button" onClick={onRefresh} disabled={refreshing} className="text-slate-600 disabled:opacity-40">
-                <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
-              </button>
-              <button type="button" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)} className="text-slate-600 disabled:opacity-35">
-                <ChevronLeft size={16} />
-              </button>
-              <button type="button" disabled={page >= totalPages - 1 || loading} onClick={() => onPageChange(page + 1)} className="text-slate-600 disabled:opacity-35">
-                <ChevronRight size={16} />
-              </button>
-              <ViewToggle value={viewMode} onChange={onViewModeChange} />
-            </div>
-          </div>
-        </>
-      )}
-
-      <div className="p-3">
+      <div className={cn("min-h-0 flex-1 p-3", (activeTab === "rows" && viewMode === "table") || activeTab === "query" ? "overflow-hidden" : "overflow-auto")}>
         {activeTab === "query" ? (
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-            <div className="rounded-md bg-slate-50 p-3">
-              <textarea
+          <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+            <div className="flex min-h-0 flex-col rounded-md bg-slate-50 p-3">
+              <SqlEditor
                 value={sql}
-                onChange={(event) => setSql(event.target.value)}
-                spellCheck={false}
-                className="h-80 w-full resize-none bg-transparent font-mono text-[12px] leading-5 outline-none"
+                onChange={setSql}
+                minHeight="min-h-full"
+                className="min-h-0 flex-1"
+                completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
               />
               <div className="mt-3 flex justify-end">
                 <ToolbarButton primary disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
@@ -577,12 +752,14 @@ export function DataPreview({
                 </ToolbarButton>
               </div>
             </div>
-            <div className="min-h-80 rounded-md bg-slate-50 p-3">
-              <div className="mb-2 text-[12px] font-semibold text-slate-800">Result preview</div>
+            <div className="flex min-h-0 flex-col rounded-md bg-slate-50 p-3">
+              <div className="mb-2 shrink-0 text-[12px] font-semibold text-slate-800">Result preview</div>
               {queryError ? (
                 <p className="text-[12px] text-destructive">{queryError}</p>
               ) : queryRows.length ? (
-                <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly onEdit={setEditingRow} onDelete={handleDelete} />
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly fill onEdit={setEditingRow} onDelete={handleDelete} />
+                </div>
               ) : (
                 <p className="py-10 text-center text-[12px] text-muted-foreground">Run a SELECT query to preview rows.</p>
               )}
@@ -671,6 +848,20 @@ export function DataPreview({
             const saved = await runAction(() => onUpdateRow(editingRow, next));
             if (saved) setEditingRow(null);
           }}
+        />
+      )}
+      {exportOpen && (
+        <ExportModal
+          tableName={selectedTable}
+          defaultQuery={`SELECT * FROM ${selectedTable} LIMIT 1000`}
+          completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
+          exporting={exporting}
+          error={exportError}
+          message={exportMessage}
+          onClose={() => {
+            if (!exporting) setExportOpen(false);
+          }}
+          onExport={(query, format) => void handleExport(query, format)}
         />
       )}
     </section>

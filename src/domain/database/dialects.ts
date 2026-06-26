@@ -1,5 +1,5 @@
 import { Connection, DbEngine } from "../connections/types";
-import { ColumnInfo, Dialect, IndexInfo, TableInfo } from "./types";
+import { ColumnInfo, Dialect, IndexInfo, RowQueryOptions, TableInfo } from "./types";
 
 function firstValue(row: Record<string, unknown>) {
   return Object.values(row)[0];
@@ -39,6 +39,55 @@ function cleanWhere(whereClause?: string) {
     throw new Error("WHERE clause cannot contain semicolons.");
   }
   return ` WHERE ${withoutWhere}`;
+}
+
+function parseIdentifierList(value: string | undefined, quote: (identifier: string) => string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "*";
+  if (/[;()]/.test(trimmed)) throw new Error("Project only accepts column names separated by commas.");
+  return trimmed
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => quoteQualified(part, quote))
+    .join(", ");
+}
+
+function cleanOrderBy(value: string | undefined, quote: (identifier: string) => string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  if (/[;()]/.test(trimmed)) throw new Error("Sort only accepts column names with optional ASC/DESC.");
+  const parts = trimmed
+    .split(",")
+    .map((part) => {
+      const match = part.trim().match(/^([a-zA-Z0-9_.-]+)(?:\s+(asc|desc))?$/i);
+      if (!match) throw new Error("Invalid sort option.");
+      return `${quoteQualified(match[1], quote)} ${match[2]?.toUpperCase() || "ASC"}`;
+    })
+    .join(", ");
+  return parts ? ` ORDER BY ${parts}` : "";
+}
+
+function limitWithOptions(defaultLimit: number, defaultOffset: number, options?: RowQueryOptions) {
+  const optionLimit = Number(options?.limit || 0);
+  const optionSkip = Number(options?.skip || 0);
+  return {
+    limit: optionLimit > 0 ? Math.min(defaultLimit, optionLimit) : defaultLimit,
+    offset: defaultOffset + (optionSkip > 0 ? optionSkip : 0),
+  };
+}
+
+function buildSelectRows(
+  tableName: string,
+  limit: number,
+  offset: number,
+  whereClause: string | undefined,
+  options: RowQueryOptions | undefined,
+  quote: (identifier: string) => string,
+  paging: (limit: number, offset: number) => string
+) {
+  const page = limitWithOptions(limit, offset, options);
+  return `SELECT ${parseIdentifierList(options?.project, quote)} FROM ${quoteQualified(tableName, quote)}${cleanWhere(whereClause)}${cleanOrderBy(options?.sort, quote)}${paging(page.limit, page.offset)}`;
 }
 
 function exactWhere(
@@ -179,8 +228,8 @@ const postgresDialect: Dialect = {
   createDatabase: (name) => `CREATE DATABASE ${quoteDouble(name)}`,
   countRows: (tableName, whereClause) =>
     `SELECT COUNT(*)::int as count FROM ${quoteQualified(tableName, quoteDouble)}${cleanWhere(whereClause)}`,
-  selectRows: (tableName, limit, offset, whereClause) =>
-    `SELECT * FROM ${quoteQualified(tableName, quoteDouble)}${cleanWhere(whereClause)} LIMIT ${limit} OFFSET ${offset}`,
+  selectRows: (tableName, limit, offset, whereClause, options) =>
+    buildSelectRows(tableName, limit, offset, whereClause, options, quoteDouble, (nextLimit, nextOffset) => ` LIMIT ${nextLimit} OFFSET ${nextOffset}`),
   insertRow: (tableName, data) => ({
     sql: `INSERT INTO ${quoteQualified(tableName, quoteDouble)} (${Object.keys(data)
       .map(quoteDouble)
@@ -214,8 +263,8 @@ const mysqlDialect: Dialect = {
   createDatabase: (name) => `CREATE DATABASE ${quoteBacktick(name)}`,
   countRows: (tableName, whereClause) =>
     `SELECT COUNT(*) as count FROM ${quoteQualified(tableName, quoteBacktick)}${cleanWhere(whereClause)}`,
-  selectRows: (tableName, limit, offset, whereClause) =>
-    `SELECT * FROM ${quoteQualified(tableName, quoteBacktick)}${cleanWhere(whereClause)} LIMIT ${limit} OFFSET ${offset}`,
+  selectRows: (tableName, limit, offset, whereClause, options) =>
+    buildSelectRows(tableName, limit, offset, whereClause, options, quoteBacktick, (nextLimit, nextOffset) => ` LIMIT ${nextLimit} OFFSET ${nextOffset}`),
   insertRow: (tableName, data) => ({
     sql: `INSERT INTO ${quoteQualified(tableName, quoteBacktick)} (${Object.keys(data)
       .map(quoteBacktick)
@@ -245,8 +294,8 @@ const sqliteDialect: Dialect = {
   createDatabase: (name) => `ATTACH DATABASE ${quoteDouble(name)} AS ${quoteDouble(name)}`,
   countRows: (tableName, whereClause) =>
     `SELECT COUNT(*) as count FROM ${quoteQualified(tableName, quoteDouble)}${cleanWhere(whereClause)}`,
-  selectRows: (tableName, limit, offset, whereClause) =>
-    `SELECT * FROM ${quoteQualified(tableName, quoteDouble)}${cleanWhere(whereClause)} LIMIT ${limit} OFFSET ${offset}`,
+  selectRows: (tableName, limit, offset, whereClause, options) =>
+    buildSelectRows(tableName, limit, offset, whereClause, options, quoteDouble, (nextLimit, nextOffset) => ` LIMIT ${nextLimit} OFFSET ${nextOffset}`),
   insertRow: (tableName, data) => ({
     sql: `INSERT INTO ${quoteQualified(tableName, quoteDouble)} (${Object.keys(data)
       .map(quoteDouble)
@@ -297,8 +346,16 @@ const sqlserverDialect: Dialect = {
   createDatabase: (name) => `CREATE SCHEMA ${quoteBracket(name)}`,
   countRows: (tableName, whereClause) =>
     `SELECT COUNT(*) as count FROM ${quoteQualified(tableName, quoteBracket)}${cleanWhere(whereClause)}`,
-  selectRows: (tableName, limit, offset, whereClause) =>
-    `SELECT * FROM ${quoteQualified(tableName, quoteBracket)}${cleanWhere(whereClause)} ORDER BY (SELECT NULL) OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`,
+  selectRows: (tableName, limit, offset, whereClause, options) =>
+    buildSelectRows(
+      tableName,
+      limit,
+      offset,
+      whereClause,
+      options,
+      quoteBracket,
+      (nextLimit, nextOffset) => `${options?.sort?.trim() ? "" : " ORDER BY (SELECT NULL)"} OFFSET ${nextOffset} ROWS FETCH NEXT ${nextLimit} ROWS ONLY`
+    ),
   insertRow: (tableName, data) => ({
     sql: `INSERT INTO ${quoteQualified(tableName, quoteBracket)} (${Object.keys(data)
       .map(quoteBracket)

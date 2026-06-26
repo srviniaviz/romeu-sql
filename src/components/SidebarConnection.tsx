@@ -22,15 +22,16 @@ interface DatabaseItemProps {
   onCreateAction?: (conn: Connection) => void;
   onSelectTable?: (tableName: string) => void;
   activeTable?: string;
+  refreshToken: number;
 }
 
-function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable }: DatabaseItemProps) {
+function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken }: DatabaseItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchTables = async () => {
-    if (tables.length > 0) return;
+  const fetchTables = async (force = false) => {
+    if (tables.length > 0 && !force) return;
     try {
       setLoading(true);
       setTables(await listTables({ ...conn, database: dbName }));
@@ -46,6 +47,12 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
       fetchTables();
     }
   }, [isExpanded]);
+
+  useEffect(() => {
+    if (refreshToken > 0 && isExpanded) {
+      fetchTables(true);
+    }
+  }, [refreshToken]);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -158,6 +165,7 @@ export function SidebarConnection({
   const [isExpanded, setIsExpanded] = useState(false);
   const [databases, setDatabases] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const getEngineColor = (type: string) => {
     switch (type) {
@@ -169,8 +177,8 @@ export function SidebarConnection({
     }
   };
 
-  const fetchDatabases = async () => {
-    if (databases.length > 0) return;
+  const fetchDatabases = async (force = false) => {
+    if (databases.length > 0 && !force) return;
     try {
       setLoading(true);
       setDatabases(await listDatabases(conn));
@@ -186,6 +194,12 @@ export function SidebarConnection({
       fetchDatabases();
     }
   }, [isActive, isExpanded]);
+
+  const refreshConnection = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setRefreshToken((value) => value + 1);
+    await fetchDatabases(true);
+  };
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -231,6 +245,16 @@ export function SidebarConnection({
                     <LogOut size={12} />
                     </Button>
                 )}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    onClick={refreshConnection}
+                    title="Refresh databases and tables"
+                    disabled={loading}
+                >
+                    <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                </Button>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -301,6 +325,7 @@ export function SidebarConnection({
                     onCreateAction={onCreateAction}
                     onSelectTable={onSelectTable}
                     activeTable={activeTable}
+                    refreshToken={refreshToken}
                 />
               ))}
 

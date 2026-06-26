@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, Clock, Code, History, Loader2, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { SqlEditor } from "@/components/ui/SqlEditor";
 import { HistoryEntry } from "@/components/DatabaseExplorer";
 
 interface SqlConsoleProps {
@@ -74,11 +74,12 @@ export function SqlConsole({
       <div className="p-2.5">
         {activeTab === "editor" ? (
           <div className="space-y-3">
-            <Textarea
+            <SqlEditor
               value={sqlQuery}
-              onChange={(event) => onSqlQueryChange(event.target.value)}
+              onChange={onSqlQueryChange}
               placeholder="SELECT * FROM table_name LIMIT 100;"
-              className="min-h-20 rounded-md border-0 bg-slate-950 font-mono text-[12px] leading-5 text-slate-100 shadow-inner focus-visible:ring-1 focus-visible:ring-primary"
+              minHeight="min-h-20"
+              className="bg-slate-950 text-slate-100 shadow-inner [&_textarea]:text-slate-100"
             />
             {execResult && (
               <div className={`flex items-start gap-2 rounded-md p-2.5 text-[12px] ${execResult.success ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>

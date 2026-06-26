@@ -1,6 +1,7 @@
 import { Connection } from "../connections/types";
 import { withDatabase } from "./client";
 import { getDialect } from "./dialects";
+import type { RowQueryOptions } from "./types";
 
 function ensurePasswordAvailable(connection: Connection) {
   if (connection.type !== "sqlite" && connection.hasSavedPassword === false && !connection.password) {
@@ -55,12 +56,13 @@ export async function selectRowsPage(
   tableName: string,
   limit: number,
   offset: number,
-  whereClause = ""
+  whereClause = "",
+  options?: RowQueryOptions
 ) {
   ensurePasswordAvailable(connection);
   const dialect = getDialect(connection.type);
   return withDatabase(connection, (db) =>
-    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, offset, whereClause))
+    db.select<Record<string, unknown>[]>(dialect.selectRows(tableName, limit, offset, whereClause, options))
   );
 }
 
