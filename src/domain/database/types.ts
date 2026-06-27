@@ -66,6 +66,13 @@ export interface RowQueryOptions {
   limit?: number;
 }
 
+export type ExportFormat = "csv" | "json" | "xls";
+
+export interface ExportResult {
+  path: string;
+  rows: number;
+}
+
 export interface Dialect {
   listDatabases(connection: Connection): string;
   listTables(connection: Connection): string;

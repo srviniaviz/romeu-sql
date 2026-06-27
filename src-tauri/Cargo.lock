@@ -5030,6 +5030,7 @@ dependencies = [
 name = "tauri-app"
 version = "0.1.0-alpha.0"
 dependencies = [
+ "futures-util",
  "serde",
  "serde_json",
  "sha2",

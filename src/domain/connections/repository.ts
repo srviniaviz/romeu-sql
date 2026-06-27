@@ -11,11 +11,17 @@ const REGISTRY_KEY = "registry";
 const passwordCache = new Map<string, string | undefined>();
 const passwordPromiseCache = new Map<string, Promise<string | undefined>>();
 
-function withoutPassword(conn: Connection): StoredConnection {
-  const { password: _password, ...profile } = conn;
+function withoutPassword(conn: Connection | StoredConnection): StoredConnection {
+  const { password: inlinePassword, ...profile } = conn as Connection & Partial<StoredConnection>;
+  const hasInlinePassword = !!inlinePassword;
+  const hasStoredPassword = !!profile.hasSavedPassword;
+  const hasSavedPassword = profile.savePassword === false
+    ? false
+    : hasInlinePassword || hasStoredPassword;
+
   return {
     ...profile,
-    hasSavedPassword: !!conn.password && conn.savePassword !== false,
+    hasSavedPassword,
   };
 }
 
@@ -125,13 +131,16 @@ export async function updateConnection(id: string, updates: Partial<Connection>)
   if (!existing) return;
 
   const updated: Connection = { ...existing, ...updates, id };
-  const shouldSavePassword = updated.savePassword !== false && !!updated.password;
+  const hasPasswordUpdate = Object.prototype.hasOwnProperty.call(updates, "password");
+  const nextPassword = typeof updates.password === "string" ? updates.password : undefined;
+  const shouldSavePassword = updated.savePassword !== false && !!nextPassword;
+  const shouldRemovePassword = updated.savePassword === false || (hasPasswordUpdate && !nextPassword);
 
   if (shouldSavePassword) {
-    await setConnectionPassword(id, updated.password || "");
-    passwordCache.set(id, updated.password || "");
+    await setConnectionPassword(id, nextPassword);
+    passwordCache.set(id, nextPassword);
     passwordPromiseCache.delete(id);
-  } else {
+  } else if (shouldRemovePassword) {
     await removeConnectionPassword(id);
     passwordCache.delete(id);
     passwordPromiseCache.delete(id);

@@ -19,6 +19,7 @@ import {
   clearDatabaseMetadataCache,
   deleteRow,
   executeSql,
+  exportQuery,
   insertRow,
   listColumns,
   listIndexes,
@@ -431,7 +432,7 @@ export function DatabaseExplorer({
               queryClient.invalidateQueries({ queryKey: ["tableData", connection.id, connection.database, selectedTable] });
             }}
             onRunQuery={(query) => queryMutation.mutateAsync(query)}
-            onExportQuery={(query) => selectQuery(connection, query)}
+            onExportQuery={(query, path, format) => exportQuery(connection, query, path, format)}
             onExportStatusChange={setActiveTask}
             onUpdateRow={(original, next) => updateRowMutation.mutateAsync({ original, next })}
             onDeleteRow={(row) => deleteRowMutation.mutateAsync(row)}

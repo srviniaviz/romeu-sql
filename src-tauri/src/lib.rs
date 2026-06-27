@@ -38,6 +38,7 @@ pub fn run() {
             db::commands::db_list_indexes,
             db::commands::db_execute_sql,
             db::commands::db_select_query,
+            db::commands::db_export_query,
             db::commands::db_insert_row,
             db::commands::db_update_row,
             db::commands::db_delete_row,

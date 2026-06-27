@@ -2,7 +2,8 @@ use super::dialect;
 use super::pool::DbPoolState;
 use super::types::{
     BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
-    ColumnInfo, ConnectionInput, IndexInfo, JsonRow, RowQueryOptions, TableInfo,
+    ColumnInfo, ConnectionInput, ExportFormat, ExportResult, IndexInfo, JsonRow, RowQueryOptions,
+    TableInfo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -381,6 +382,30 @@ pub async fn db_select_query(
     }
     with_query_timeout(query_timeout_ms, async {
         state.select(&connection, trimmed).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn db_export_query(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
+    query: String,
+    path: String,
+    format: ExportFormat,
+) -> DbResult<ExportResult> {
+    let trimmed = query.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("select ") && !lower.starts_with("with ") {
+        return Err("Export only runs SELECT/WITH statements.".into());
+    }
+
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .export_query(&connection, trimmed, &path, format)
+            .await?;
+        Ok(ExportResult { path, rows })
     })
     .await
 }

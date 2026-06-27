@@ -7,6 +7,8 @@ import type {
   ClusterPermissionInfo,
   ClusterUserInfo,
   ColumnInfo,
+  ExportFormat,
+  ExportResult,
   IndexInfo,
   RowQueryOptions,
   TableInfo,
@@ -166,6 +168,15 @@ export async function executeSql(connection: Connection, query: string) {
 
 export async function selectQuery(connection: Connection, query: string) {
   return dbInvoke<Record<string, unknown>[]>("db_select_query", connection, { query });
+}
+
+export async function exportQuery(
+  connection: Connection,
+  query: string,
+  path: string,
+  format: ExportFormat
+) {
+  return dbInvoke<ExportResult>("db_export_query", connection, { query, path, format });
 }
 
 export async function insertRow(

@@ -1,6 +1,31 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
+export type ExportFileFormat = "csv" | "json" | "sql" | "txt" | "xls";
+
+function filtersFor(format: ExportFileFormat) {
+  return {
+    csv: [{ name: "CSV", extensions: ["csv"] }],
+    json: [{ name: "JSON", extensions: ["json"] }],
+    sql: [{ name: "SQL", extensions: ["sql"] }],
+    txt: [{ name: "Text", extensions: ["txt"] }],
+    xls: [{ name: "Excel", extensions: ["xls"] }],
+  }[format];
+}
+
+export async function pickSaveFile({
+  defaultPath,
+  format,
+}: {
+  defaultPath: string;
+  format: ExportFileFormat;
+}) {
+  return save({
+    defaultPath,
+    filters: filtersFor(format),
+  });
+}
+
 export async function saveTextFile({
   defaultPath,
   contents,
@@ -8,18 +33,11 @@ export async function saveTextFile({
 }: {
   defaultPath: string;
   contents: string;
-  format: "csv" | "json" | "sql" | "txt" | "xls";
+  format: ExportFileFormat;
 }) {
-  const filters = {
-    csv: [{ name: "CSV", extensions: ["csv"] }],
-    json: [{ name: "JSON", extensions: ["json"] }],
-    sql: [{ name: "SQL", extensions: ["sql"] }],
-    txt: [{ name: "Text", extensions: ["txt"] }],
-    xls: [{ name: "Excel", extensions: ["xls"] }],
-  }[format];
-  const filePath = await save({
+  const filePath = await pickSaveFile({
     defaultPath,
-    filters,
+    format,
   });
 
   if (!filePath) return false;

@@ -22,6 +22,7 @@
     "workspace_desc": "Connections and schema browser",
     "new": "New",
     "search_connections": "Search connections",
+    "search_tables": "Search tables",
     "loading_connections": "Loading connections",
     "no_connections": "No connections",
     "create_first_connection": "Create your first SQL connection",

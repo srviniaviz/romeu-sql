@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Connection } from "../lib/useConnections";
 import { listDatabases, listTables } from "@/domain/database/service";
 import { 
@@ -10,7 +10,8 @@ import {
   Database as DatabaseIcon,
   Plus as PlusIcon,
   Table as TableIcon,
-  Shield
+  Shield,
+  Search
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,7 +33,13 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [tables, setTables] = useState<string[]>([]);
+  const [tableSearch, setTableSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const filteredTables = useMemo(() => {
+    const term = tableSearch.trim().toLowerCase();
+    if (!term) return tables;
+    return tables.filter((table) => table.toLowerCase().includes(term));
+  }, [tableSearch, tables]);
 
   const fetchTables = async (force = false) => {
     if (tables.length > 0 && !force) return;
@@ -53,6 +60,12 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   }, [isExpanded]);
 
   useEffect(() => {
+    if (isCurrentDb) {
+      setIsExpanded(true);
+    }
+  }, [isCurrentDb]);
+
+  useEffect(() => {
     if (refreshToken > 0 && isExpanded) {
       fetchTables(true);
     }
@@ -64,8 +77,11 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
         className={`group/db-item flex items-center justify-between rounded-md px-2 py-1 cursor-pointer group/item transition-all hover:bg-background/70 ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={(e) => {
           e.stopPropagation();
-          onSelect({ ...conn, database: dbName });
-          setIsExpanded(!isExpanded);
+          setIsExpanded((expanded) => {
+            const next = !expanded;
+            if (next) onSelect({ ...conn, database: dbName });
+            return next;
+          });
         }}
       >
         <div className="flex items-center gap-2 truncate">
@@ -113,22 +129,38 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
                 <span>{t("shell.loading")}</span>
               </div>
             ) : tables.length > 0 ? (
-              tables.map(table => (
-                <div 
-                  key={table}
-                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isCurrentDb) onSelect({ ...conn, database: dbName });
-                    onSelectTable?.(table);
-                  }}
-                >
-                  <TableIcon size={12} className={`${activeTable === table && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className={`truncate text-[12px] ${activeTable === table && isCurrentDb ? 'font-medium text-primary' : 'text-muted-foreground group-hover/table:text-foreground'}`}>
-                    {table}
-                  </span>
+              <>
+                <div className="relative mb-1 px-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3 -translate-y-1/2 text-muted-foreground/60" />
+                  <input
+                    value={tableSearch}
+                    onChange={(event) => setTableSearch(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    placeholder={t("shell.search_tables")}
+                    className="h-7 w-full rounded-md bg-background/60 pl-7 pr-2 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/55 focus:bg-background"
+                  />
                 </div>
-              ))
+                {filteredTables.length > 0 ? (
+                  filteredTables.map(table => (
+                    <div 
+                      key={table}
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCurrentDb) onSelect({ ...conn, database: dbName });
+                        onSelectTable?.(table);
+                      }}
+                    >
+                      <TableIcon size={12} className={`${activeTable === table && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <span className={`truncate text-[12px] ${activeTable === table && isCurrentDb ? 'font-medium text-primary' : 'text-muted-foreground group-hover/table:text-foreground'}`}>
+                        {table}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="px-3 py-1 text-[11px] text-muted-foreground">{t("shell.no_tables")}</span>
+                )}
+              </>
             ) : (
               <span className="px-3 py-1 text-[11px] text-muted-foreground">{t("shell.no_tables")}</span>
             )}
@@ -198,6 +230,12 @@ export function SidebarConnection({
     setHasScanned(false);
   }, [conn.id, conn.database]);
 
+  useEffect(() => {
+    if (isActive) {
+      setIsExpanded(true);
+    }
+  }, [isActive]);
+
   const refreshConnection = async (event: React.MouseEvent) => {
     event.stopPropagation();
     setRefreshToken((value) => value + 1);
@@ -216,7 +254,7 @@ export function SidebarConnection({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <ChevronRight 
             size={14} 
-            className={`text-muted-foreground transition-transform ${isExpanded || isActive ? 'rotate-90 text-primary' : ''}`} 
+            className={`text-muted-foreground transition-transform ${isExpanded ? 'rotate-90 text-primary' : ''}`} 
           />
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative flex items-center">
@@ -305,7 +343,7 @@ export function SidebarConnection({
       </div>
 
       <AnimatePresence>
-        {(isExpanded || isActive) && (
+        {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}

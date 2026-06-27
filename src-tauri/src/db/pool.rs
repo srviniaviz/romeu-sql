@@ -1,5 +1,6 @@
 use super::dialect::connection_string;
-use super::types::{ConnectionInput, DbEngine, JsonRow};
+use super::types::{ConnectionInput, DbEngine, ExportFormat, JsonRow};
+use futures_util::TryStreamExt;
 use serde_json::{json, Value};
 use sqlx::mysql::{MySqlPoolOptions, MySqlRow};
 use sqlx::postgres::{PgPoolOptions, PgRow};
@@ -9,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tauri::async_runtime::RwLock;
+use tokio::fs::File;
+use tokio::io::{AsyncWriteExt, BufWriter};
 
 #[derive(Clone)]
 pub struct DbPoolState {
@@ -142,6 +145,199 @@ impl DbPoolState {
             }
         }
     }
+
+    pub async fn export_query(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+        path: &str,
+        format: ExportFormat,
+    ) -> Result<u64, String> {
+        let started = Instant::now();
+        let file = File::create(path).await.map_err(|error| error.to_string())?;
+        let mut writer = ExportWriter::new(BufWriter::new(file), format);
+
+        let rows = match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let mut rows = sqlx::query(sql).fetch(&pool);
+                let mut count = 0;
+                while let Some(row) = rows.try_next().await.map_err(to_error)? {
+                    writer.write_row(&pg_row_to_json(&row)?).await?;
+                    count += 1;
+                }
+                count
+            }
+            DatabasePool::Mysql(pool) => {
+                let mut rows = sqlx::query(sql).fetch(&pool);
+                let mut count = 0;
+                while let Some(row) = rows.try_next().await.map_err(to_error)? {
+                    writer.write_row(&mysql_row_to_json(&row)?).await?;
+                    count += 1;
+                }
+                count
+            }
+            DatabasePool::Sqlite(pool) => {
+                let mut rows = sqlx::query(sql).fetch(&pool);
+                let mut count = 0;
+                while let Some(row) = rows.try_next().await.map_err(to_error)? {
+                    writer.write_row(&sqlite_row_to_json(&row)?).await?;
+                    count += 1;
+                }
+                count
+            }
+        };
+
+        writer.finish().await?;
+        log_slow("export", started, sql);
+        Ok(rows)
+    }
+}
+
+struct ExportWriter {
+    writer: BufWriter<File>,
+    format: ExportFormat,
+    columns: Vec<String>,
+    rows: u64,
+}
+
+impl ExportWriter {
+    fn new(writer: BufWriter<File>, format: ExportFormat) -> Self {
+        Self {
+            writer,
+            format,
+            columns: Vec::new(),
+            rows: 0,
+        }
+    }
+
+    async fn write_row(&mut self, row: &JsonRow) -> Result<(), String> {
+        if self.columns.is_empty() {
+            self.columns = row.keys().cloned().collect();
+            self.write_header().await?;
+        }
+
+        match self.format {
+            ExportFormat::Csv => self.write_csv_row(row).await?,
+            ExportFormat::Json => self.write_json_row(row).await?,
+            ExportFormat::Xls => self.write_xls_row(row).await?,
+        }
+        self.rows += 1;
+        Ok(())
+    }
+
+    async fn write_header(&mut self) -> Result<(), String> {
+        match self.format {
+            ExportFormat::Csv => {
+                let line = self
+                    .columns
+                    .iter()
+                    .map(|column| escape_csv(column))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                self.write_line(&line).await
+            }
+            ExportFormat::Json => self.write_raw("[\n").await,
+            ExportFormat::Xls => {
+                self.write_raw("<!doctype html><html><head><meta charset=\"utf-8\" /></head><body><table><thead><tr>").await?;
+                let header = self
+                    .columns
+                    .iter()
+                    .map(|column| format!("<th>{}</th>", escape_html(column)))
+                    .collect::<Vec<_>>()
+                    .join("");
+                self.write_raw(&header).await?;
+                self.write_raw("</tr></thead><tbody>\n").await
+            }
+        }
+    }
+
+    async fn write_csv_row(&mut self, row: &JsonRow) -> Result<(), String> {
+        let line = self
+            .columns
+            .iter()
+            .map(|column| escape_csv(&value_to_export_string(row.get(column).unwrap_or(&Value::Null))))
+            .collect::<Vec<_>>()
+            .join(",");
+        self.write_line(&line).await
+    }
+
+    async fn write_json_row(&mut self, row: &JsonRow) -> Result<(), String> {
+        if self.rows > 0 {
+            self.write_raw(",\n").await?;
+        }
+        self.write_raw(&serde_json::to_string(row).map_err(|error| error.to_string())?)
+            .await
+    }
+
+    async fn write_xls_row(&mut self, row: &JsonRow) -> Result<(), String> {
+        self.write_raw("<tr>").await?;
+        let cells = self
+            .columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "<td>{}</td>",
+                    escape_html(&value_to_export_string(row.get(column).unwrap_or(&Value::Null)))
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        self.write_raw(&cells).await?;
+        self.write_raw("</tr>\n").await
+    }
+
+    async fn finish(&mut self) -> Result<(), String> {
+        if self.columns.is_empty() {
+            match self.format {
+                ExportFormat::Json => self.write_raw("[]").await?,
+                ExportFormat::Xls => {
+                    self.write_raw("<!doctype html><html><head><meta charset=\"utf-8\" /></head><body><table></table></body></html>").await?;
+                }
+                ExportFormat::Csv => {}
+            }
+        } else {
+            match self.format {
+                ExportFormat::Json => self.write_raw("\n]").await?,
+                ExportFormat::Xls => self.write_raw("</tbody></table></body></html>").await?,
+                ExportFormat::Csv => {}
+            }
+        }
+        self.writer.flush().await.map_err(|error| error.to_string())
+    }
+
+    async fn write_line(&mut self, value: &str) -> Result<(), String> {
+        self.write_raw(value).await?;
+        self.write_raw("\n").await
+    }
+
+    async fn write_raw(&mut self, value: &str) -> Result<(), String> {
+        self.writer
+            .write_all(value.as_bytes())
+            .await
+            .map_err(|error| error.to_string())
+    }
+}
+
+fn value_to_export_string(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(value) => value.clone(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn escape_csv(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn log_slow(kind: &str, started: Instant, detail: &str) {

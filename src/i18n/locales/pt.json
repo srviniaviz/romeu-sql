@@ -22,6 +22,7 @@
     "workspace_desc": "Conexões e navegador de esquema",
     "new": "Novo",
     "search_connections": "Buscar conexões",
+    "search_tables": "Buscar tabelas",
     "loading_connections": "Carregando conexões",
     "no_connections": "Nenhuma conexão",
     "create_first_connection": "Crie sua primeira conexão SQL",

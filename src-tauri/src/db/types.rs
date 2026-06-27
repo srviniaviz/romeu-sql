@@ -106,4 +106,19 @@ pub struct BenchmarkAnalyzeResult {
     pub tables: Vec<BenchmarkTableResult>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Csv,
+    Json,
+    Xls,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub path: String,
+    pub rows: u64,
+}
+
 pub type JsonRow = BTreeMap<String, Value>;

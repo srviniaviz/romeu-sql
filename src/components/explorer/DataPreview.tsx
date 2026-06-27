@@ -21,8 +21,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import type { ColumnInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
-import { saveTextFile } from "@/lib/exportFile";
+import type { ColumnInfo, ExportFormat, IndexInfo, RowQueryOptions } from "@/domain/database/types";
+import { pickSaveFile, saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
@@ -65,7 +65,7 @@ interface DataPreviewProps {
   onOptionsApply: (options: RowQueryOptions) => void;
   onFind: () => void;
   onRunQuery: (query: string) => Promise<unknown>;
-  onExportQuery: (query: string) => Promise<Record<string, unknown>[]>;
+  onExportQuery: (query: string, path: string, format: ExportFormat) => Promise<{ rows: number }>;
   onExportStatusChange: (status: string | null) => void;
   onUpdateRow: (original: Record<string, unknown>, next: Record<string, unknown>) => Promise<unknown>;
   onDeleteRow: (row: Record<string, unknown>) => Promise<unknown>;
@@ -426,29 +426,29 @@ function RowsTable({
   const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
   return (
     <div className={cn("h-full w-full max-w-full overflow-auto rounded-md bg-background", fill && "min-w-0")}>
-      <table className="min-w-max border-collapse text-left text-[12px]">
-        <thead className="sticky top-0 z-10 bg-muted/25">
+      <table className="min-w-max border-separate border-spacing-0 text-left text-[12px]">
+        <thead>
           <tr>
-            <th className="w-10 min-w-10 px-2 py-2 text-muted-foreground">#</th>
+            <th className="sticky left-0 top-0 z-30 w-10 min-w-10 bg-background px-2 py-2 text-muted-foreground shadow-[1px_1px_0_hsl(var(--border))]">#</th>
             {columns.map((column) => (
-              <th key={column} className="min-w-[150px] max-w-[260px] px-3 py-2 font-medium text-foreground">
+              <th key={column} className="sticky top-0 z-20 min-w-[150px] max-w-[260px] bg-background px-3 py-2 font-medium text-foreground shadow-[0_1px_0_hsl(var(--border))]">
                 {column}
               </th>
             ))}
-            {!readOnly && <th className="w-[116px] min-w-[116px] px-2 py-2" />}
+            {!readOnly && <th className="sticky right-0 top-0 z-30 w-[116px] min-w-[116px] bg-background px-2 py-2 shadow-[-1px_1px_0_hsl(var(--border))]" />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className="group/row hover:bg-muted/25">
-              <td className="px-2 py-1.5 font-mono text-muted-foreground">{page * pageSize + rowIndex + 1}</td>
+              <td className="sticky left-0 z-10 bg-background px-2 py-1.5 font-mono text-muted-foreground group-hover/row:bg-muted/25">{page * pageSize + rowIndex + 1}</td>
               {columns.map((column) => (
                 <td key={column} className="max-w-[260px] truncate px-3 py-1.5 font-mono">
                   <FieldValue value={row[column]} fieldName={column} settings={settings} />
                 </td>
               ))}
               {!readOnly && (
-                <td className="px-2 py-1.5">
+                <td className="sticky right-0 z-10 bg-background px-2 py-1.5 group-hover/row:bg-muted/25">
                   <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
                 </td>
               )}
@@ -532,16 +532,16 @@ function ExportModal({
   defaultQuery: string;
   completions: string[];
   editorSettings: AppSettings["editor"];
-  defaultFormat: "csv" | "json";
+  defaultFormat: ExportFormat;
   exporting: boolean;
   error: string | null;
   message: string | null;
   onClose: () => void;
-  onExport: (query: string, format: "csv" | "json") => void;
+  onExport: (query: string, format: ExportFormat) => void;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState(defaultQuery);
-  const [format, setFormat] = useState<"csv" | "json">(defaultFormat);
+  const [format, setFormat] = useState<ExportFormat>(defaultFormat);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
@@ -569,10 +569,11 @@ function ExportModal({
             {t("data_preview.format")}
             <select
               value={format}
-              onChange={(event) => setFormat(event.target.value as "csv" | "json")}
+              onChange={(event) => setFormat(event.target.value as ExportFormat)}
               className="h-8 rounded-md bg-muted/25 px-2 text-[12px] outline-none"
             >
               <option value="csv">CSV</option>
+              <option value="xls">Excel</option>
               <option value="json">JSON</option>
             </select>
           </label>
@@ -640,6 +641,7 @@ export function DataPreview({
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DataTab>("rows");
   const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
+  const [lastQuerySql, setLastQuerySql] = useState("");
   const [busy, setBusy] = useState(false);
   const querySplitRef = useRef<HTMLDivElement | null>(null);
   const [querySplit, setQuerySplit] = useState(52);
@@ -678,7 +680,10 @@ export function DataPreview({
     setSkip(String(rowOptions.skip || ""));
     setLimit(String(rowOptions.limit || ""));
   }, [rowOptions]);
-  useEffect(() => setSql(`SELECT * FROM ${selectedTable} LIMIT 100`), [selectedTable]);
+  useEffect(() => {
+    setSql(`SELECT * FROM ${selectedTable} LIMIT 100`);
+    setLastQuerySql("");
+  }, [selectedTable]);
 
   function applyRows() {
     onOptionsApply({
@@ -703,7 +708,7 @@ export function DataPreview({
     onFind();
   }
 
-  async function handleExport(query: string, format: "csv" | "json") {
+  async function handleExport(query: string, format: ExportFormat) {
     if (!appSettings.security.allowExports) {
       setExportError(t("settings.security.exports_disabled"));
       return;
@@ -713,15 +718,30 @@ export function DataPreview({
     setExportMessage(null);
     onExportStatusChange(t("data_preview.exporting_data"));
     try {
-      const exportRows = query.trim() ? await onExportQuery(query) : rows;
-      const safeRows = sanitizeRows(exportRows, appSettings);
       const filename = `${selectedTable}-export.${format}`;
+      if (query.trim()) {
+        const path = await pickSaveFile({ defaultPath: filename, format });
+        if (!path) {
+          setExportMessage(t("data_preview.export_canceled"));
+          return;
+        }
+
+        const result = await onExportQuery(query, path, format);
+        setExportMessage(t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() }));
+        return;
+      }
+
+      const safeRows = sanitizeRows(rows, appSettings);
       const saved = await saveTextFile({
         defaultPath: filename,
-        contents: format === "csv" ? toCsv(safeRows) : JSON.stringify(safeRows, null, 2),
+        contents: format === "json"
+          ? JSON.stringify(safeRows, null, 2)
+          : format === "xls"
+            ? toExcelHtml(safeRows)
+            : toCsv(safeRows),
         format,
       });
-      setExportMessage(saved ? t("data_preview.exported_rows", { count: exportRows.length, format: format.toUpperCase() }) : t("data_preview.export_canceled"));
+      setExportMessage(saved ? t("data_preview.exported_rows", { count: rows.length, format: format === "xls" ? "EXCEL" : format.toUpperCase() }) : t("data_preview.export_canceled"));
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -741,24 +761,28 @@ export function DataPreview({
     setExportMessage(null);
     onExportStatusChange(t("data_preview.exporting_data"));
     try {
-      const contents =
-        format === "json"
-          ? JSON.stringify(sanitizeRows(queryRows, appSettings), null, 2)
-          : format === "xls"
-            ? toExcelHtml(sanitizeRows(queryRows, appSettings))
-            : toCsv(sanitizeRows(queryRows, appSettings));
-      const saved = await saveTextFile({
+      const path = await pickSaveFile({
         defaultPath: `${selectedTable}-query-result.${format}`,
-        contents,
         format,
       });
-      setExportMessage(saved ? t("data_preview.exported_rows", { count: queryRows.length, format: format === "xls" ? "EXCEL" : format.toUpperCase() }) : t("data_preview.export_canceled"));
+      if (!path) {
+        setExportMessage(t("data_preview.export_canceled"));
+        return;
+      }
+      const result = await onExportQuery(lastQuerySql || sql, path, format);
+      setExportMessage(t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() }));
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
       setExporting(false);
       onExportStatusChange(null);
     }
+  }
+
+  async function handleRunQuery() {
+    const nextQuery = appSettings.editor.formatOnRun ? sql.trim() : sql;
+    setLastQuerySql(nextQuery);
+    await onRunQuery(nextQuery);
   }
 
   async function runAction(action: () => Promise<unknown>) {
@@ -951,7 +975,7 @@ export function DataPreview({
                 autocomplete={appSettings.editor.autocomplete}
               />
               <div className="mt-3 flex justify-end">
-                <IconButton title={t("data_preview.run_query")} disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(appSettings.editor.formatOnRun ? sql.trim() : sql)}>
+                <IconButton title={t("data_preview.run_query")} disabled={queryLoading || !sql.trim()} onClick={() => void handleRunQuery()}>
                   {queryLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
                 </IconButton>
               </div>
@@ -1112,10 +1136,10 @@ export function DataPreview({
       {exportOpen && (
         <ExportModal
           tableName={selectedTable}
-          defaultQuery={`SELECT * FROM ${selectedTable} LIMIT 1000`}
+          defaultQuery={`SELECT * FROM ${selectedTable}`}
           completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
           editorSettings={appSettings.editor}
-          defaultFormat={appSettings.query.exportFormat === "json" ? "json" : "csv"}
+          defaultFormat={appSettings.query.exportFormat}
           exporting={exporting}
           error={exportError}
           message={exportMessage}
