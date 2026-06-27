@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { HistoryEntry } from "@/components/DatabaseExplorer";
+import type { AppSettings } from "@/domain/settings/types";
 
 interface SqlConsoleProps {
   sqlQuery: string;
@@ -12,6 +13,7 @@ interface SqlConsoleProps {
   execResult: { success: boolean; message: string } | null;
   history: HistoryEntry[];
   activeTab: "editor" | "history";
+  editorSettings: AppSettings["editor"];
   onActiveTabChange: (tab: "editor" | "history") => void;
   onClearHistory: () => void;
   onClearEditor: () => void;
@@ -25,6 +27,7 @@ export function SqlConsole({
   execResult,
   history,
   activeTab,
+  editorSettings,
   onActiveTabChange,
   onClearHistory,
   onClearEditor,
@@ -83,6 +86,8 @@ export function SqlConsole({
               minHeight="96px"
               dark
               className="bg-slate-950 shadow-inner"
+              fontSize={editorSettings.fontSize}
+              autocomplete={editorSettings.autocomplete}
             />
             {execResult && (
               <div className={`flex items-start gap-2 rounded-md p-2.5 text-[12px] ${execResult.success ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>

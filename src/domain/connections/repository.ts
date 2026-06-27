@@ -92,6 +92,17 @@ function getCachedPassword(id: string) {
   return next;
 }
 
+export function clearPasswordMemoryCache(id?: string) {
+  if (id) {
+    passwordCache.delete(id);
+    passwordPromiseCache.delete(id);
+    return;
+  }
+
+  passwordCache.clear();
+  passwordPromiseCache.clear();
+}
+
 export async function addConnection(conn: NewConnection): Promise<Connection> {
   const id = crypto.randomUUID();
   const newConn: Connection = { ...conn, id };

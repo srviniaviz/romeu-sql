@@ -44,6 +44,7 @@
     "saved": "Saved",
     "autosaved_hint": "Saved settings apply to the next query.",
     "back_workspace": "Back to workspace",
+    "coming_soon": "Coming soon",
     "sections": {
       "query": "Query",
       "editor": "SQL Editor",
@@ -122,6 +123,7 @@
       "confirm_destructive_desc": "Asks before deleting rows, tables or connections.",
       "allow_exports": "Allow exports",
       "allow_exports_desc": "Enables local export of results and tables.",
+      "exports_disabled": "Exports are disabled in security settings.",
       "clear_secrets": "Clear password cache on disconnect",
       "clear_secrets_desc": "Removes passwords from memory after leaving a connection."
     },

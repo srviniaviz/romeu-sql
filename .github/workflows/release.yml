@@ -130,6 +130,20 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Read release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.version }}"
+          $notesPath = "release-notes/v$version.md"
+          if (!(Test-Path $notesPath)) {
+            $notesPath = "release-notes/TEMPLATE.md"
+          }
+
+          "body<<ROMEUSQL_RELEASE_NOTES" >> $env:GITHUB_OUTPUT
+          Get-Content $notesPath -Raw >> $env:GITHUB_OUTPUT
+          "ROMEUSQL_RELEASE_NOTES" >> $env:GITHUB_OUTPUT
+
       - name: Build and publish GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -137,6 +151,6 @@ jobs:
         with:
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: Romeu SQL ${{ needs.prepare.outputs.version }}
-          releaseBody: Alpha build for Windows.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: true

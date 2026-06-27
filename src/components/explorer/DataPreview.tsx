@@ -24,6 +24,9 @@ import { useTranslation } from "react-i18next";
 import type { ColumnInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
 import { saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
+import { useSettings } from "@/domain/settings/useSettings";
+import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
+import type { AppSettings } from "@/domain/settings/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -125,7 +128,41 @@ function stringKind(value: string, fieldName?: string) {
   return "text";
 }
 
-function FieldValue({ value, fieldName }: { value: unknown; fieldName?: string }) {
+function isSensitiveField(fieldName?: string) {
+  return Boolean(fieldName && /(password|passwd|pwd|token|secret|apikey|api_key|privatekey|private_key|credential)/i.test(fieldName));
+}
+
+function truncateText(value: string, length: number) {
+  return value.length > length ? `${value.slice(0, Math.max(1, length - 3))}...` : value;
+}
+
+function sanitizeRow(row: Record<string, unknown>, settings: AppSettings) {
+  if (!settings.security.maskSensitiveFields) return row;
+
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      isSensitiveField(key) ? "********" : value,
+    ])
+  );
+}
+
+function sanitizeRows(rows: Record<string, unknown>[], settings: AppSettings) {
+  return rows.map((row) => sanitizeRow(row, settings));
+}
+
+function FieldValue({
+  value,
+  fieldName,
+  settings,
+}: {
+  value: unknown;
+  fieldName?: string;
+  settings: AppSettings;
+}) {
+  if (settings.security.maskSensitiveFields && isSensitiveField(fieldName)) {
+    return <span className="text-muted-foreground">"••••••••"</span>;
+  }
   if (value === null) return <span className="text-muted-foreground/70">null</span>;
   if (value === undefined) return <span className="text-muted-foreground/70">undefined</span>;
   if (typeof value === "boolean") {
@@ -137,13 +174,16 @@ function FieldValue({ value, fieldName }: { value: unknown; fieldName?: string }
   }
   if (typeof value === "string") {
     const kind = stringKind(value, fieldName);
-    if (kind === "date") return <span className="text-foreground">{value}</span>;
-    if (kind === "id") return <span className="text-muted-foreground">"{value}"</span>;
-    if (kind === "email") return <span className="text-foreground">"{value}"</span>;
-    if (kind === "url") return <span className="text-foreground">"{value}"</span>;
+    const displayValue = kind === "date" && settings.dataView.dateDisplay === "local"
+      ? new Date(value).toLocaleString()
+      : truncateText(value, settings.dataView.truncateLength);
+    if (kind === "date") return <span className="text-foreground">{displayValue}</span>;
+    if (kind === "id") return <span className="text-muted-foreground">"{displayValue}"</span>;
+    if (kind === "email") return <span className="text-foreground">"{displayValue}"</span>;
+    if (kind === "url") return <span className="text-foreground">"{displayValue}"</span>;
     if (kind === "enum") return <span className="rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-primary">{value}</span>;
-    if (kind === "money") return <span className="text-primary">"{value}"</span>;
-    return <span className="text-foreground">"{value}"</span>;
+    if (kind === "money") return <span className="text-primary">"{displayValue}"</span>;
+    return <span className="text-foreground">"{displayValue}"</span>;
   }
   if (Array.isArray(value)) return <span className="text-muted-foreground">Array({value.length})</span>;
   return <span className="text-muted-foreground">{JSON.stringify(value)}</span>;
@@ -303,19 +343,22 @@ function RowActions({
 function DocumentRow({
   row,
   busy,
+  settings,
   onEdit,
   onDelete,
 }: {
   row: Record<string, unknown>;
   busy: boolean;
+  settings: AppSettings;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const entries = sortRowEntries(row);
-  const hiddenCount = Math.max(0, entries.length - CARD_FIELD_LIMIT);
-  const visibleEntries = expanded ? entries : entries.slice(0, CARD_FIELD_LIMIT);
+  const cardLimit = settings.dataView.maxCardFields || CARD_FIELD_LIMIT;
+  const hiddenCount = Math.max(0, entries.length - cardLimit);
+  const visibleEntries = expanded ? entries : entries.slice(0, cardLimit);
 
   return (
     <article className="group/row relative overflow-hidden rounded-md bg-muted/25 hover:bg-muted/35">
@@ -339,7 +382,7 @@ function DocumentRow({
                 <span className="shrink-0 font-semibold text-foreground">{key}</span>
                 <span className="shrink-0 text-muted-foreground">:</span>
                 <span className="min-w-0 truncate">
-                  <FieldValue value={value} fieldName={key} />
+                  <FieldValue value={value} fieldName={key} settings={settings} />
                 </span>
               </div>
             ))}
@@ -364,6 +407,7 @@ function RowsTable({
   page,
   pageSize,
   busy,
+  settings,
   readOnly,
   fill,
   onEdit,
@@ -373,6 +417,7 @@ function RowsTable({
   page: number;
   pageSize: number;
   busy: boolean;
+  settings: AppSettings;
   readOnly?: boolean;
   fill?: boolean;
   onEdit: (row: Record<string, unknown>) => void;
@@ -399,7 +444,7 @@ function RowsTable({
               <td className="px-2 py-1.5 font-mono text-muted-foreground">{page * pageSize + rowIndex + 1}</td>
               {columns.map((column) => (
                 <td key={column} className="max-w-[260px] truncate px-3 py-1.5 font-mono">
-                  <FieldValue value={row[column]} fieldName={column} />
+                  <FieldValue value={row[column]} fieldName={column} settings={settings} />
                 </td>
               ))}
               {!readOnly && (
@@ -475,6 +520,8 @@ function ExportModal({
   tableName,
   defaultQuery,
   completions,
+  editorSettings,
+  defaultFormat,
   exporting,
   error,
   message,
@@ -484,6 +531,8 @@ function ExportModal({
   tableName: string;
   defaultQuery: string;
   completions: string[];
+  editorSettings: AppSettings["editor"];
+  defaultFormat: "csv" | "json";
   exporting: boolean;
   error: string | null;
   message: string | null;
@@ -492,7 +541,7 @@ function ExportModal({
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState(defaultQuery);
-  const [format, setFormat] = useState<"csv" | "json">("csv");
+  const [format, setFormat] = useState<"csv" | "json">(defaultFormat);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
@@ -513,6 +562,8 @@ function ExportModal({
             placeholder={t("data_preview.export_query_placeholder")}
             minHeight="176px"
             completions={completions}
+            fontSize={editorSettings.fontSize}
+            autocomplete={editorSettings.autocomplete}
           />
           <label className="flex items-center gap-2 text-[12px] font-medium text-foreground">
             {t("data_preview.format")}
@@ -573,6 +624,8 @@ export function DataPreview({
   onDeleteRow,
 }: DataPreviewProps) {
   const { t } = useTranslation();
+  const { settings } = useSettings();
+  const appSettings = settings ?? DEFAULT_APP_SETTINGS;
   const [query, setQuery] = useState(whereClause);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [project, setProject] = useState(rowOptions.project || "");
@@ -651,16 +704,21 @@ export function DataPreview({
   }
 
   async function handleExport(query: string, format: "csv" | "json") {
+    if (!appSettings.security.allowExports) {
+      setExportError(t("settings.security.exports_disabled"));
+      return;
+    }
     setExporting(true);
     setExportError(null);
     setExportMessage(null);
     onExportStatusChange(t("data_preview.exporting_data"));
     try {
       const exportRows = query.trim() ? await onExportQuery(query) : rows;
+      const safeRows = sanitizeRows(exportRows, appSettings);
       const filename = `${selectedTable}-export.${format}`;
       const saved = await saveTextFile({
         defaultPath: filename,
-        contents: format === "csv" ? toCsv(exportRows) : JSON.stringify(exportRows, null, 2),
+        contents: format === "csv" ? toCsv(safeRows) : JSON.stringify(safeRows, null, 2),
         format,
       });
       setExportMessage(saved ? t("data_preview.exported_rows", { count: exportRows.length, format: format.toUpperCase() }) : t("data_preview.export_canceled"));
@@ -674,6 +732,10 @@ export function DataPreview({
 
   async function handleQueryResultExport(format: "csv" | "json" | "xls") {
     if (!queryRows.length) return;
+    if (!appSettings.security.allowExports) {
+      setExportError(t("settings.security.exports_disabled"));
+      return;
+    }
     setExporting(true);
     setExportError(null);
     setExportMessage(null);
@@ -681,10 +743,10 @@ export function DataPreview({
     try {
       const contents =
         format === "json"
-          ? JSON.stringify(queryRows, null, 2)
+          ? JSON.stringify(sanitizeRows(queryRows, appSettings), null, 2)
           : format === "xls"
-            ? toExcelHtml(queryRows)
-            : toCsv(queryRows);
+            ? toExcelHtml(sanitizeRows(queryRows, appSettings))
+            : toCsv(sanitizeRows(queryRows, appSettings));
       const saved = await saveTextFile({
         defaultPath: `${selectedTable}-query-result.${format}`,
         contents,
@@ -715,7 +777,7 @@ export function DataPreview({
   }
 
   function handleDelete(row: Record<string, unknown>) {
-    if (!window.confirm(t("data_preview.confirm_delete"))) return;
+    if (appSettings.security.confirmDestructiveActions && !window.confirm(t("data_preview.confirm_delete"))) return;
     void runAction(() => onDeleteRow(row));
   }
 
@@ -842,7 +904,7 @@ export function DataPreview({
                   {t("data_preview.add_row")}
                   <ChevronDown size={12} />
                 </ToolbarButton>
-                <ToolbarButton onClick={() => setExportOpen(true)} disabled={!rows.length}>
+                <ToolbarButton onClick={() => setExportOpen(true)} disabled={!rows.length || !appSettings.security.allowExports}>
                   <Download size={13} />
                   {t("data_preview.export")}
                 </ToolbarButton>
@@ -885,9 +947,11 @@ export function DataPreview({
                 minHeight="100%"
                 className="min-h-0 flex-1"
                 completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
+                fontSize={appSettings.editor.fontSize}
+                autocomplete={appSettings.editor.autocomplete}
               />
               <div className="mt-3 flex justify-end">
-                <IconButton title={t("data_preview.run_query")} disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
+                <IconButton title={t("data_preview.run_query")} disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(appSettings.editor.formatOnRun ? sql.trim() : sql)}>
                   {queryLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
                 </IconButton>
               </div>
@@ -918,7 +982,7 @@ export function DataPreview({
                     <button
                       type="button"
                       title={t("data_preview.export_result")}
-                      disabled={exporting || !queryRows.length}
+                      disabled={exporting || !queryRows.length || !appSettings.security.allowExports}
                       className="inline-flex size-7 items-center justify-center rounded-md bg-muted/25 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {exporting ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
@@ -944,7 +1008,7 @@ export function DataPreview({
                 <p className="text-[12px] text-destructive">{queryError}</p>
               ) : queryRows.length ? (
                 <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-                  <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly fill onEdit={setEditingRow} onDelete={handleDelete} />
+                  <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} settings={appSettings} readOnly fill onEdit={setEditingRow} onDelete={handleDelete} />
                 </div>
               ) : (
                 <p className="py-10 text-center text-[12px] text-muted-foreground">{t("data_preview.run_select_preview")}</p>
@@ -1016,19 +1080,19 @@ export function DataPreview({
         ) : rows.length === 0 ? (
           <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">{t("data_preview.no_rows")}</div>
         ) : viewMode === "table" ? (
-          <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
+          <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} />
         ) : viewMode === "json" ? (
           <div className="space-y-2 overflow-auto">
             {rows.map((row, rowIndex) => (
               <pre key={rowIndex} className="rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 text-foreground">
-                {JSON.stringify(row, null, 2)}
+                {JSON.stringify(sanitizeRow(row, appSettings), null, 2)}
               </pre>
             ))}
           </div>
         ) : (
           <div className="space-y-1">
             {rows.map((row, rowIndex) => (
-              <DocumentRow key={rowIndex} row={row} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
+              <DocumentRow key={rowIndex} row={row} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} />
             ))}
           </div>
         )}
@@ -1050,6 +1114,8 @@ export function DataPreview({
           tableName={selectedTable}
           defaultQuery={`SELECT * FROM ${selectedTable} LIMIT 1000`}
           completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
+          editorSettings={appSettings.editor}
+          defaultFormat={appSettings.query.exportFormat === "json" ? "json" : "csv"}
           exporting={exporting}
           error={exportError}
           message={exportMessage}

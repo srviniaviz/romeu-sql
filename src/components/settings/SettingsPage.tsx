@@ -15,6 +15,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,14 +40,14 @@ import { cn } from "@/lib/utils";
 
 const timeoutPresets = [15, 30, 60, 120];
 const sections = [
-  { key: "query", icon: TerminalSquare },
-  { key: "editor", icon: SlidersHorizontal },
-  { key: "dataView", icon: Table2 },
-  { key: "connections", icon: Database },
-  { key: "security", icon: Lock },
-  { key: "appearance", icon: Brush },
-  { key: "updates", icon: DownloadCloud },
-  { key: "advanced", icon: Settings },
+  { key: "query", icon: TerminalSquare, enabled: true },
+  { key: "editor", icon: SlidersHorizontal, enabled: true },
+  { key: "dataView", icon: Table2, enabled: true },
+  { key: "connections", icon: Database, enabled: false },
+  { key: "security", icon: Lock, enabled: true },
+  { key: "appearance", icon: Brush, enabled: false },
+  { key: "updates", icon: DownloadCloud, enabled: false },
+  { key: "advanced", icon: Settings, enabled: false },
 ] as const;
 
 type SettingsSection = (typeof sections)[number]["key"];
@@ -141,14 +142,18 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 icon={section.icon}
                 label={t(`settings.sections.${section.key}`)}
                 active={activeSection === section.key}
-                onClick={() => setActiveSection(section.key)}
+                disabled={!section.enabled}
+                badge={!section.enabled ? t("settings.coming_soon") : undefined}
+                onClick={() => {
+                  if (section.enabled) setActiveSection(section.key);
+                }}
               />
             ))}
           </nav>
         </aside>
 
         <main className="min-h-0 overflow-auto py-2">
-          <div className="max-w-4xl">
+          <div className="max-w-6xl">
             <SectionIntro
               eyebrow={t(`settings.${activeSection}.eyebrow`)}
               title={t(`settings.${activeSection}.title`)}
@@ -232,22 +237,26 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
             )}
 
             {activeSection === "editor" && (
-              <SettingsGroup>
-                <SettingRow title={t("settings.editor.font_size")} description={t("settings.editor.font_size_desc")} control={<NumberInput value={data.editor.fontSize} min={10} max={22} onCommit={(fontSize) => patchSettings({ editor: { ...data.editor, fontSize } })} />} />
-                <SettingToggle title={t("settings.editor.autocomplete")} description={t("settings.editor.autocomplete_desc")} checked={data.editor.autocomplete} onChange={(autocomplete) => patchSettings({ editor: { ...data.editor, autocomplete } })} />
-                <SettingToggle title={t("settings.editor.format_on_run")} description={t("settings.editor.format_on_run_desc")} checked={data.editor.formatOnRun} onChange={(formatOnRun) => patchSettings({ editor: { ...data.editor, formatOnRun } })} />
-                <SettingRow title={t("settings.editor.history_limit")} description={t("settings.editor.history_limit_desc")} control={<NumberInput value={data.editor.historyLimit} min={10} max={1000} onCommit={(historyLimit) => patchSettings({ editor: { ...data.editor, historyLimit } })} />} />
-              </SettingsGroup>
+              <SettingsPreviewLayout preview={<EditorSettingsPreview settings={data.editor} />}>
+                <SettingsGroup>
+                  <SettingRow title={t("settings.editor.font_size")} description={t("settings.editor.font_size_desc")} control={<NumberInput value={data.editor.fontSize} min={10} max={22} onCommit={(fontSize) => patchSettings({ editor: { ...data.editor, fontSize } })} />} />
+                  <SettingToggle title={t("settings.editor.autocomplete")} description={t("settings.editor.autocomplete_desc")} checked={data.editor.autocomplete} onChange={(autocomplete) => patchSettings({ editor: { ...data.editor, autocomplete } })} />
+                  <SettingToggle title={t("settings.editor.format_on_run")} description={t("settings.editor.format_on_run_desc")} checked={data.editor.formatOnRun} onChange={(formatOnRun) => patchSettings({ editor: { ...data.editor, formatOnRun } })} />
+                  <SettingRow title={t("settings.editor.history_limit")} description={t("settings.editor.history_limit_desc")} control={<NumberInput value={data.editor.historyLimit} min={10} max={1000} onCommit={(historyLimit) => patchSettings({ editor: { ...data.editor, historyLimit } })} />} />
+                </SettingsGroup>
+              </SettingsPreviewLayout>
             )}
 
             {activeSection === "dataView" && (
-              <SettingsGroup>
-                <SettingRow title={t("settings.dataView.default_page_size")} description={t("settings.dataView.default_page_size_desc")} control={<SimpleSelect value={String(data.dataView.defaultPageSize)} options={["10", "25", "50", "100", "250"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, defaultPageSize: Number(value) } })} />} />
-                <SettingRow title={t("settings.dataView.default_view_mode")} description={t("settings.dataView.default_view_mode_desc")} control={<SimpleSelect value={data.dataView.defaultViewMode} options={["list", "json", "table"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, defaultViewMode: value as AppSettings["dataView"]["defaultViewMode"] } })} />} />
-                <SettingRow title={t("settings.dataView.max_card_fields")} description={t("settings.dataView.max_card_fields_desc")} control={<NumberInput value={data.dataView.maxCardFields} min={4} max={100} onCommit={(maxCardFields) => patchSettings({ dataView: { ...data.dataView, maxCardFields } })} />} />
-                <SettingRow title={t("settings.dataView.truncate_length")} description={t("settings.dataView.truncate_length_desc")} control={<NumberInput value={data.dataView.truncateLength} min={40} max={1000} onCommit={(truncateLength) => patchSettings({ dataView: { ...data.dataView, truncateLength } })} />} />
-                <SettingRow title={t("settings.dataView.date_display")} description={t("settings.dataView.date_display_desc")} control={<SimpleSelect value={data.dataView.dateDisplay} options={["raw", "local"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, dateDisplay: value as AppSettings["dataView"]["dateDisplay"] } })} />} />
-              </SettingsGroup>
+              <SettingsPreviewLayout preview={<DataViewSettingsPreview settings={data.dataView} />}>
+                <SettingsGroup>
+                  <SettingRow title={t("settings.dataView.default_page_size")} description={t("settings.dataView.default_page_size_desc")} control={<SimpleSelect value={String(data.dataView.defaultPageSize)} options={["10", "25", "50", "100", "250"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, defaultPageSize: Number(value) } })} />} />
+                  <SettingRow title={t("settings.dataView.default_view_mode")} description={t("settings.dataView.default_view_mode_desc")} control={<SimpleSelect value={data.dataView.defaultViewMode} options={["list", "json", "table"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, defaultViewMode: value as AppSettings["dataView"]["defaultViewMode"] } })} />} />
+                  <SettingRow title={t("settings.dataView.max_card_fields")} description={t("settings.dataView.max_card_fields_desc")} control={<NumberInput value={data.dataView.maxCardFields} min={4} max={100} onCommit={(maxCardFields) => patchSettings({ dataView: { ...data.dataView, maxCardFields } })} />} />
+                  <SettingRow title={t("settings.dataView.truncate_length")} description={t("settings.dataView.truncate_length_desc")} control={<NumberInput value={data.dataView.truncateLength} min={40} max={1000} onCommit={(truncateLength) => patchSettings({ dataView: { ...data.dataView, truncateLength } })} />} />
+                  <SettingRow title={t("settings.dataView.date_display")} description={t("settings.dataView.date_display_desc")} control={<SimpleSelect value={data.dataView.dateDisplay} options={["raw", "local"]} onValueChange={(value) => patchSettings({ dataView: { ...data.dataView, dateDisplay: value as AppSettings["dataView"]["dateDisplay"] } })} />} />
+                </SettingsGroup>
+              </SettingsPreviewLayout>
             )}
 
             {activeSection === "connections" && (
@@ -313,6 +322,169 @@ function SectionIntro({ eyebrow, title, description }: { eyebrow: string; title:
 
 function SettingsGroup({ children }: { children: ReactNode }) {
   return <div className="space-y-7">{children}</div>;
+}
+
+function SettingsPreviewLayout({ children, preview }: { children: ReactNode; preview: ReactNode }) {
+  return (
+    <div className="grid gap-10 xl:grid-cols-[minmax(0,620px)_minmax(320px,430px)]">
+      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 xl:sticky xl:top-2 xl:self-start">{preview}</div>
+    </div>
+  );
+}
+
+function PreviewShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-xl bg-muted/25 p-3 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="flex gap-1.5">
+          <span className="size-2 rounded-full bg-muted-foreground/35" />
+          <span className="size-2 rounded-full bg-muted-foreground/25" />
+          <span className="size-2 rounded-full bg-muted-foreground/15" />
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EditorSettingsPreview({ settings }: { settings: AppSettings["editor"] }) {
+  const query = settings.formatOnRun
+    ? ["SELECT id, email, created_at", "FROM user_accounts", "WHERE is_active = true", "ORDER BY created_at DESC", "LIMIT 10;"]
+    : ["SELECT id, email, created_at FROM user_accounts WHERE is_active = true ORDER BY created_at DESC LIMIT 10;"];
+
+  return (
+    <PreviewShell title="SQL editor preview" subtitle={`${settings.fontSize}px · history ${settings.historyLimit}`}>
+      <motion.div
+        key={`${settings.fontSize}-${settings.autocomplete}-${settings.formatOnRun}-${settings.historyLimit}`}
+        initial={{ opacity: 0.65, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-lg bg-[#121212] p-3 text-white"
+      >
+        <div className="mb-3 flex items-center justify-between text-[10px] text-white/45">
+          <span>query.sql</span>
+          <span>{settings.autocomplete ? "autocomplete on" : "autocomplete off"}</span>
+        </div>
+        <div className="space-y-1 font-mono leading-6" style={{ fontSize: settings.fontSize }}>
+          {query.map((line, index) => (
+            <div key={`${line}-${index}`} className="flex min-w-0 gap-3">
+              <span className="w-4 shrink-0 text-right text-white/30">{index + 1}</span>
+              <span className="min-w-0 truncate">
+                {line
+                  .replace("SELECT", "SELECT")
+                  .replace("FROM", "FROM")
+                  .replace("WHERE", "WHERE")
+                  .replace("ORDER BY", "ORDER BY")
+                  .replace("LIMIT", "LIMIT")}
+              </span>
+            </div>
+          ))}
+        </div>
+        {settings.autocomplete && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.08, duration: 0.18 }}
+            className="absolute right-4 top-16 w-44 rounded-md bg-[#252525] p-1 text-[11px] text-white shadow-xl"
+          >
+            {["user_accounts", "created_at", "is_active"].map((item, index) => (
+              <div key={item} className={cn("rounded px-2 py-1", index === 0 && "bg-white/10")}>
+                {item}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </motion.div>
+    </PreviewShell>
+  );
+}
+
+function DataViewSettingsPreview({ settings }: { settings: AppSettings["dataView"] }) {
+  const fields = [
+    ["id", '"ce5510fd..."'],
+    ["email", '"user@example.com"'],
+    ["status", "ACTIVE"],
+    ["createdAt", settings.dateDisplay === "local" ? '"27/06/2026 20:29"' : '"2026-06-27T23:29:05.132Z"'],
+    ["bio", `"${truncatePreview("This is a long text value that should respect the configured truncation length.", settings.truncateLength)}"`],
+    ["credits", "388.3"],
+    ["lastLoginAt", settings.dateDisplay === "local" ? '"27/06/2026 21:03"' : '"2026-06-28T00:03:44.653Z"'],
+  ];
+  const visibleFields = fields.slice(0, Math.min(fields.length, Math.max(1, settings.maxCardFields)));
+
+  return (
+    <PreviewShell title="Data view preview" subtitle={`${settings.defaultPageSize} rows · ${settings.defaultViewMode}`}>
+      <motion.div
+        key={`${settings.defaultPageSize}-${settings.defaultViewMode}-${settings.maxCardFields}-${settings.truncateLength}-${settings.dateDisplay}`}
+        initial={{ opacity: 0.65, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        className="rounded-lg bg-background p-3"
+      >
+        <div className="mb-3 flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-foreground">user_accounts</span>
+          <span className="rounded-md bg-muted/60 px-2 py-1 text-muted-foreground">{settings.defaultPageSize} rows</span>
+        </div>
+
+        {settings.defaultViewMode === "table" ? (
+          <div className="overflow-hidden rounded-md bg-muted/25 font-mono text-[11px]">
+            <div className="grid grid-cols-[32px_1fr_1fr_80px] bg-muted/45 px-2 py-2 text-muted-foreground">
+              <span>#</span>
+              <span>email</span>
+              <span>createdAt</span>
+              <span>status</span>
+            </div>
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="grid grid-cols-[32px_1fr_1fr_80px] px-2 py-2">
+                <span className="text-muted-foreground">{row + 1}</span>
+                <span className="truncate">"user_{row}@mail.com"</span>
+                <span className="truncate text-primary">{settings.dateDisplay === "local" ? "27/06/2026" : "2026-06-27"}</span>
+                <span className="text-primary">ACTIVE</span>
+              </div>
+            ))}
+          </div>
+        ) : settings.defaultViewMode === "json" ? (
+          <pre className="max-h-64 overflow-hidden rounded-md bg-muted/25 p-3 font-mono text-[11px] leading-5 text-foreground">
+{`[
+  {
+    "id": "ce5510fd...",
+    "email": "user@example.com",
+    "createdAt": ${settings.dateDisplay === "local" ? '"27/06/2026 20:29"' : '"2026-06-27T23:29:05.132Z"'},
+    "status": "ACTIVE"
+  }
+]`}
+          </pre>
+        ) : (
+          <div className="space-y-2">
+            {[0, 1].map((row) => (
+              <div key={row} className="rounded-md bg-muted/25 p-3 font-mono text-[11px] leading-5">
+                {visibleFields.map(([key, value], index) => (
+                  <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", index === 2 && "bg-muted/55")}>
+                    <span className="font-semibold text-foreground">{key}</span>
+                    <span className="text-muted-foreground">:</span>
+                    <span className="min-w-0 truncate text-primary">{row === 1 && key === "email" ? '"another@example.com"' : value}</span>
+                  </div>
+                ))}
+                {fields.length > visibleFields.length && (
+                  <button type="button" className="mt-1 px-1 text-[11px] font-medium text-primary">
+                    Show {fields.length - visibleFields.length} more fields
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </PreviewShell>
+  );
+}
+
+function truncatePreview(value: string, length: number) {
+  return value.length > length ? `${value.slice(0, Math.max(1, length - 3))}...` : value;
 }
 
 function SettingRow({
@@ -478,23 +650,32 @@ type SettingsNavItemProps = {
   icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
   active?: boolean;
+  disabled?: boolean;
+  badge?: string;
   onClick: () => void;
 };
 
-function SettingsNavItem({ icon: Icon, label, active, onClick }: SettingsNavItemProps) {
+function SettingsNavItem({ icon: Icon, label, active, disabled, badge, onClick }: SettingsNavItemProps) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={cn(
         "flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-medium transition-colors",
         active
           ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        disabled && "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground"
       )}
     >
       <Icon size={15} />
-      <span>{label}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge && (
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

@@ -58,6 +58,7 @@ The release workflow runs on pushes to `main`, but it only creates a build when:
 1. The head commit message starts with `[RELEASE]`.
 2. Fast checks pass.
 3. The app version is different from the latest GitHub release tag.
+4. The release body is read from `release-notes/v{version}.md`.
 
 Commit example:
 
@@ -66,6 +67,17 @@ git commit -m "[RELEASE] 0.1.1-alpha.0"
 ```
 
 If the latest GitHub release is already `v0.1.1-alpha.0`, the workflow skips the build.
+
+## Patch notes
+
+Create one patch notes file per version:
+
+```text
+release-notes/v0.1.1-alpha.0.md
+```
+
+Use `release-notes/TEMPLATE.md` as the base. The release workflow uses the matching file as the GitHub release body.
+If the version-specific file is missing, the workflow falls back to the template, but release commits should include the real notes.
 
 ## Fast checks before build
 

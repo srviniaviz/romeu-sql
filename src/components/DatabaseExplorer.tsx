@@ -31,6 +31,7 @@ import {
 import type { DataViewMode } from "./explorer/DataPreview";
 import type { RowQueryOptions } from "@/domain/database/types";
 import { useSettings } from "@/domain/settings/useSettings";
+import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
 
 interface Props {
   connection: Connection;
@@ -63,6 +64,7 @@ export function DatabaseExplorer({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { settings } = useSettings();
+  const appSettings = settings ?? DEFAULT_APP_SETTINGS;
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
@@ -136,7 +138,7 @@ export function DatabaseExplorer({
         timestamp: new Date(),
       },
       ...prev,
-    ]);
+    ].slice(0, appSettings.editor.historyLimit));
   };
 
   const {
@@ -463,10 +465,11 @@ export function DatabaseExplorer({
             sqlQuery={sqlQuery}
             onSqlQueryChange={setSqlQuery}
             executing={executeMutation.isPending}
-            onExecute={() => executeMutation.mutate(sqlQuery)}
+            onExecute={() => executeMutation.mutate(appSettings.editor.formatOnRun ? sqlQuery.trim() : sqlQuery)}
             execResult={execResult}
             history={history}
             activeTab={activeTab}
+            editorSettings={appSettings.editor}
             onActiveTabChange={setActiveTab}
             onClearHistory={() => setHistory([])}
             onClearEditor={() => setSqlQuery("")}

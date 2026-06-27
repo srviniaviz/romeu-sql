@@ -43,6 +43,8 @@ interface SqlEditorProps {
   minHeight?: string;
   completions?: string[];
   dark?: boolean;
+  fontSize?: number;
+  autocomplete?: boolean;
 }
 
 export function SqlEditor({
@@ -53,6 +55,8 @@ export function SqlEditor({
   minHeight = "160px",
   completions = [],
   dark = false,
+  fontSize = 12,
+  autocomplete: autocompleteEnabled = true,
 }: SqlEditorProps) {
   const isDark = dark || (typeof document !== "undefined" && document.documentElement.classList.contains("dark"));
   const completionSource = (context: CompletionContext) => {
@@ -87,20 +91,24 @@ export function SqlEditor({
           foldGutter: true,
           highlightActiveLine: true,
           highlightSelectionMatches: true,
-          autocompletion: false,
+          autocompletion: autocompleteEnabled,
           closeBrackets: true,
           bracketMatching: true,
         }}
         extensions={[
           sql(),
-          autocompletion({
-            override: [completionSource],
-            activateOnTyping: true,
-            maxRenderedOptions: 14,
-          }),
+          ...(autocompleteEnabled
+            ? [
+                autocompletion({
+                  override: [completionSource],
+                  activateOnTyping: true,
+                  maxRenderedOptions: 14,
+                }),
+              ]
+            : []),
           EditorView.theme({
             "&": {
-              fontSize: "12px",
+              fontSize: `${fontSize}px`,
               height: "100%",
             },
             ".cm-editor": {

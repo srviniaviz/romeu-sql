@@ -8,7 +8,9 @@ import { ClusterManagerModal } from "./components/ClusterManagerModal";
 import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDialog";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
+import { clearPasswordMemoryCache } from "./domain/connections/repository";
 import { warmStronghold } from "./domain/connections/secretsRepository";
+import { loadSettings } from "./domain/settings/repository";
 import { useConnections, Connection } from "./lib/useConnections";
 
 const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
@@ -98,6 +100,14 @@ function App() {
 
   const disconnect = (event?: MouseEvent) => {
     event?.stopPropagation();
+    const connectionId = selectedConn?.id;
+    if (connectionId) {
+      void loadSettings().then((settings) => {
+        if (settings.security.clearSecretsOnDisconnect) {
+          clearPasswordMemoryCache(connectionId);
+        }
+      });
+    }
     selectOverview();
   };
 

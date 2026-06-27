@@ -44,6 +44,7 @@
     "saved": "Salvo",
     "autosaved_hint": "A configuração vale para a próxima consulta.",
     "back_workspace": "Voltar ao workspace",
+    "coming_soon": "Em breve",
     "sections": {
       "query": "Query",
       "editor": "Editor SQL",
@@ -122,6 +123,7 @@
       "confirm_destructive_desc": "Pede confirmação antes de excluir linhas, tabelas ou conexões.",
       "allow_exports": "Permitir exports",
       "allow_exports_desc": "Habilita exportação local de resultados e tabelas.",
+      "exports_disabled": "Exports estão desabilitados nas configurações de segurança.",
       "clear_secrets": "Limpar cache de senhas ao desconectar",
       "clear_secrets_desc": "Remove senhas da memória ao sair de uma conexão."
     },
