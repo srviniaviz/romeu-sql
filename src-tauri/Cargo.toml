@@ -1,6 +1,6 @@
 [package]
 name = "romeu-sql"
-version = "0.1.0-alpha.6"
+version = "0.1.0-alpha.7"
 description = "Desktop PostgreSQL client"
 authors = ["Vinicius"]
 edition = "2021"
