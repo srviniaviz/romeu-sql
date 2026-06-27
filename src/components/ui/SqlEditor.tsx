@@ -54,6 +54,7 @@ export function SqlEditor({
   completions = [],
   dark = false,
 }: SqlEditorProps) {
+  const isDark = dark || (typeof document !== "undefined" && document.documentElement.classList.contains("dark"));
   const completionSource = (context: CompletionContext) => {
     const word = context.matchBefore(/[\w.]+/);
     if (!word || (word.from === word.to && !context.explicit)) return null;
@@ -74,13 +75,13 @@ export function SqlEditor({
   };
 
   return (
-    <div className={cn("overflow-hidden rounded-md bg-slate-50 text-[12px]", className)}>
+    <div className={cn("overflow-hidden rounded-md bg-muted/25 text-[12px]", className)}>
       <CodeMirror
         value={value}
         height="100%"
         minHeight={minHeight}
         placeholder={placeholder}
-        theme={dark ? oneDark : undefined}
+        theme={isDark ? oneDark : undefined}
         basicSetup={{
           lineNumbers: true,
           foldGutter: true,
@@ -111,13 +112,15 @@ export function SqlEditor({
             },
             ".cm-tooltip": {
               borderRadius: "6px",
-              border: "1px solid rgb(226 232 240)",
-              boxShadow: "0 16px 32px rgba(15, 23, 42, 0.16)",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--popover)",
+              color: "var(--popover-foreground)",
+              boxShadow: "0 16px 32px rgba(0, 0, 0, 0.18)",
               overflow: "hidden",
             },
             ".cm-tooltip-autocomplete ul li[aria-selected]": {
-              backgroundColor: "rgb(226 232 240)",
-              color: "rgb(15 23 42)",
+              backgroundColor: "var(--muted)",
+              color: "var(--foreground)",
             },
           }),
         ]}

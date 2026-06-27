@@ -59,6 +59,42 @@ interface DataPreviewProps {
 }
 
 const CARD_FIELD_LIMIT = 8;
+const FIELD_PRIORITY = [
+  "_id",
+  "id",
+  "uuid",
+  "key",
+  "code",
+  "orderNumber",
+  "name",
+  "title",
+  "email",
+  "username",
+  "status",
+  "state",
+  "type",
+  "createdAt",
+  "updatedAt",
+  "deletedAt",
+];
+
+function fieldRank(key: string) {
+  const exact = FIELD_PRIORITY.findIndex((field) => field.toLowerCase() === key.toLowerCase());
+  if (exact >= 0) return exact;
+  if (/(^|_)id$/i.test(key) || /id$/i.test(key)) return 20;
+  if (/(name|title|label)$/i.test(key)) return 30;
+  if (/(status|state|type)$/i.test(key)) return 40;
+  if (/(created|updated|deleted|date|time|at)$/i.test(key)) return 50;
+  return 100;
+}
+
+function sortRowEntries(row: Record<string, unknown>) {
+  return Object.entries(row).sort(([left], [right]) => {
+    const rankDiff = fieldRank(left) - fieldRank(right);
+    if (rankDiff !== 0) return rankDiff;
+    return left.localeCompare(right);
+  });
+}
 
 function looksLikeDate(value: string, fieldName?: string) {
   const nameHint = fieldName ? /(date|time|created|updated|deleted|at)$/i.test(fieldName) : false;
@@ -80,27 +116,27 @@ function stringKind(value: string, fieldName?: string) {
 }
 
 function FieldValue({ value, fieldName }: { value: unknown; fieldName?: string }) {
-  if (value === null) return <span className="text-slate-400">null</span>;
-  if (value === undefined) return <span className="text-slate-400">undefined</span>;
+  if (value === null) return <span className="text-muted-foreground/70">null</span>;
+  if (value === undefined) return <span className="text-muted-foreground/70">undefined</span>;
   if (typeof value === "boolean") {
-    return <span className={cn("font-semibold", value ? "text-blue-700" : "text-slate-500")}>{String(value)}</span>;
+    return <span className={cn("font-semibold", value ? "text-primary" : "text-muted-foreground")}>{String(value)}</span>;
   }
   if (typeof value === "number") {
     const isMoney = fieldName && /(amount|price|cost|total|subtotal|tax|discount|shipping|unitprice)$/i.test(fieldName);
-    return <span className={cn("tabular-nums", isMoney ? "text-blue-700" : "text-indigo-700")}>{isMoney ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}</span>;
+    return <span className={cn("tabular-nums", isMoney ? "text-primary" : "text-primary")}>{isMoney ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}</span>;
   }
   if (typeof value === "string") {
     const kind = stringKind(value, fieldName);
-    if (kind === "date") return <span className="text-sky-700">{value}</span>;
-    if (kind === "id") return <span className="text-slate-600">"{value}"</span>;
-    if (kind === "email") return <span className="text-cyan-700">"{value}"</span>;
-    if (kind === "url") return <span className="text-cyan-700">"{value}"</span>;
-    if (kind === "enum") return <span className="rounded bg-blue-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-blue-700">{value}</span>;
-    if (kind === "money") return <span className="text-blue-700">"{value}"</span>;
-    return <span className="text-emerald-700">"{value}"</span>;
+    if (kind === "date") return <span className="text-foreground">{value}</span>;
+    if (kind === "id") return <span className="text-muted-foreground">"{value}"</span>;
+    if (kind === "email") return <span className="text-foreground">"{value}"</span>;
+    if (kind === "url") return <span className="text-foreground">"{value}"</span>;
+    if (kind === "enum") return <span className="rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-primary">{value}</span>;
+    if (kind === "money") return <span className="text-primary">"{value}"</span>;
+    return <span className="text-foreground">"{value}"</span>;
   }
-  if (Array.isArray(value)) return <span className="text-amber-700">Array({value.length})</span>;
-  return <span className="text-amber-700">{JSON.stringify(value)}</span>;
+  if (Array.isArray(value)) return <span className="text-muted-foreground">Array({value.length})</span>;
+  return <span className="text-muted-foreground">{JSON.stringify(value)}</span>;
 }
 
 function serializeValue(value: unknown) {
@@ -138,7 +174,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-        primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-slate-50 text-slate-800 hover:bg-slate-100"
+        primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted/25 text-foreground hover:bg-muted/45"
       )}
     >
       {children}
@@ -166,8 +202,8 @@ function IconButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex size-7 items-center justify-center rounded-md bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40",
-        active && "bg-slate-900 text-white hover:bg-slate-900 hover:text-white"
+        "inline-flex size-7 items-center justify-center rounded-md bg-muted/25 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+        active && "bg-foreground text-background hover:bg-foreground hover:text-background"
       )}
     >
       {children}
@@ -183,7 +219,7 @@ function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode:
   ];
 
   return (
-    <div className="inline-flex h-7 items-center rounded-md bg-slate-50 p-0.5">
+    <div className="inline-flex h-7 items-center rounded-md bg-muted/25 p-0.5">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -193,8 +229,8 @@ function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode:
             title={item.title}
             onClick={() => onChange(item.value)}
             className={cn(
-              "flex size-6 items-center justify-center rounded text-slate-600 hover:bg-slate-100",
-              value === item.value && "bg-slate-900 text-white hover:bg-slate-900"
+              "flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted/45",
+              value === item.value && "bg-foreground text-background hover:bg-foreground"
             )}
           >
             <Icon size={13} />
@@ -243,12 +279,12 @@ function DocumentRow({
   onDelete: (row: Record<string, unknown>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const entries = Object.entries(row);
+  const entries = sortRowEntries(row);
   const hiddenCount = Math.max(0, entries.length - CARD_FIELD_LIMIT);
   const visibleEntries = expanded ? entries : entries.slice(0, CARD_FIELD_LIMIT);
 
   return (
-    <article className="group/row relative overflow-hidden rounded-md bg-slate-50/70 hover:bg-slate-100/70">
+    <article className="group/row relative overflow-hidden rounded-md bg-muted/25 hover:bg-muted/35">
       <div className="absolute right-3 top-3 z-10">
         <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
       </div>
@@ -259,15 +295,15 @@ function DocumentRow({
             type="button"
             disabled={hiddenCount === 0}
             onClick={() => setExpanded((value) => !value)}
-            className="mr-3 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-600 disabled:opacity-0"
+            className="mr-3 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-muted/25 text-muted-foreground disabled:opacity-0"
           >
             <ChevronRight size={12} className={cn("transition-transform", expanded && "rotate-90")} />
           </button>
           <div className="min-w-0 flex-1 pr-28">
             {visibleEntries.map(([key, value], index) => (
-              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", index === 2 && "bg-slate-100")}>
-                <span className="shrink-0 font-semibold text-slate-700">{key}</span>
-                <span className="shrink-0 text-slate-500">:</span>
+              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", index === 2 && "bg-muted/45")}>
+                <span className="shrink-0 font-semibold text-foreground">{key}</span>
+                <span className="shrink-0 text-muted-foreground">:</span>
                 <span className="min-w-0 truncate">
                   <FieldValue value={value} fieldName={key} />
                 </span>
@@ -312,11 +348,11 @@ function RowsTable({
   return (
     <div className={cn("w-full max-w-full rounded-md bg-background", fill ? "h-full" : "h-full overflow-auto")}>
       <table className="min-w-max border-collapse text-left text-[12px]">
-        <thead className="sticky top-0 z-10 bg-slate-50">
+        <thead className="sticky top-0 z-10 bg-muted/25">
           <tr>
-            <th className="w-10 min-w-10 px-2 py-2 text-slate-500">#</th>
+            <th className="w-10 min-w-10 px-2 py-2 text-muted-foreground">#</th>
             {columns.map((column) => (
-              <th key={column} className="min-w-[150px] max-w-[260px] px-3 py-2 font-medium text-slate-700">
+              <th key={column} className="min-w-[150px] max-w-[260px] px-3 py-2 font-medium text-foreground">
                 {column}
               </th>
             ))}
@@ -325,8 +361,8 @@ function RowsTable({
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="group/row hover:bg-slate-50">
-              <td className="px-2 py-1.5 font-mono text-slate-500">{page * pageSize + rowIndex + 1}</td>
+            <tr key={rowIndex} className="group/row hover:bg-muted/25">
+              <td className="px-2 py-1.5 font-mono text-muted-foreground">{page * pageSize + rowIndex + 1}</td>
               {columns.map((column) => (
                 <td key={column} className="max-w-[260px] truncate px-3 py-1.5 font-mono">
                   <FieldValue value={row[column]} fieldName={column} />
@@ -375,8 +411,8 @@ function RowEditor({
       <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-background shadow-xl">
         <div className="flex h-12 items-center justify-between px-4">
           <div>
-            <h2 className="text-[14px] font-semibold text-slate-950">Edit row</h2>
-            <p className="text-[12px] text-slate-500">Update the JSON object and save.</p>
+            <h2 className="text-[14px] font-semibold text-foreground">Edit row</h2>
+            <p className="text-[12px] text-muted-foreground">Update the JSON object and save.</p>
           </div>
           <IconButton title="Close" disabled={saving} onClick={onClose}>
             <X size={14} />
@@ -387,7 +423,7 @@ function RowEditor({
             value={value}
             onChange={(event) => setValue(event.target.value)}
             spellCheck={false}
-            className="h-[360px] w-full resize-none rounded-md bg-slate-50 p-3 font-mono text-[12px] leading-5 outline-none focus:ring-2 focus:ring-primary/15"
+            className="h-[360px] w-full resize-none rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 outline-none focus:ring-2 focus:ring-primary/15"
           />
           {error && <p className="mt-2 text-[12px] text-destructive">{error}</p>}
         </div>
@@ -427,8 +463,8 @@ function ExportModal({
       <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-background shadow-xl">
         <div className="flex h-12 items-center justify-between px-4">
           <div>
-            <h2 className="text-[14px] font-semibold text-slate-950">Export {tableName}</h2>
-            <p className="text-[12px] text-slate-500">Use a SELECT query or leave empty to export the current page.</p>
+            <h2 className="text-[14px] font-semibold text-foreground">Export {tableName}</h2>
+            <p className="text-[12px] text-muted-foreground">Use a SELECT query or leave empty to export the current page.</p>
           </div>
           <IconButton title="Close" disabled={exporting} onClick={onClose}>
             <X size={14} />
@@ -442,12 +478,12 @@ function ExportModal({
             minHeight="176px"
             completions={completions}
           />
-          <label className="flex items-center gap-2 text-[12px] font-medium text-slate-700">
+          <label className="flex items-center gap-2 text-[12px] font-medium text-foreground">
             Format
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as "csv" | "json")}
-              className="h-8 rounded-md bg-slate-50 px-2 text-[12px] outline-none"
+              className="h-8 rounded-md bg-muted/25 px-2 text-[12px] outline-none"
             >
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
@@ -604,11 +640,11 @@ export function DataPreview({
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-background">
       <div className="z-20 shrink-0 bg-background pb-1">
         <div className="flex h-10 items-center gap-2 px-5">
-          <button type="button" onClick={onBack} className="text-slate-500 hover:text-slate-900">
+          <button type="button" onClick={onBack} className="text-muted-foreground hover:text-foreground">
             <ChevronLeft size={14} />
           </button>
-          <Database size={15} className="text-slate-700" />
-          <span className="font-mono text-[13px] font-semibold text-slate-950">{selectedTable}</span>
+          <Database size={15} className="text-foreground" />
+          <span className="font-mono text-[13px] font-semibold text-foreground">{selectedTable}</span>
         </div>
 
         <div className="flex h-11 items-end gap-7 px-5">
@@ -619,12 +655,12 @@ export function DataPreview({
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 "h-11 border-b-2 px-0 text-[13px] font-semibold",
-                activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-slate-600"
+                activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"
               )}
             >
               {tab.label}
               {tab.count !== undefined && (
-                <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{tab.count}</span>
+                <span className="ml-1 rounded-full bg-muted/45 px-1.5 py-0.5 text-[11px] text-muted-foreground">{tab.count}</span>
               )}
             </button>
           ))}
@@ -634,18 +670,18 @@ export function DataPreview({
           <>
             <div className="space-y-2 px-5 py-2">
               <div className="flex min-h-8 items-center gap-3">
-                <div className="flex h-8 flex-1 items-center rounded-md bg-slate-50 px-2 text-[12px]">
-                  <Search size={14} className="mr-2 text-slate-500" />
-                  <span className="mr-2 font-semibold text-slate-700">WHERE</span>
+                <div className="flex h-8 flex-1 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+                  <Search size={14} className="mr-2 text-muted-foreground" />
+                  <span className="mr-2 font-semibold text-foreground">WHERE</span>
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => event.key === "Enter" && applyRows()}
                     placeholder="id = 1"
-                    className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                   />
                   {query || whereClause || project || sort || skip || limit ? (
-                    <button type="button" title="Reset" onClick={resetRows} className="ml-2 text-slate-400 hover:text-slate-700">
+                    <button type="button" title="Reset" onClick={resetRows} className="ml-2 text-muted-foreground/70 hover:text-foreground">
                       <X size={13} />
                     </button>
                   ) : null}
@@ -656,21 +692,21 @@ export function DataPreview({
                   <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />
                 </ToolbarButton>
               </div>
-              <div className="flex h-8 items-center rounded-md bg-slate-50 px-2 text-[12px]">
-                <span className="mr-2 font-semibold text-slate-700">ORDER BY</span>
+              <div className="flex h-8 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+                <span className="mr-2 font-semibold text-foreground">ORDER BY</span>
                 <input
                   value={sort}
                   onChange={(event) => setSort(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && applyRows()}
                   placeholder="createdAt desc"
-                  className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-slate-400"
+                  className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                 />
               </div>
-              {message && <pre className="max-h-32 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[11px] leading-4 text-slate-700">{message}</pre>}
+              {message && <pre className="max-h-32 overflow-auto rounded-md bg-muted/25 p-2 font-mono text-[11px] leading-4 text-foreground">{message}</pre>}
               {optionsOpen && (
-                <div className="grid gap-3 rounded-md bg-slate-50 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 rounded-md bg-muted/25 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
                   <label className="space-y-1">
-                    <span className="font-medium text-slate-700">Project</span>
+                    <span className="font-medium text-foreground">Project</span>
                     <input
                       value={project}
                       onChange={(event) => setProject(event.target.value)}
@@ -679,7 +715,7 @@ export function DataPreview({
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="font-medium text-slate-700">Skip</span>
+                    <span className="font-medium text-foreground">Skip</span>
                     <input
                       value={skip}
                       onChange={(event) => setSkip(event.target.value.replace(/\D/g, ""))}
@@ -688,7 +724,7 @@ export function DataPreview({
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="font-medium text-slate-700">Limit</span>
+                    <span className="font-medium text-foreground">Limit</span>
                     <input
                       value={limit}
                       onChange={(event) => setLimit(event.target.value.replace(/\D/g, ""))}
@@ -714,17 +750,17 @@ export function DataPreview({
               </div>
 
               <div className="flex items-center gap-2">
-                <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-slate-50 px-2 text-[12px] outline-none">
+                <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-muted/25 px-2 text-[12px] outline-none">
                   {[10, 25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
                 </select>
-                <span className="min-w-[104px] text-right text-[12px] text-slate-700">{startRow} - {endRow} of {totalRows}</span>
-                <button type="button" onClick={onRefresh} disabled={refreshing} className="text-slate-600 disabled:opacity-40">
+                <span className="min-w-[104px] text-right text-[12px] text-foreground">{startRow} - {endRow} of {totalRows}</span>
+                <button type="button" onClick={onRefresh} disabled={refreshing} className="text-muted-foreground disabled:opacity-40">
                   <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
                 </button>
-                <button type="button" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)} className="text-slate-600 disabled:opacity-35">
+                <button type="button" disabled={page === 0 || loading} onClick={() => onPageChange(page - 1)} className="text-muted-foreground disabled:opacity-35">
                   <ChevronLeft size={16} />
                 </button>
-                <button type="button" disabled={page >= totalPages - 1 || loading} onClick={() => onPageChange(page + 1)} className="text-slate-600 disabled:opacity-35">
+                <button type="button" disabled={page >= totalPages - 1 || loading} onClick={() => onPageChange(page + 1)} className="text-muted-foreground disabled:opacity-35">
                   <ChevronRight size={16} />
                 </button>
                 <ViewToggle value={viewMode} onChange={onViewModeChange} />
@@ -737,7 +773,7 @@ export function DataPreview({
       <div className={cn("min-h-0 flex-1 p-3", (activeTab === "rows" && viewMode === "table") || activeTab === "query" ? "overflow-hidden" : "overflow-auto")}>
         {activeTab === "query" ? (
           <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-            <div className="flex min-h-0 flex-col rounded-md bg-slate-50 p-3">
+            <div className="flex min-h-0 flex-col rounded-md bg-muted/25 p-3">
               <SqlEditor
                 value={sql}
                 onChange={setSql}
@@ -751,8 +787,8 @@ export function DataPreview({
                 </ToolbarButton>
               </div>
             </div>
-            <div className="flex min-h-0 flex-col rounded-md bg-slate-50 p-3">
-              <div className="mb-2 shrink-0 text-[12px] font-semibold text-slate-800">Result preview</div>
+            <div className="flex min-h-0 flex-col rounded-md bg-muted/25 p-3">
+              <div className="mb-2 shrink-0 text-[12px] font-semibold text-foreground">Result preview</div>
               {queryError ? (
                 <p className="text-[12px] text-destructive">{queryError}</p>
               ) : queryRows.length ? (
@@ -765,7 +801,7 @@ export function DataPreview({
             </div>
           </div>
         ) : activeTab === "schema" ? (
-          <div className="rounded-md bg-slate-50/70 p-2">
+          <div className="rounded-md bg-muted/25 p-2">
             <table className="w-full text-left text-[12px]">
               <thead>
                 <tr className="text-muted-foreground">
@@ -779,18 +815,18 @@ export function DataPreview({
               <tbody>
                 {schemaColumns.map((column) => (
                   <tr key={column.name} className="hover:bg-background">
-                    <td className="px-3 py-2 font-mono font-semibold text-slate-800">{column.name}</td>
-                    <td className="px-3 py-2 font-mono text-slate-600">{column.type}</td>
-                    <td className="px-3 py-2 text-slate-600">{column.nullable ? "Yes" : "No"}</td>
-                    <td className="px-3 py-2 font-mono text-slate-500">{column.defaultValue == null ? "-" : String(column.defaultValue)}</td>
-                    <td className="px-3 py-2 text-slate-600">{column.isPrimaryKey ? "Primary" : "-"}</td>
+                    <td className="px-3 py-2 font-mono font-semibold text-foreground">{column.name}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{column.type}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{column.nullable ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{column.defaultValue == null ? "-" : String(column.defaultValue)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{column.isPrimaryKey ? "Primary" : "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : activeTab === "indexes" ? (
-          <div className="rounded-md bg-slate-50/70 p-2">
+          <div className="rounded-md bg-muted/25 p-2">
             {indexes.length ? (
               <table className="w-full text-left text-[12px]">
                 <thead>
@@ -805,9 +841,9 @@ export function DataPreview({
                   {indexes.map((index) => (
                     <tr key={`${index.name}-${index.columns}`} className="hover:bg-background">
                       <td className="px-3 py-2 font-mono font-semibold">{index.name}</td>
-                      <td className="px-3 py-2 font-mono text-slate-600">{index.columns || "-"}</td>
-                      <td className="px-3 py-2 text-slate-600">{index.unique ? "Yes" : "No"}</td>
-                      <td className="px-3 py-2 text-slate-600">{index.type}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{index.columns || "-"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{index.unique ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{index.type}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -817,23 +853,23 @@ export function DataPreview({
             )}
           </div>
         ) : loading ? (
-          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md text-slate-500">
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md text-muted-foreground">
             <RefreshCw size={24} className="animate-spin" />
             <span className="text-[12px]">Fetching rows</span>
           </div>
         ) : rows.length === 0 && totalRows > 0 && refreshing ? (
-          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md bg-slate-50 text-slate-500">
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md bg-muted/25 text-muted-foreground">
             <RefreshCw size={24} className="animate-spin" />
             <span className="text-[12px]">Syncing rows</span>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-md bg-slate-50 py-20 text-center text-[13px] text-slate-500">No rows found</div>
+          <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">No rows found</div>
         ) : viewMode === "table" ? (
           <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
         ) : viewMode === "json" ? (
           <div className="space-y-2 overflow-auto">
             {rows.map((row, rowIndex) => (
-              <pre key={rowIndex} className="rounded-md bg-slate-50 p-3 font-mono text-[12px] leading-5 text-slate-800">
+              <pre key={rowIndex} className="rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 text-foreground">
                 {JSON.stringify(row, null, 2)}
               </pre>
             ))}

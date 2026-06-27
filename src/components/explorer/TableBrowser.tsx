@@ -54,7 +54,7 @@ export function TableBrowser({
 
   if (tables.length === 0) {
     return (
-      <div className="rounded-md bg-slate-50 py-20 text-center text-[13px] text-muted-foreground">
+      <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">
         No tables found
       </div>
     );
@@ -98,16 +98,16 @@ export function TableBrowser({
             {tables.map((table) => {
               const stats = statsByName.get(table);
               return (
-                <tr key={table} className="group cursor-pointer rounded-md hover:bg-slate-50" onClick={() => onSelectTable(table)}>
+                <tr key={table} className="group cursor-pointer rounded-md hover:bg-muted/25" onClick={() => onSelectTable(table)}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      {(stats?.type || "table").includes("view") ? <Database size={14} className="text-slate-500" /> : <Table size={14} className="text-slate-500" />}
-                      <span className="font-semibold text-slate-900">{table}</span>
+                      {(stats?.type || "table").includes("view") ? <Database size={14} className="text-muted-foreground" /> : <Table size={14} className="text-muted-foreground" />}
+                      <span className="font-semibold text-foreground">{table}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{stats?.type || "table"}</td>
-                  <td className="px-3 py-2 font-mono text-slate-600">{formatRows(stats?.estimatedRows ?? null)}</td>
-                  <td className="px-3 py-2 font-mono text-slate-600">{formatBytes(stats?.totalBytes ?? null)}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{stats?.type || "table"}</td>
+                  <td className="px-3 py-2 font-mono text-muted-foreground">{formatRows(stats?.estimatedRows ?? null)}</td>
+                  <td className="px-3 py-2 font-mono text-muted-foreground">{formatBytes(stats?.totalBytes ?? null)}</td>
                   <td className="px-3 py-2 text-right text-primary opacity-0 transition-opacity group-hover:opacity-100">Open</td>
                 </tr>
               );

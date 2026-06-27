@@ -102,7 +102,7 @@ export function SqlConsole({
                   <span className="text-[12px] font-semibold text-foreground">{entry.action}</span>
                   <span className="text-[11px] text-muted-foreground">{entry.timestamp.toLocaleTimeString()}</span>
                 </div>
-                {entry.query && <code className="mt-2 block truncate rounded bg-slate-950 px-2 py-1.5 font-mono text-[11px] text-slate-200">{entry.query}</code>}
+                {entry.query && <code className="mt-2 block truncate rounded bg-slate-950 px-2 py-1.5 font-mono text-[11px] text-muted-foreground">{entry.query}</code>}
                 <p className={`mt-2 text-[12px] ${entry.status === "success" ? "text-muted-foreground" : "text-destructive"}`}>{entry.message}</p>
               </div>
             ))}
