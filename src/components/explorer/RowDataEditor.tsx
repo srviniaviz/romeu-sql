@@ -279,9 +279,11 @@ function EditableLiteral({
   onContextMenu?: (event: React.MouseEvent, field: ParsedField) => void;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
+  const focusedRef = useRef(false);
   const displayValue = displayRaw(parsed.raw, parsed.kind);
 
   useEffect(() => {
+    if (focusedRef.current) return;
     if (ref.current && ref.current.textContent !== displayValue) {
       ref.current.textContent = displayValue;
     }
@@ -299,6 +301,15 @@ function EditableLiteral({
         literalClass(parsed.kind, parsed.error)
       )}
       onInput={(event) => onChange?.(parsed.column.name, event.currentTarget.textContent ?? "")}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        if (ref.current && ref.current.textContent !== displayValue) {
+          ref.current.textContent = displayValue;
+        }
+      }}
       onContextMenu={(event) => onContextMenu?.(event, parsed)}
       onKeyDown={(event) => {
         if (parsed.kind !== "json" && event.key === "Enter") event.preventDefault();
