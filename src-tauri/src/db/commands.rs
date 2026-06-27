@@ -381,10 +381,110 @@ pub async fn db_execute_sql(
     query: String,
 ) -> DbResult<String> {
     with_query_timeout(query_timeout_ms, async {
-        state.execute(&connection, &query, &[]).await?;
+        let statements = split_sql_statements(&query);
+        if statements.is_empty() {
+            return Err("No SQL statement to execute.".into());
+        }
+        for statement in statements {
+            state.execute(&connection, &statement, &[]).await?;
+        }
         Ok(query)
     })
     .await
+}
+
+fn split_sql_statements(sql: &str) -> Vec<String> {
+    let mut statements = Vec::new();
+    let mut current = String::new();
+    let mut chars = sql.chars().peekable();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut in_line_comment = false;
+    let mut in_block_comment = false;
+
+    while let Some(ch) = chars.next() {
+        if in_line_comment {
+            current.push(ch);
+            if ch == '\n' {
+                in_line_comment = false;
+            }
+            continue;
+        }
+
+        if in_block_comment {
+            current.push(ch);
+            if ch == '*' && chars.peek() == Some(&'/') {
+                current.push('/');
+                chars.next();
+                in_block_comment = false;
+            }
+            continue;
+        }
+
+        if in_single_quote {
+            current.push(ch);
+            if ch == '\'' {
+                if chars.peek() == Some(&'\'') {
+                    current.push('\'');
+                    chars.next();
+                } else {
+                    in_single_quote = false;
+                }
+            }
+            continue;
+        }
+
+        if in_double_quote {
+            current.push(ch);
+            if ch == '"' {
+                if chars.peek() == Some(&'"') {
+                    current.push('"');
+                    chars.next();
+                } else {
+                    in_double_quote = false;
+                }
+            }
+            continue;
+        }
+
+        match ch {
+            '\'' => {
+                in_single_quote = true;
+                current.push(ch);
+            }
+            '"' => {
+                in_double_quote = true;
+                current.push(ch);
+            }
+            '-' if chars.peek() == Some(&'-') => {
+                current.push(ch);
+                current.push('-');
+                chars.next();
+                in_line_comment = true;
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                current.push(ch);
+                current.push('*');
+                chars.next();
+                in_block_comment = true;
+            }
+            ';' => {
+                let statement = current.trim();
+                if !statement.is_empty() {
+                    statements.push(statement.to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    let statement = current.trim();
+    if !statement.is_empty() {
+        statements.push(statement.to_string());
+    }
+
+    statements
 }
 
 #[tauri::command]
