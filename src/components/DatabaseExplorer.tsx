@@ -30,6 +30,7 @@ import {
 } from "@/domain/database/service";
 import type { DataViewMode } from "./explorer/DataPreview";
 import type { RowQueryOptions } from "@/domain/database/types";
+import { useSettings } from "@/domain/settings/useSettings";
 
 interface Props {
   connection: Connection;
@@ -61,6 +62,7 @@ export function DatabaseExplorer({
 }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { settings } = useSettings();
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
@@ -116,6 +118,15 @@ export function DatabaseExplorer({
     setWhereClause("");
     setRowOptions({});
   }, [selectedTable, connection.id, connection.database]);
+
+  useEffect(() => {
+    if (settings?.dataView.defaultPageSize) {
+      setPageSize(settings.dataView.defaultPageSize);
+    }
+    if (settings?.dataView.defaultViewMode) {
+      setViewMode(settings.dataView.defaultViewMode);
+    }
+  }, [settings?.dataView.defaultPageSize, settings?.dataView.defaultViewMode]);
 
   const addHistory = (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
     setHistory((prev) => [
@@ -339,17 +350,19 @@ export function DatabaseExplorer({
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="max-w-xl rounded-lg border border-destructive/20 bg-destructive/10 p-5 text-destructive">
-          <div className="mb-3 flex items-center gap-2 font-semibold">
-            <AlertCircle size={18} />
-            {t("explorer.connection_failed")}
+      <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+        <div className="flex max-w-xl flex-col items-center text-center">
+          <div className="mb-4 flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <AlertCircle size={19} />
           </div>
-          <p className="text-[13px] leading-5">{error}</p>
-          <div className="mt-4 flex gap-2">
+          <h2 className="text-[16px] font-semibold text-destructive">
+            {t("explorer.connection_failed")}
+          </h2>
+          <p className="mt-3 text-[13px] leading-6 text-muted-foreground">{error}</p>
+          <div className="mt-6 flex items-center justify-center gap-2">
             <Button
               variant="destructive"
-              className="h-8 rounded-md text-[12px]"
+              className="h-8 rounded-md px-4 text-[12px]"
               onClick={() => {
                 clearDatabaseMetadataCache(connection);
                 refetchTables();
@@ -357,7 +370,7 @@ export function DatabaseExplorer({
             >
               {t("explorer.try_again")}
             </Button>
-            <Button variant="ghost" className="h-8 rounded-md text-[12px]" onClick={onDisconnect}>
+            <Button variant="ghost" className="h-8 rounded-md px-4 text-[12px]" onClick={onDisconnect}>
               {t("explorer.disconnect")}
             </Button>
           </div>

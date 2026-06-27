@@ -40,12 +40,20 @@
   "settings": {
     "title": "Settings",
     "description": "Local preferences for the desktop workspace.",
-    "database": "Database",
-    "search": "Search",
     "saving": "Saving...",
     "saved": "Saved",
     "autosaved_hint": "Saved settings apply to the next query.",
     "back_workspace": "Back to workspace",
+    "sections": {
+      "query": "Query",
+      "editor": "SQL Editor",
+      "dataView": "Data View",
+      "connections": "Connections",
+      "security": "Security",
+      "appearance": "Appearance",
+      "updates": "Updates",
+      "advanced": "Advanced"
+    },
     "query": {
       "eyebrow": "Query execution",
       "title": "Query settings",
@@ -55,11 +63,104 @@
       "timeout_field": "Timeout",
       "unit_seconds": "seconds",
       "seconds": "{{count}}s",
-      "range": "Allowed range: {{min}}s to {{max}}s."
+      "range": "Allowed range: {{min}}s to {{max}}s.",
+      "default_limit": "Default limit",
+      "default_limit_desc": "Base limit used by new queries and previews.",
+      "export_format": "Default export format",
+      "export_format_desc": "Initial format when exporting data or results.",
+      "cancel_on_navigate": "Cancel on navigation",
+      "cancel_on_navigate_desc": "Stops running operations when changing table or connection."
+    },
+    "editor": {
+      "eyebrow": "SQL writing",
+      "title": "SQL Editor",
+      "description": "Preferences for the editor used in queries and custom exports.",
+      "font_size": "Font size",
+      "font_size_desc": "SQL editor font size.",
+      "autocomplete": "Autocomplete",
+      "autocomplete_desc": "Shows suggestions while writing SQL.",
+      "format_on_run": "Format on run",
+      "format_on_run_desc": "Formats the query visually before running it.",
+      "history_limit": "History limit",
+      "history_limit_desc": "Maximum commands kept in local history."
+    },
+    "dataView": {
+      "eyebrow": "Data reading",
+      "title": "Data View",
+      "description": "Preferences for table pages, JSON view and row cards.",
+      "default_page_size": "Rows per page",
+      "default_page_size_desc": "Initial amount when opening a table.",
+      "default_view_mode": "Default view",
+      "default_view_mode_desc": "Initial mode for browsing rows.",
+      "max_card_fields": "Card fields",
+      "max_card_fields_desc": "Fields shown before the expand button.",
+      "truncate_length": "Long text truncation",
+      "truncate_length_desc": "Maximum size before truncating long strings.",
+      "date_display": "Date format",
+      "date_display_desc": "Show raw database dates or local formatted dates."
+    },
+    "connections": {
+      "eyebrow": "Workspace",
+      "title": "Connections",
+      "description": "Connection, schema and local cache behavior.",
+      "auto_connect": "Auto-connect",
+      "auto_connect_desc": "Tries to open the last connection when the app starts.",
+      "remember_last_workspace": "Remember last workspace",
+      "remember_last_workspace_desc": "Keeps the last connection, database and table.",
+      "schema_cache": "Schema cache",
+      "schema_cache_desc": "Reuses metadata to reduce repeated reads.",
+      "refresh_metadata": "Refresh metadata on connect",
+      "refresh_metadata_desc": "Forces a fresh database and table scan when connecting."
+    },
+    "security": {
+      "eyebrow": "Local protection",
+      "title": "Security",
+      "description": "Controls for secrets, exports and destructive actions.",
+      "mask_sensitive": "Mask sensitive fields",
+      "mask_sensitive_desc": "Hides values from fields like password, token, secret and key.",
+      "confirm_destructive": "Confirm destructive actions",
+      "confirm_destructive_desc": "Asks before deleting rows, tables or connections.",
+      "allow_exports": "Allow exports",
+      "allow_exports_desc": "Enables local export of results and tables.",
+      "clear_secrets": "Clear password cache on disconnect",
+      "clear_secrets_desc": "Removes passwords from memory after leaving a connection."
+    },
+    "appearance": {
+      "eyebrow": "Interface",
+      "title": "Appearance",
+      "description": "Theme and density for the desktop interface.",
+      "theme": "Theme",
+      "theme_desc": "Switches between light and dark.",
+      "density": "Density",
+      "density_desc": "Adjusts general interface spacing.",
+      "font_size": "Base font",
+      "font_size_desc": "Base font size used by the interface."
+    },
+    "updates": {
+      "eyebrow": "Versions",
+      "title": "Updates",
+      "description": "How the app checks GitHub releases.",
+      "auto_check": "Check automatically",
+      "auto_check_desc": "Looks for updates when opening the app.",
+      "channel": "Channel",
+      "channel_desc": "Channel used to fetch releases.",
+      "check_now": "Check now",
+      "check_now_desc": "Reads GitHub Releases and compares against the local version."
+    },
+    "advanced": {
+      "eyebrow": "Diagnostics",
+      "title": "Advanced",
+      "description": "Support tools and local reset.",
+      "debug_logs": "Debug logs",
+      "debug_logs_desc": "Shows detailed logs in the app console.",
+      "reset": "Reset settings",
+      "reset_desc": "Restores all preferences to defaults.",
+      "reset_action": "Reset"
     }
   },
   "updates": {
     "check": "Check for updates",
+    "checking": "Checking...",
     "available": "Update available: {{version}}. Click to open releases.",
     "current": "You are on the latest version: {{version}}.",
     "error": "Could not check for updates."

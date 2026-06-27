@@ -40,12 +40,20 @@
   "settings": {
     "title": "Configurações",
     "description": "Preferências locais do workspace desktop.",
-    "database": "Banco de dados",
-    "search": "Busca",
     "saving": "Salvando...",
     "saved": "Salvo",
     "autosaved_hint": "A configuração vale para a próxima consulta.",
     "back_workspace": "Voltar ao workspace",
+    "sections": {
+      "query": "Query",
+      "editor": "Editor SQL",
+      "dataView": "Visualização",
+      "connections": "Conexões",
+      "security": "Segurança",
+      "appearance": "Aparência",
+      "updates": "Atualizações",
+      "advanced": "Avançado"
+    },
     "query": {
       "eyebrow": "Execução de consultas",
       "title": "Configurações de query",
@@ -55,11 +63,104 @@
       "timeout_field": "Timeout",
       "unit_seconds": "segundos",
       "seconds": "{{count}}s",
-      "range": "Intervalo permitido: {{min}}s até {{max}}s."
+      "range": "Intervalo permitido: {{min}}s até {{max}}s.",
+      "default_limit": "Limite padrão",
+      "default_limit_desc": "Quantidade usada como base em consultas novas e previews.",
+      "export_format": "Formato padrão de export",
+      "export_format_desc": "Formato inicial ao exportar dados ou resultados.",
+      "cancel_on_navigate": "Cancelar ao navegar",
+      "cancel_on_navigate_desc": "Interrompe operações em andamento quando você troca de tabela ou conexão."
+    },
+    "editor": {
+      "eyebrow": "Escrita de SQL",
+      "title": "Editor SQL",
+      "description": "Preferências do editor usado em consultas e exports customizados.",
+      "font_size": "Tamanho da fonte",
+      "font_size_desc": "Fonte do editor SQL.",
+      "autocomplete": "Autocomplete",
+      "autocomplete_desc": "Mostra sugestões enquanto você escreve SQL.",
+      "format_on_run": "Formatar ao executar",
+      "format_on_run_desc": "Prepara a consulta visualmente antes de executar.",
+      "history_limit": "Limite de histórico",
+      "history_limit_desc": "Número máximo de comandos mantidos no histórico local."
+    },
+    "dataView": {
+      "eyebrow": "Leitura de dados",
+      "title": "Visualização de dados",
+      "description": "Preferências para páginas de tabela, JSON e cards de linhas.",
+      "default_page_size": "Linhas por página",
+      "default_page_size_desc": "Quantidade inicial ao abrir uma tabela.",
+      "default_view_mode": "Visualização padrão",
+      "default_view_mode_desc": "Modo inicial para navegar pelas linhas.",
+      "max_card_fields": "Campos no card",
+      "max_card_fields_desc": "Quantidade de campos exibidos antes do botão de expandir.",
+      "truncate_length": "Corte de texto longo",
+      "truncate_length_desc": "Tamanho máximo antes de truncar strings grandes.",
+      "date_display": "Formato de datas",
+      "date_display_desc": "Mostra datas cruas do banco ou formatadas localmente."
+    },
+    "connections": {
+      "eyebrow": "Workspace",
+      "title": "Conexões",
+      "description": "Comportamento de conexão, schema e cache local.",
+      "auto_connect": "Conectar automaticamente",
+      "auto_connect_desc": "Tenta abrir a última conexão ao iniciar o app.",
+      "remember_last_workspace": "Lembrar último workspace",
+      "remember_last_workspace_desc": "Mantém a última conexão, banco e tabela usados.",
+      "schema_cache": "Cache de schema",
+      "schema_cache_desc": "Reutiliza metadados para reduzir leituras repetidas.",
+      "refresh_metadata": "Atualizar metadata ao conectar",
+      "refresh_metadata_desc": "Força uma nova leitura de bancos e tabelas ao conectar."
+    },
+    "security": {
+      "eyebrow": "Proteção local",
+      "title": "Segurança",
+      "description": "Controles para segredos, exports e ações destrutivas.",
+      "mask_sensitive": "Mascarar campos sensíveis",
+      "mask_sensitive_desc": "Oculta valores de campos como password, token, secret e key.",
+      "confirm_destructive": "Confirmar ações destrutivas",
+      "confirm_destructive_desc": "Pede confirmação antes de excluir linhas, tabelas ou conexões.",
+      "allow_exports": "Permitir exports",
+      "allow_exports_desc": "Habilita exportação local de resultados e tabelas.",
+      "clear_secrets": "Limpar cache de senhas ao desconectar",
+      "clear_secrets_desc": "Remove senhas da memória ao sair de uma conexão."
+    },
+    "appearance": {
+      "eyebrow": "Interface",
+      "title": "Aparência",
+      "description": "Tema e densidade da interface desktop.",
+      "theme": "Tema",
+      "theme_desc": "Alterna entre claro e escuro.",
+      "density": "Densidade",
+      "density_desc": "Ajusta o espaçamento geral da interface.",
+      "font_size": "Fonte base",
+      "font_size_desc": "Tamanho base usado pela interface."
+    },
+    "updates": {
+      "eyebrow": "Versões",
+      "title": "Atualizações",
+      "description": "Como o app verifica releases no GitHub.",
+      "auto_check": "Verificar automaticamente",
+      "auto_check_desc": "Procura atualizações ao abrir o app.",
+      "channel": "Canal",
+      "channel_desc": "Canal usado para buscar releases.",
+      "check_now": "Verificar agora",
+      "check_now_desc": "Consulta o GitHub Releases e compara com a versão local."
+    },
+    "advanced": {
+      "eyebrow": "Diagnóstico",
+      "title": "Avançado",
+      "description": "Ferramentas de suporte e reset local.",
+      "debug_logs": "Logs de debug",
+      "debug_logs_desc": "Mostra logs detalhados no console do app.",
+      "reset": "Resetar configurações",
+      "reset_desc": "Volta todas as preferências para o padrão.",
+      "reset_action": "Resetar"
     }
   },
   "updates": {
     "check": "Verificar atualizações",
+    "checking": "Verificando...",
     "available": "Atualização disponível: {{version}}. Clique para abrir os releases.",
     "current": "Você está na versão mais recente: {{version}}.",
     "error": "Não foi possível verificar atualizações."

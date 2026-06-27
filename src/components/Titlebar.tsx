@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import appIcon from "@/assets/icon.png";
 import { checkForUpdates, type UpdateCheckResult } from "@/lib/updates";
 import { useState } from "react";
+import { loadSettings, updateSettings } from "@/domain/settings/repository";
 
 interface TitlebarProps {
   onOpenSettings: () => void;
@@ -14,7 +15,7 @@ interface TitlebarProps {
 type UpdateStatus = "idle" | "checking" | "available" | "current" | "error";
 
 export function Titlebar({ onOpenSettings }: TitlebarProps) {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { i18n, t } = useTranslation();
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
@@ -41,6 +42,21 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
       setUpdateResult(null);
       setUpdateStatus("error");
     }
+  };
+
+  const toggleThemeAndSettings = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    void loadSettings()
+      .then((settings) =>
+        updateSettings({
+          appearance: {
+            ...settings.appearance,
+            theme: nextTheme,
+          },
+        })
+      )
+      .catch(() => undefined);
   };
 
   const minimize = async () => {
@@ -128,7 +144,7 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
-            toggleTheme();
+            toggleThemeAndSettings();
           }}
           className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
           title={theme === 'dark' ? t("shell.switch_to_light") : t("shell.switch_to_dark")}
