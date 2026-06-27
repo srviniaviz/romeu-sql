@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { hydrateConnectionSecrets } from "../connections/repository";
 import { Connection } from "../connections/types";
+import { loadSettings } from "../settings/repository";
 import type {
   BenchmarkAnalyzeResult,
   ClusterPermissionInfo,
@@ -22,10 +23,14 @@ async function prepareConnection(connection: Connection) {
 }
 
 async function dbInvoke<T>(command: string, connection: Connection, args: Record<string, unknown> = {}) {
-  const readyConnection = await prepareConnection(connection);
+  const [readyConnection, settings] = await Promise.all([
+    prepareConnection(connection),
+    loadSettings(),
+  ]);
   const started = performance.now();
   const result = await invoke<T>(command, {
     connection: readyConnection,
+    queryTimeoutMs: settings.query.timeoutMs,
     ...args,
   });
   logSlow(command, started, connection);

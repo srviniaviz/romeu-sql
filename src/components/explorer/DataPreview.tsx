@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Braces,
   ChevronDown,
@@ -8,7 +8,10 @@ import {
   Database,
   Download,
   Edit3,
+  FileJson,
+  FileSpreadsheet,
   List,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -21,6 +24,12 @@ import { useTranslation } from "react-i18next";
 import type { ColumnInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
 import { saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type DataViewMode = "list" | "json" | "table";
 type DataTab = "rows" | "query" | "schema" | "indexes";
@@ -155,6 +164,27 @@ function toCsv(rows: Record<string, unknown>[]) {
     columns.map(escape).join(","),
     ...rows.map((row) => columns.map((column) => escape(row[column])).join(",")),
   ].join("\n");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function toExcelHtml(rows: Record<string, unknown>[]) {
+  if (!rows.length) return "";
+  const columns = Object.keys(rows[0]);
+  const header = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const body = rows
+    .map((row) => (
+      `<tr>${columns.map((column) => `<td>${escapeHtml(serializeValue(row[column]))}</td>`).join("")}</tr>`
+    ))
+    .join("");
+
+  return `<!doctype html><html><head><meta charset="utf-8" /></head><body><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`;
 }
 
 function ToolbarButton({
@@ -350,7 +380,7 @@ function RowsTable({
 }) {
   const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
   return (
-    <div className={cn("w-full max-w-full rounded-md bg-background", fill ? "h-full" : "h-full overflow-auto")}>
+    <div className={cn("h-full w-full max-w-full overflow-auto rounded-md bg-background", fill && "min-w-0")}>
       <table className="min-w-max border-collapse text-left text-[12px]">
         <thead className="sticky top-0 z-10 bg-muted/25">
           <tr>
@@ -558,11 +588,37 @@ export function DataPreview({
   const [activeTab, setActiveTab] = useState<DataTab>("rows");
   const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
   const [busy, setBusy] = useState(false);
+  const querySplitRef = useRef<HTMLDivElement | null>(null);
+  const [querySplit, setQuerySplit] = useState(52);
+  const [queryResizing, setQueryResizing] = useState(false);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const startRow = totalRows === 0 ? 0 : page * pageSize + 1;
   const endRow = Math.min(totalRows, (page + 1) * pageSize);
 
   useEffect(() => setQuery(whereClause), [whereClause]);
+  useEffect(() => {
+    if (!queryResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = querySplitRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      const next = ((event.clientX - rect.left) / rect.width) * 100;
+      setQuerySplit(Math.min(72, Math.max(28, next)));
+    };
+
+    const stopResize = () => setQueryResizing(false);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+    };
+  }, [queryResizing]);
   useEffect(() => {
     setProject(rowOptions.project || "");
     setSort(rowOptions.sort || "");
@@ -608,6 +664,33 @@ export function DataPreview({
         format,
       });
       setExportMessage(saved ? t("data_preview.exported_rows", { count: exportRows.length, format: format.toUpperCase() }) : t("data_preview.export_canceled"));
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+      onExportStatusChange(null);
+    }
+  }
+
+  async function handleQueryResultExport(format: "csv" | "json" | "xls") {
+    if (!queryRows.length) return;
+    setExporting(true);
+    setExportError(null);
+    setExportMessage(null);
+    onExportStatusChange(t("data_preview.exporting_data"));
+    try {
+      const contents =
+        format === "json"
+          ? JSON.stringify(queryRows, null, 2)
+          : format === "xls"
+            ? toExcelHtml(queryRows)
+            : toCsv(queryRows);
+      const saved = await saveTextFile({
+        defaultPath: `${selectedTable}-query-result.${format}`,
+        contents,
+        format,
+      });
+      setExportMessage(saved ? t("data_preview.exported_rows", { count: queryRows.length, format: format === "xls" ? "EXCEL" : format.toUpperCase() }) : t("data_preview.export_canceled"));
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -790,8 +873,12 @@ export function DataPreview({
 
       <div className={cn("min-h-0 flex-1 p-3", (activeTab === "rows" && viewMode === "table") || activeTab === "query" ? "overflow-hidden" : "overflow-auto")}>
         {activeTab === "query" ? (
-          <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-            <div className="flex min-h-0 flex-col rounded-md bg-muted/25 p-3">
+          <div
+            ref={querySplitRef}
+            className={cn("grid h-full min-h-0", queryResizing && "select-none")}
+            style={{ gridTemplateColumns: `${querySplit}fr 8px ${100 - querySplit}fr` }}
+          >
+            <div className="flex min-h-0 min-w-0 flex-col rounded-md bg-muted/25 p-3">
               <SqlEditor
                 value={sql}
                 onChange={setSql}
@@ -800,17 +887,63 @@ export function DataPreview({
                 completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}
               />
               <div className="mt-3 flex justify-end">
-                <ToolbarButton primary disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
-                  {queryLoading ? t("data_preview.running") : t("data_preview.run_query")}
-                </ToolbarButton>
+                <IconButton title={t("data_preview.run_query")} disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
+                  {queryLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+                </IconButton>
               </div>
             </div>
-            <div className="flex min-h-0 flex-col rounded-md bg-muted/25 p-3">
-              <div className="mb-2 shrink-0 text-[12px] font-semibold text-foreground">{t("data_preview.result_preview")}</div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              className="group flex cursor-col-resize items-center justify-center"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setQueryResizing(true);
+              }}
+            >
+              <div className="h-16 w-px rounded-full bg-border/50 transition-colors group-hover:bg-primary/70" />
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-col rounded-md bg-muted/25 p-3">
+              <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
+                <div>
+                  <div className="text-[12px] font-semibold text-foreground">{t("data_preview.result_preview")}</div>
+                  {(exportError || exportMessage) && (
+                    <div className={cn("mt-1 text-[11px]", exportError ? "text-destructive" : "text-muted-foreground")}>
+                      {exportError || exportMessage}
+                    </div>
+                  )}
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title={t("data_preview.export_result")}
+                      disabled={exporting || !queryRows.length}
+                      className="inline-flex size-7 items-center justify-center rounded-md bg-muted/25 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {exporting ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-36">
+                    <DropdownMenuItem onClick={() => void handleQueryResultExport("csv")}>
+                      <Download size={13} />
+                      CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void handleQueryResultExport("xls")}>
+                      <FileSpreadsheet size={13} />
+                      Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => void handleQueryResultExport("json")}>
+                      <FileJson size={13} />
+                      JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               {queryError ? (
                 <p className="text-[12px] text-destructive">{queryError}</p>
               ) : queryRows.length ? (
-                <div className="min-h-0 flex-1 overflow-auto">
+                <div className="min-h-0 min-w-0 flex-1 overflow-auto">
                   <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly fill onEdit={setEditingRow} onDelete={handleDelete} />
                 </div>
               ) : (

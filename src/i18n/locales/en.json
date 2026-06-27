@@ -37,6 +37,33 @@
     "no_tables": "No tables",
     "empty": "Empty"
   },
+  "settings": {
+    "title": "Settings",
+    "description": "Local preferences for the desktop workspace.",
+    "database": "Database",
+    "search": "Search",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "autosaved_hint": "Saved settings apply to the next query.",
+    "back_workspace": "Back to workspace",
+    "query": {
+      "eyebrow": "Query execution",
+      "title": "Query settings",
+      "description": "Control how long Romeu SQL lets database operations run before stopping them. This applies to table reads, filters, SQL editor executions, exports, schema reads and manager queries.",
+      "timeout_title": "Maximum query timeout",
+      "timeout_desc": "Use a lower value to fail fast on slow SQL, or increase it for heavy reads and maintenance commands.",
+      "timeout_field": "Timeout",
+      "unit_seconds": "seconds",
+      "seconds": "{{count}}s",
+      "range": "Allowed range: {{min}}s to {{max}}s."
+    }
+  },
+  "updates": {
+    "check": "Check for updates",
+    "available": "Update available: {{version}}. Click to open releases.",
+    "current": "You are on the latest version: {{version}}.",
+    "error": "Could not check for updates."
+  },
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "Manage your database connections",
@@ -186,6 +213,10 @@
     "format": "Format",
     "exporting": "Exporting...",
     "export": "Export",
+    "export_result": "Export result",
+    "export_csv": "Export CSV",
+    "export_excel": "Export Excel",
+    "export_json": "Export JSON",
     "export_query_placeholder": "SELECT * FROM table_name LIMIT 1000",
     "exporting_data": "Exporting data",
     "exported_rows": "Exported {{count}} rows as {{format}}.",

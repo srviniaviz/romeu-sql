@@ -77,7 +77,25 @@ export function DatabaseExplorer({
   const [queryRows, setQueryRows] = useState<Record<string, unknown>[]>([]);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState("");
   const emptyRowsRecoveryKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then((version) => {
+        if (mounted) setAppVersion(version);
+      })
+      .catch(() => {
+        if (mounted) setAppVersion("");
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -473,15 +491,22 @@ export function DatabaseExplorer({
             </>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setIsConsoleOpen((open) => !open)}
-          className="inline-flex h-5 items-center gap-1.5 rounded px-2 font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {isConsoleOpen ? <X size={13} /> : <Terminal size={13} />}
-          Console
-          {history.length > 0 && <span className="rounded bg-muted px-1 text-[10px]">{history.length}</span>}
-        </button>
+        <div className="flex items-center gap-2">
+          {appVersion && (
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              v{appVersion}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsConsoleOpen((open) => !open)}
+            className="inline-flex h-5 items-center gap-1.5 rounded px-2 font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {isConsoleOpen ? <X size={13} /> : <Terminal size={13} />}
+            Console
+            {history.length > 0 && <span className="rounded bg-muted px-1 text-[10px]">{history.length}</span>}
+          </button>
+        </div>
       </footer>
 
       <CreateTableModal

@@ -6,6 +6,7 @@ import { CreateConnectionModal } from "./components/CreateConnection";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { ClusterManagerModal } from "./components/ClusterManagerModal";
 import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDialog";
+import { SettingsPage } from "./components/settings/SettingsPage";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
 import { warmStronghold } from "./domain/connections/secretsRepository";
 import { useConnections, Connection } from "./lib/useConnections";
@@ -13,6 +14,7 @@ import { useConnections, Connection } from "./lib/useConnections";
 const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
+type AppView = "workspace" | "settings";
 
 function clampSidebarWidth(value: number) {
   return Math.min(Math.max(value, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
@@ -37,6 +39,7 @@ function App() {
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
   const [managingConn, setManagingConn] = useState<Connection | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
+  const [activeView, setActiveView] = useState<AppView>("workspace");
 
   useEffect(() => {
     if (connections.some((connection) => connection.hasSavedPassword)) {
@@ -56,11 +59,13 @@ function App() {
   }, [connections, search]);
 
   const selectOverview = () => {
+    setActiveView("workspace");
     setSelectedConn(null);
     setSelectedTable(null);
   };
 
   const selectConnection = (conn: Connection) => {
+    setActiveView("workspace");
     if (conn.id !== selectedConn?.id || conn.database !== selectedConn?.database) {
       setSelectedTable(null);
     }
@@ -154,49 +159,57 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground font-sans text-[13px]">
-      <Titlebar />
+      <Titlebar onOpenSettings={() => setActiveView("settings")} />
 
       <main className="flex min-h-0 flex-1 overflow-hidden">
-        <AppSidebar
-          width={sidebarWidth}
-          connections={filteredConnections}
-          loading={loading}
-          selectedConn={selectedConn}
-          selectedTable={selectedTable}
-          search={search}
-          onSearchChange={setSearch}
-          onCreateConnection={openCreateConnection}
-          onRefresh={() => refresh()}
-          onSelectConnection={selectConnection}
-          onSelectTable={setSelectedTable}
-          onEdit={editConnection}
-          onDelete={requestDeleteConnection}
-          onDisconnect={disconnect}
-          onCreateTable={openCreateTable}
-          onCreateDatabase={openCreateDatabase}
-          onManageConnection={openClusterManager}
-        />
+        {activeView === "settings" ? (
+          <div className="min-w-0 flex-1">
+            <SettingsPage onBack={() => setActiveView("workspace")} />
+          </div>
+        ) : (
+          <>
+            <AppSidebar
+              width={sidebarWidth}
+              connections={filteredConnections}
+              loading={loading}
+              selectedConn={selectedConn}
+              selectedTable={selectedTable}
+              search={search}
+              onSearchChange={setSearch}
+              onCreateConnection={openCreateConnection}
+              onRefresh={() => refresh()}
+              onSelectConnection={selectConnection}
+              onSelectTable={setSelectedTable}
+              onEdit={editConnection}
+              onDelete={requestDeleteConnection}
+              onDisconnect={disconnect}
+              onCreateTable={openCreateTable}
+              onCreateDatabase={openCreateDatabase}
+              onManageConnection={openClusterManager}
+            />
 
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t("shell.resize_sidebar")}
-          className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-muted/25 lg:flex"
-          onPointerDown={startSidebarResize}
-        >
-          <div className="h-full w-px bg-border/40 transition-colors group-hover:bg-primary/60" />
-        </div>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("shell.resize_sidebar")}
+              className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-muted/25 lg:flex"
+              onPointerDown={startSidebarResize}
+            >
+              <div className="h-full w-px bg-border/40 transition-colors group-hover:bg-primary/60" />
+            </div>
 
-        <WorkspacePanel
-          selectedConn={selectedConn}
-          selectedTable={selectedTable}
-          openCreateTable={shouldOpenCreateModal}
-          openCreateDatabase={shouldOpenCreateDbModal}
-          onCreateConnection={openCreateConnection}
-          onDisconnect={() => disconnect()}
-          onTableSelected={setSelectedTable}
-          onModalOpened={clearModalOpenFlags}
-        />
+            <WorkspacePanel
+              selectedConn={selectedConn}
+              selectedTable={selectedTable}
+              openCreateTable={shouldOpenCreateModal}
+              openCreateDatabase={shouldOpenCreateDbModal}
+              onCreateConnection={openCreateConnection}
+              onDisconnect={() => disconnect()}
+              onTableSelected={setSelectedTable}
+              onModalOpened={clearModalOpenFlags}
+            />
+          </>
+        )}
       </main>
 
       <CreateConnectionModal

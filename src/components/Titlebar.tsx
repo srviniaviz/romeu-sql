@@ -1,17 +1,46 @@
 import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "react-i18next";
-import { Minus, Moon, Square, Sun, X } from "lucide-react";
+import { DownloadCloud, Loader2, Minus, Moon, Settings, Square, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import appIcon from "@/assets/icon.png";
+import { checkForUpdates, type UpdateCheckResult } from "@/lib/updates";
+import { useState } from "react";
 
-export function Titlebar() {
+interface TitlebarProps {
+  onOpenSettings: () => void;
+}
+
+type UpdateStatus = "idle" | "checking" | "available" | "current" | "error";
+
+export function Titlebar({ onOpenSettings }: TitlebarProps) {
   const { theme, toggleTheme } = useTheme();
   const { i18n, t } = useTranslation();
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
 
   const toggleLanguage = () => {
     const nextLang = i18n.language.startsWith('en') ? 'pt' : 'en';
     i18n.changeLanguage(nextLang);
+  };
+
+  const checkUpdates = async () => {
+    if (updateStatus === "checking") return;
+    if (updateStatus === "available" && updateResult?.releaseUrl) {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(updateResult.releaseUrl);
+      return;
+    }
+
+    setUpdateStatus("checking");
+    try {
+      const result = await checkForUpdates();
+      setUpdateResult(result);
+      setUpdateStatus(result.hasUpdate ? "available" : "current");
+    } catch {
+      setUpdateResult(null);
+      setUpdateStatus("error");
+    }
   };
 
   const minimize = async () => {
@@ -42,6 +71,46 @@ export function Titlebar() {
       </div>
 
       <div className="flex h-full items-center px-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpenSettings}
+          className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title={t("settings.title")}
+        >
+          <Settings size={14} strokeWidth={2.4} />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void checkUpdates()}
+          className="relative h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title={
+            updateStatus === "available" && updateResult
+              ? t("updates.available", { version: updateResult.latestVersion })
+              : updateStatus === "current" && updateResult
+                ? t("updates.current", { version: updateResult.currentVersion })
+                : updateStatus === "error"
+                  ? t("updates.error")
+                  : t("updates.check")
+          }
+        >
+          {updateStatus === "checking" ? (
+            <Loader2 size={14} className="animate-spin" strokeWidth={2.4} />
+          ) : (
+            <DownloadCloud size={14} strokeWidth={2.4} />
+          )}
+          {updateStatus === "available" && (
+            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
+          )}
+          {updateStatus === "error" && (
+            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" />
+          )}
+        </Button>
+
+        <Separator orientation="vertical" className="h-4 mx-1.5" />
+
         <Button 
           variant="ghost" 
           size="sm"

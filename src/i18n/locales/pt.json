@@ -37,6 +37,33 @@
     "no_tables": "Nenhuma tabela",
     "empty": "Vazio"
   },
+  "settings": {
+    "title": "Configurações",
+    "description": "Preferências locais do workspace desktop.",
+    "database": "Banco de dados",
+    "search": "Busca",
+    "saving": "Salvando...",
+    "saved": "Salvo",
+    "autosaved_hint": "A configuração vale para a próxima consulta.",
+    "back_workspace": "Voltar ao workspace",
+    "query": {
+      "eyebrow": "Execução de consultas",
+      "title": "Configurações de query",
+      "description": "Controle por quanto tempo o Romeu SQL deixa operações no banco rodarem antes de interromper. Isso vale para leitura de tabelas, filtros, editor SQL, exports, leitura de schema e queries do gerenciador.",
+      "timeout_title": "Timeout máximo de consulta",
+      "timeout_desc": "Use um valor menor para falhar rápido em SQL lento, ou aumente para leituras pesadas e comandos de manutenção.",
+      "timeout_field": "Timeout",
+      "unit_seconds": "segundos",
+      "seconds": "{{count}}s",
+      "range": "Intervalo permitido: {{min}}s até {{max}}s."
+    }
+  },
+  "updates": {
+    "check": "Verificar atualizações",
+    "available": "Atualização disponível: {{version}}. Clique para abrir os releases.",
+    "current": "Você está na versão mais recente: {{version}}.",
+    "error": "Não foi possível verificar atualizações."
+  },
   "dashboard": {
     "title": "Painel",
     "subtitle": "Gerenciando suas conexões de banco de dados",
@@ -186,6 +213,10 @@
     "format": "Formato",
     "exporting": "Exportando...",
     "export": "Exportar",
+    "export_result": "Exportar resultado",
+    "export_csv": "Exportar CSV",
+    "export_excel": "Exportar Excel",
+    "export_json": "Exportar JSON",
     "export_query_placeholder": "SELECT * FROM table_name LIMIT 1000",
     "exporting_data": "Exportando dados",
     "exported_rows": "{{count}} linhas exportadas como {{format}}.",

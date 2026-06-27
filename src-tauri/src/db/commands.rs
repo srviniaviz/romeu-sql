@@ -6,15 +6,38 @@ use super::types::{
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::time::Instant;
+use std::future::Future;
+use std::time::{Duration, Instant};
 use tauri::State;
+use tokio::time::timeout;
 
 type DbResult<T> = Result<T, String>;
+const DEFAULT_QUERY_TIMEOUT_MS: u64 = 60_000;
+const MIN_QUERY_TIMEOUT_MS: u64 = 1_000;
+const MAX_QUERY_TIMEOUT_MS: u64 = 600_000;
+
+fn normalized_timeout_ms(query_timeout_ms: Option<u64>) -> u64 {
+    query_timeout_ms
+        .unwrap_or(DEFAULT_QUERY_TIMEOUT_MS)
+        .clamp(MIN_QUERY_TIMEOUT_MS, MAX_QUERY_TIMEOUT_MS)
+}
+
+async fn with_query_timeout<T, F>(query_timeout_ms: Option<u64>, future: F) -> DbResult<T>
+where
+    F: Future<Output = DbResult<T>>,
+{
+    let ms = normalized_timeout_ms(query_timeout_ms);
+    match timeout(Duration::from_millis(ms), future).await {
+        Ok(result) => result,
+        Err(_) => Err(format!("Query timed out after {ms} ms")),
+    }
+}
 
 #[tauri::command]
 pub async fn db_test_connection(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<()> {
     let sql = match connection.engine {
         super::types::DbEngine::Postgres | super::types::DbEngine::Mysql => "SELECT 1 as ok",
@@ -23,279 +46,332 @@ pub async fn db_test_connection(
             return Err("SQL Server is not supported by the Rust database backend yet.".into())
         }
     };
-    state.select(&connection, sql).await?;
-    Ok(())
+    with_query_timeout(query_timeout_ms, async {
+        state.select(&connection, sql).await?;
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_databases(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<Vec<String>> {
-    let rows = state
-        .select(&connection, &dialect::list_databases(&connection))
-        .await?;
-    Ok(names_from(
-        &rows,
-        &["name", "datname", "Database"],
-        &connection.database,
-    ))
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_databases(&connection))
+            .await?;
+        Ok(names_from(
+            &rows,
+            &["name", "datname", "Database"],
+            &connection.database,
+        ))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_tables(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<Vec<String>> {
-    let rows = state
-        .select(&connection, &dialect::list_tables(&connection))
-        .await?;
-    Ok(names_from(&rows, &["name", "table_name", "TABLE_NAME"], ""))
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_tables(&connection))
+            .await?;
+        Ok(names_from(&rows, &["name", "table_name", "TABLE_NAME"], ""))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_table_stats(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<Vec<TableInfo>> {
-    let rows = state
-        .select(&connection, &dialect::list_table_stats(&connection))
-        .await?;
-    Ok(rows.iter().map(normalize_table_stats).collect())
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_table_stats(&connection))
+            .await?;
+        Ok(rows.iter().map(normalize_table_stats).collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_benchmark_analyze(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<BenchmarkAnalyzeResult> {
-    let started = Instant::now();
-    let stats_rows = state
-        .select(&connection, &dialect::list_table_stats(&connection))
-        .await?;
-    let stats = stats_rows
-        .iter()
-        .map(normalize_table_stats)
-        .collect::<Vec<_>>();
-    let mut tables = Vec::new();
+    with_query_timeout(query_timeout_ms, async {
+        let started = Instant::now();
+        let stats_rows = state
+            .select(&connection, &dialect::list_table_stats(&connection))
+            .await?;
+        let stats = stats_rows
+            .iter()
+            .map(normalize_table_stats)
+            .collect::<Vec<_>>();
+        let mut tables = Vec::new();
 
-    for table in stats
-        .iter()
-        .filter(|table| !table.table_type.contains("view"))
-    {
-        let table_started = Instant::now();
-        let mut notes = Vec::new();
-
-        let index_started = Instant::now();
-        let index_count = match state
-            .select(
-                &connection,
-                &dialect::list_indexes(&connection, &table.name),
-            )
-            .await
+        for table in stats
+            .iter()
+            .filter(|table| !table.table_type.contains("view"))
         {
-            Ok(rows) => rows.len() as i64,
-            Err(error) => {
-                notes.push(format!("Index scan failed: {error}"));
-                0
-            }
-        };
-        let index_ms = index_started.elapsed().as_secs_f64() * 1000.0;
+            let table_started = Instant::now();
+            let mut notes = Vec::new();
 
-        let count_started = Instant::now();
-        let count_ms = match dialect::count_rows(&connection, &table.name, None) {
-            Ok(sql) => match state.select(&connection, &sql).await {
-                Ok(_) => count_started.elapsed().as_secs_f64() * 1000.0,
+            let index_started = Instant::now();
+            let index_count = match state
+                .select(
+                    &connection,
+                    &dialect::list_indexes(&connection, &table.name),
+                )
+                .await
+            {
+                Ok(rows) => rows.len() as i64,
                 Err(error) => {
-                    notes.push(format!("Count failed: {error}"));
+                    notes.push(format!("Index scan failed: {error}"));
+                    0
+                }
+            };
+            let index_ms = index_started.elapsed().as_secs_f64() * 1000.0;
+
+            let count_started = Instant::now();
+            let count_ms = match dialect::count_rows(&connection, &table.name, None) {
+                Ok(sql) => match state.select(&connection, &sql).await {
+                    Ok(_) => count_started.elapsed().as_secs_f64() * 1000.0,
+                    Err(error) => {
+                        notes.push(format!("Count failed: {error}"));
+                        0.0
+                    }
+                },
+                Err(error) => {
+                    notes.push(format!("Count SQL failed: {error}"));
                     0.0
                 }
-            },
-            Err(error) => {
-                notes.push(format!("Count SQL failed: {error}"));
-                0.0
-            }
-        };
+            };
 
-        let sample_started = Instant::now();
-        let sample_ms = match dialect::select_rows(&connection, &table.name, 25, 0, None, None) {
-            Ok(sql) => match state.select(&connection, &sql).await {
-                Ok(_) => sample_started.elapsed().as_secs_f64() * 1000.0,
+            let sample_started = Instant::now();
+            let sample_ms = match dialect::select_rows(&connection, &table.name, 25, 0, None, None)
+            {
+                Ok(sql) => match state.select(&connection, &sql).await {
+                    Ok(_) => sample_started.elapsed().as_secs_f64() * 1000.0,
+                    Err(error) => {
+                        notes.push(format!("Sample failed: {error}"));
+                        0.0
+                    }
+                },
                 Err(error) => {
-                    notes.push(format!("Sample failed: {error}"));
+                    notes.push(format!("Sample SQL failed: {error}"));
                     0.0
                 }
-            },
-            Err(error) => {
-                notes.push(format!("Sample SQL failed: {error}"));
-                0.0
+            };
+
+            if index_count == 0 && table.estimated_rows.unwrap_or_default() > 10_000 {
+                notes.push("Large table without visible indexes".into());
             }
-        };
+            if count_ms > 750.0 {
+                notes.push("COUNT scan is slow".into());
+            }
+            if sample_ms > 250.0 {
+                notes.push("Sample read is slow".into());
+            }
+            if index_ms > 250.0 {
+                notes.push("Index metadata scan is slow".into());
+            }
 
-        if index_count == 0 && table.estimated_rows.unwrap_or_default() > 10_000 {
-            notes.push("Large table without visible indexes".into());
-        }
-        if count_ms > 750.0 {
-            notes.push("COUNT scan is slow".into());
-        }
-        if sample_ms > 250.0 {
-            notes.push("Sample read is slow".into());
-        }
-        if index_ms > 250.0 {
-            notes.push("Index metadata scan is slow".into());
+            let score = table_score(table.estimated_rows, index_count, count_ms, sample_ms);
+            tables.push(BenchmarkTableResult {
+                table_name: table.name.clone(),
+                estimated_rows: table.estimated_rows,
+                total_bytes: table.total_bytes,
+                index_count,
+                count_ms,
+                sample_ms,
+                total_ms: table_started.elapsed().as_secs_f64() * 1000.0,
+                score,
+                grade: score_grade(score),
+                notes,
+            });
         }
 
-        let score = table_score(table.estimated_rows, index_count, count_ms, sample_ms);
-        tables.push(BenchmarkTableResult {
-            table_name: table.name.clone(),
-            estimated_rows: table.estimated_rows,
-            total_bytes: table.total_bytes,
-            index_count,
-            count_ms,
-            sample_ms,
-            total_ms: table_started.elapsed().as_secs_f64() * 1000.0,
-            score,
-            grade: score_grade(score),
-            notes,
+        tables.sort_by(|left, right| {
+            left.score
+                .cmp(&right.score)
+                .then_with(|| right.total_ms.total_cmp(&left.total_ms))
         });
-    }
 
-    tables.sort_by(|left, right| {
-        left.score
-            .cmp(&right.score)
-            .then_with(|| right.total_ms.total_cmp(&left.total_ms))
-    });
+        let average_score = if tables.is_empty() {
+            0
+        } else {
+            tables.iter().map(|table| table.score).sum::<i64>() / tables.len() as i64
+        };
+        let slowest_table = tables
+            .iter()
+            .max_by(|left, right| left.total_ms.total_cmp(&right.total_ms))
+            .map(|table| table.table_name.clone());
 
-    let average_score = if tables.is_empty() {
-        0
-    } else {
-        tables.iter().map(|table| table.score).sum::<i64>() / tables.len() as i64
-    };
-    let slowest_table = tables
-        .iter()
-        .max_by(|left, right| left.total_ms.total_cmp(&right.total_ms))
-        .map(|table| table.table_name.clone());
-
-    Ok(BenchmarkAnalyzeResult {
-        database: connection.database,
-        table_count: tables.len() as i64,
-        average_score,
-        slowest_table,
-        total_ms: started.elapsed().as_secs_f64() * 1000.0,
-        tables,
+        Ok(BenchmarkAnalyzeResult {
+            database: connection.database,
+            table_count: tables.len() as i64,
+            average_score,
+            slowest_table,
+            total_ms: started.elapsed().as_secs_f64() * 1000.0,
+            tables,
+        })
     })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_cluster_users(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<Vec<ClusterUserInfo>> {
-    let rows = state
-        .select(&connection, &dialect::list_cluster_users(&connection))
-        .await?;
-    Ok(rows.iter().map(normalize_cluster_user).collect())
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_cluster_users(&connection))
+            .await?;
+        Ok(rows.iter().map(normalize_cluster_user).collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_cluster_permissions(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
 ) -> DbResult<Vec<ClusterPermissionInfo>> {
-    let rows = state
-        .select(&connection, &dialect::list_cluster_permissions(&connection))
-        .await?;
-    Ok(rows.iter().map(normalize_cluster_permission).collect())
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_cluster_permissions(&connection))
+            .await?;
+        Ok(rows.iter().map(normalize_cluster_permission).collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_select_rows_page(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     limit: i64,
     offset: i64,
     where_clause: Option<String>,
     options: Option<RowQueryOptions>,
 ) -> DbResult<Vec<JsonRow>> {
-    let sql = dialect::select_rows(
-        &connection,
-        &table_name,
-        limit,
-        offset,
-        where_clause.as_deref(),
-        options.as_ref(),
-    )?;
-    state.select(&connection, &sql).await
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::select_rows(
+            &connection,
+            &table_name,
+            limit,
+            offset,
+            where_clause.as_deref(),
+            options.as_ref(),
+        )?;
+        state.select(&connection, &sql).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_count_rows(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     where_clause: Option<String>,
 ) -> DbResult<i64> {
-    let sql = dialect::count_rows(&connection, &table_name, where_clause.as_deref())?;
-    let rows = state.select(&connection, &sql).await?;
-    Ok(rows.first().and_then(first_number).unwrap_or(0))
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::count_rows(&connection, &table_name, where_clause.as_deref())?;
+        let rows = state.select(&connection, &sql).await?;
+        Ok(rows.first().and_then(first_number).unwrap_or(0))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_explain_rows(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     where_clause: Option<String>,
 ) -> DbResult<Vec<JsonRow>> {
-    let sql = dialect::explain_rows(&connection, &table_name, where_clause.as_deref())?;
-    state.select(&connection, &sql).await
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::explain_rows(&connection, &table_name, where_clause.as_deref())?;
+        state.select(&connection, &sql).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_columns(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
 ) -> DbResult<Vec<ColumnInfo>> {
-    let rows = state
-        .select(
-            &connection,
-            &dialect::list_columns(&connection, &table_name),
-        )
-        .await?;
-    Ok(rows.iter().map(normalize_column).collect())
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(
+                &connection,
+                &dialect::list_columns(&connection, &table_name),
+            )
+            .await?;
+        Ok(rows.iter().map(normalize_column).collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_list_indexes(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
 ) -> DbResult<Vec<IndexInfo>> {
-    let rows = state
-        .select(
-            &connection,
-            &dialect::list_indexes(&connection, &table_name),
-        )
-        .await?;
-    Ok(rows.iter().map(normalize_index).collect())
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(
+                &connection,
+                &dialect::list_indexes(&connection, &table_name),
+            )
+            .await?;
+        Ok(rows.iter().map(normalize_index).collect())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_execute_sql(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     query: String,
 ) -> DbResult<String> {
-    state.execute(&connection, &query, &[]).await?;
-    Ok(query)
+    with_query_timeout(query_timeout_ms, async {
+        state.execute(&connection, &query, &[]).await?;
+        Ok(query)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_select_query(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     query: String,
 ) -> DbResult<Vec<JsonRow>> {
     let trimmed = query.trim();
@@ -303,73 +379,96 @@ pub async fn db_select_query(
     if !lower.starts_with("select ") && !lower.starts_with("with ") {
         return Err("Query tab only runs SELECT/WITH statements.".into());
     }
-    state.select(&connection, trimmed).await
+    with_query_timeout(query_timeout_ms, async {
+        state.select(&connection, trimmed).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_insert_row(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     data: BTreeMap<String, Value>,
 ) -> DbResult<String> {
-    let sql = dialect::insert_row(&connection, &table_name, &data);
-    let values = data.values().cloned().collect::<Vec<_>>();
-    state.execute(&connection, &sql, &values).await?;
-    Ok(sql)
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::insert_row(&connection, &table_name, &data);
+        let values = data.values().cloned().collect::<Vec<_>>();
+        state.execute(&connection, &sql, &values).await?;
+        Ok(sql)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_update_row(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     original: BTreeMap<String, Value>,
     next: BTreeMap<String, Value>,
 ) -> DbResult<String> {
-    let sql = dialect::update_row(&connection, &table_name, &original, &next);
-    let mut values = next.values().cloned().collect::<Vec<_>>();
-    values.extend(original.values().filter(|value| !value.is_null()).cloned());
-    state.execute(&connection, &sql, &values).await?;
-    Ok(sql)
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::update_row(&connection, &table_name, &original, &next);
+        let mut values = next.values().cloned().collect::<Vec<_>>();
+        values.extend(original.values().filter(|value| !value.is_null()).cloned());
+        state.execute(&connection, &sql, &values).await?;
+        Ok(sql)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_delete_row(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     table_name: String,
     row: BTreeMap<String, Value>,
 ) -> DbResult<String> {
-    let sql = dialect::delete_row(&connection, &table_name, &row);
-    let values = row
-        .values()
-        .filter(|value| !value.is_null())
-        .cloned()
-        .collect::<Vec<_>>();
-    state.execute(&connection, &sql, &values).await?;
-    Ok(sql)
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::delete_row(&connection, &table_name, &row);
+        let values = row
+            .values()
+            .filter(|value| !value.is_null())
+            .cloned()
+            .collect::<Vec<_>>();
+        state.execute(&connection, &sql, &values).await?;
+        Ok(sql)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_create_table(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     query: String,
 ) -> DbResult<()> {
-    state.execute(&connection, &query, &[]).await?;
-    Ok(())
+    with_query_timeout(query_timeout_ms, async {
+        state.execute(&connection, &query, &[]).await?;
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn db_create_database(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
     name: String,
 ) -> DbResult<()> {
-    let sql = dialect::create_database(&connection, &name);
-    state.execute(&connection, &sql, &[]).await?;
-    Ok(())
+    with_query_timeout(query_timeout_ms, async {
+        let sql = dialect::create_database(&connection, &name);
+        state.execute(&connection, &sql, &[]).await?;
+        Ok(())
+    })
+    .await
 }
 
 fn names_from(rows: &[JsonRow], keys: &[&str], fallback: &str) -> Vec<String> {

@@ -14,6 +14,14 @@ vi.mock("../connections/repository", () => ({
   })),
 }));
 
+vi.mock("../settings/repository", () => ({
+  loadSettings: vi.fn(async () => ({
+    query: {
+      timeoutMs: 60000,
+    },
+  })),
+}));
+
 const connection: Connection = {
   id: "test-connection",
   name: "test",
@@ -45,6 +53,7 @@ describe("database service metadata cache", () => {
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("db_list_tables", expect.objectContaining({
       connection: expect.objectContaining({ id: connection.id, password: "postgres" }),
+      queryTimeoutMs: 60000,
     }));
   });
 
