@@ -143,7 +143,6 @@ The CI workflow runs:
 - Rust unit tests.
 - Rust `cargo check`.
 - PostgreSQL-backed integration tests.
-- Tauri debug bundle smoke build.
 
 ## Database Support
 

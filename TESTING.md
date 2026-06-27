@@ -33,6 +33,5 @@ cargo test --manifest-path src-tauri/Cargo.toml postgres_pool -- --nocapture
 - `frontend`: Vitest, TypeScript, Vite production build.
 - `rust`: Rust format, unit tests, `cargo check`.
 - `postgres-integration`: real Postgres CRUD through the Rust pool.
-- `tauri-bundle-smoke`: debug Tauri bundle build on Ubuntu.
 
 The desktop UI itself is not driven by browser-only tests because native Tauri behavior must be validated in the Tauri runtime. Add Tauri/WebDriver E2E later when the core flows stabilize.
