@@ -63,9 +63,23 @@ function replaceTomlVersion(contents, version) {
   return contents.replace(/^version = ".*"$/m, `version = "${version}"`);
 }
 
+function replaceCargoLockVersion(contents, version) {
+  const nextContents = contents.replace(
+    /(\[\[package\]\]\r?\nname = "tauri-app"\r?\nversion = ")[^"]+(")/,
+    `$1${version}$2`
+  );
+
+  if (nextContents === contents) {
+    throw new Error("Could not update tauri-app version in src-tauri/Cargo.lock.");
+  }
+
+  return nextContents;
+}
+
 const packagePath = path.join(root, "package.json");
 const packageLockPath = path.join(root, "package-lock.json");
 const cargoTomlPath = path.join(root, "src-tauri", "Cargo.toml");
+const cargoLockPath = path.join(root, "src-tauri", "Cargo.lock");
 const tauriConfigPath = path.join(root, "src-tauri", "tauri.conf.json");
 
 const packageJson = readJson(packagePath);
@@ -84,6 +98,10 @@ if (fs.existsSync(packageLockPath)) {
 }
 
 fs.writeFileSync(cargoTomlPath, replaceTomlVersion(fs.readFileSync(cargoTomlPath, "utf8"), next));
+
+if (fs.existsSync(cargoLockPath)) {
+  fs.writeFileSync(cargoLockPath, replaceCargoLockVersion(fs.readFileSync(cargoLockPath, "utf8"), next));
+}
 
 const tauriConfig = readJson(tauriConfigPath);
 tauriConfig.version = next;
