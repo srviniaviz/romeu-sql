@@ -707,173 +707,182 @@ function UserEditorDialog({
     update({ permissions: next, permissionPreset: "custom" });
   };
 
+  const presetOptions = [
+    { value: "viewer" as const, label: t("cluster.viewer"), description: t("cluster.viewer_desc") },
+    { value: "editor" as const, label: t("cluster.editor"), description: t("cluster.editor_desc") },
+    { value: "admin" as const, label: t("cluster.admin"), description: t("cluster.admin_desc") },
+  ];
+
   return (
     <Dialog open onOpenChange={(nextOpen) => {
       if (!nextOpen) onClose();
     }}>
-      <DialogContent className="flex max-h-[86vh] w-[640px] flex-col gap-0 overflow-hidden rounded-lg border-border/50 p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/30 px-5 py-4">
-          <DialogTitle className="text-[16px] font-semibold">
-            {isCreate ? t("cluster.new_cluster_user") : t("cluster.edit_user", { name: state.originalName })}
-          </DialogTitle>
-          <DialogDescription className="text-[12px]">
-            {connection.name} · {connection.type}
-          </DialogDescription>
+      <DialogContent className="flex max-h-[86vh] w-[calc(100vw-64px)] max-w-none flex-col gap-0 overflow-hidden rounded-xl border-border/60 bg-background p-0 shadow-2xl sm:max-w-[880px]">
+        <DialogHeader className="border-b border-border/25 px-6 py-5 pr-14">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Users size={17} />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-[17px] font-semibold tracking-tight">
+                {isCreate ? t("cluster.new_cluster_user") : t("cluster.edit_user", { name: state.originalName })}
+              </DialogTitle>
+              <DialogDescription className="mt-1 truncate text-[12px]">
+                {connection.name} · {connection.database} · {connection.type}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 custom-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 custom-scrollbar">
           {error && (
-            <div className="rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+            <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>{t("cluster.user_name")}</Label>
-              <Input
-                value={state.username}
-                disabled={!isCreate}
-                onChange={(event) => update({ username: event.target.value })}
-                placeholder="analyst"
-                className="h-9 rounded-md border-border/60 text-[13px]"
-              />
-            </div>
-
-            {supportsHost ? (
-              <div className="space-y-2">
-                <Label>{t("cluster.host")}</Label>
-                <Input
-                  value={state.host}
-                  disabled={!isCreate}
-                  onChange={(event) => update({ host: event.target.value })}
-                  placeholder="%"
-                  className="h-9 rounded-md border-border/60 text-[13px]"
-                />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>{t("cluster.role_type")}</Label>
-                <Input
-                  value={state.roleInfo}
-                  disabled
-                  className="h-9 rounded-md border-border/60 text-[13px]"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>{isCreate ? t("cluster.password") : t("cluster.new_password")}</Label>
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                value={state.password}
-                onChange={(event) => update({ password: event.target.value })}
-                placeholder={isCreate ? t("cluster.set_initial_password") : t("cluster.keep_password")}
-                className="h-9 rounded-md border-border/60 font-mono text-[13px]"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-md px-3 text-[12px]"
-                onClick={() => update({ password: generateSecurePassword() })}
-              >
-                <Shuffle size={13} />
-                {t("cluster.generate")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{t("cluster.permission_preset")}</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { value: "viewer" as const, label: t("cluster.viewer"), description: t("cluster.viewer_desc") },
-                { value: "editor" as const, label: t("cluster.editor"), description: t("cluster.editor_desc") },
-                { value: "admin" as const, label: t("cluster.admin"), description: t("cluster.admin_desc") },
-              ].map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  onClick={() => applyPreset(preset.value)}
-                  className={cn(
-                    "rounded-lg bg-muted/25 p-3 text-left transition-colors hover:bg-muted/40",
-                    state.permissionPreset === preset.value && "bg-primary/10 text-primary ring-1 ring-primary/30"
-                  )}
-                >
-                  <span className="block text-[12px] font-semibold">{preset.label}</span>
-                  <span className="mt-1 block text-[11px] text-muted-foreground">{preset.description}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-start gap-3 rounded-lg bg-muted/25 p-3 text-[12px]">
-              <Checkbox
-                checked={state.canLogin}
-                disabled={!supportsLoginToggle}
-                onCheckedChange={(checked) => update({ canLogin: checked === true })}
-              />
-              <span className="space-y-1">
-                <span className="block font-medium text-foreground">{t("cluster.can_login")}</span>
-                <span className="block text-muted-foreground">
-                  {supportsLoginToggle ? t("cluster.can_login_desc") : t("cluster.login_auto_desc")}
-                </span>
-              </span>
-            </label>
-
-            <label className="flex items-start gap-3 rounded-lg bg-muted/25 p-3 text-[12px]">
-              <Checkbox
-                checked={state.isAdmin}
-                disabled={!supportsAdminToggle}
-                onCheckedChange={(checked) => update({ isAdmin: checked === true })}
-              />
-              <span className="space-y-1">
-                <span className="block font-medium text-foreground">{t("cluster.admin")}</span>
-                <span className="block text-muted-foreground">
-                  {connection.type === "postgres" && t("cluster.admin_pg_desc")}
-                  {connection.type === "mysql" && t("cluster.admin_mysql_desc")}
-                  {connection.type === "sqlserver" && t("cluster.admin_sqlserver_desc")}
-                  {connection.type === "sqlite" && t("cluster.admin_sqlite_desc")}
-                </span>
-              </span>
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{t("cluster.specific_permissions")}</Label>
-            <div className="grid max-h-48 gap-2 overflow-auto rounded-lg bg-muted/20 p-2 sm:grid-cols-2">
-              {PERMISSION_OPTIONS.map((permission) => (
-                <label key={permission.value} className="flex items-start gap-3 rounded-md p-2 text-[12px] hover:bg-background/70">
-                  <Checkbox
-                    checked={state.permissions.includes(permission.value)}
-                    onCheckedChange={(checked) => togglePermission(permission.value, checked === true)}
+          <div className="grid gap-6 lg:grid-cols-[minmax(320px,380px)_1fr]">
+            <section className="space-y-5">
+              <div className="grid grid-cols-[1fr_150px] gap-3">
+                <div className="space-y-2">
+                  <Label>{t("cluster.user_name")}</Label>
+                  <Input
+                    value={state.username}
+                    disabled={!isCreate}
+                    onChange={(event) => update({ username: event.target.value })}
+                    placeholder="analyst"
+                    className="h-9 rounded-md border-border/50 bg-muted/20 text-[13px] shadow-none"
                   />
-                  <span className="min-w-0">
-                    <span className="block font-medium text-foreground">{t(`cluster.permission_labels.${permission.labelKey}`)}</span>
-                    <span className="block text-[11px] text-muted-foreground">{t(`cluster.permission_descriptions.${permission.descriptionKey}`)}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                </div>
+
+                {supportsHost ? (
+                  <div className="space-y-2">
+                    <Label>{t("cluster.host")}</Label>
+                    <Input
+                      value={state.host}
+                      disabled={!isCreate}
+                      onChange={(event) => update({ host: event.target.value })}
+                      placeholder="%"
+                      className="h-9 rounded-md border-border/50 bg-muted/20 text-[13px] shadow-none"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>{t("cluster.role_type")}</Label>
+                    <Input
+                      value={state.roleInfo}
+                      disabled
+                      className="h-9 rounded-md border-border/40 bg-muted/30 text-[13px] shadow-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>{isCreate ? t("cluster.password") : t("cluster.new_password")}</Label>
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <Input
+                    type="text"
+                    value={state.password}
+                    onChange={(event) => update({ password: event.target.value })}
+                    placeholder={isCreate ? t("cluster.set_initial_password") : t("cluster.keep_password")}
+                    className="h-9 rounded-md border-border/50 bg-muted/20 font-mono text-[13px] shadow-none"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-md border-border/50 bg-muted/10 px-3 text-[12px] shadow-none hover:bg-muted/35"
+                    onClick={() => update({ password: generateSecurePassword() })}
+                  >
+                    <Shuffle size={13} />
+                    {t("cluster.generate")}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("cluster.permission_preset")}</Label>
+                <div className="grid grid-cols-3 rounded-lg bg-muted/25 p-1">
+                  {presetOptions.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => applyPreset(preset.value)}
+                      className={cn(
+                        "rounded-md px-3 py-2 text-left transition-colors hover:bg-background/70",
+                        state.permissionPreset === preset.value && "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                      )}
+                    >
+                      <span className="block text-[12px] font-medium">{preset.label}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{preset.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="divide-y divide-border/25 rounded-lg bg-muted/15">
+                <PermissionSwitch
+                  checked={state.canLogin}
+                  disabled={!supportsLoginToggle}
+                  title={t("cluster.can_login")}
+                  description={supportsLoginToggle ? t("cluster.can_login_desc") : t("cluster.login_auto_desc")}
+                  onCheckedChange={(checked) => update({ canLogin: checked })}
+                />
+                <PermissionSwitch
+                  checked={state.isAdmin}
+                  disabled={!supportsAdminToggle}
+                  title={t("cluster.admin")}
+                  description={
+                    connection.type === "postgres"
+                      ? t("cluster.admin_pg_desc")
+                      : connection.type === "mysql"
+                        ? t("cluster.admin_mysql_desc")
+                        : connection.type === "sqlserver"
+                          ? t("cluster.admin_sqlserver_desc")
+                          : t("cluster.admin_sqlite_desc")
+                  }
+                  onCheckedChange={(checked) => update({ isAdmin: checked })}
+                />
+              </div>
+            </section>
+
+            <section className="min-w-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>{t("cluster.specific_permissions")}</Label>
+                <span className="text-[11px] text-muted-foreground">{state.permissions.length}/{PERMISSION_OPTIONS.length}</span>
+              </div>
+              <div className="grid max-h-[420px] gap-x-5 overflow-auto rounded-lg bg-muted/15 p-3 sm:grid-cols-2 custom-scrollbar">
+                {PERMISSION_OPTIONS.map((permission) => (
+                  <label key={permission.value} className="flex items-start gap-2.5 rounded-md px-2 py-2 text-[12px] hover:bg-background/60">
+                    <Checkbox
+                      checked={state.permissions.includes(permission.value)}
+                      onCheckedChange={(checked) => togglePermission(permission.value, checked === true)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">{t(`cluster.permission_labels.${permission.labelKey}`)}</span>
+                      <span className="block text-[11px] text-muted-foreground">{t(`cluster.permission_descriptions.${permission.descriptionKey}`)}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {!isCreate && connection.type === "mysql" && !state.password && !state.isAdmin && (
+                <div className="rounded-md bg-muted/35 px-3 py-2 text-[12px] text-muted-foreground">
+                  For MySQL, saving without a password or admin change may only revoke broad privileges.
+                </div>
+              )}
+            </section>
           </div>
 
-          {!isCreate && connection.type === "mysql" && !state.password && !state.isAdmin && (
-            <div className="rounded-md bg-muted/35 px-3 py-2 text-[12px] text-muted-foreground">
-              For MySQL, saving without a password or admin change may only revoke broad privileges.
-            </div>
-          )}
         </div>
 
-        <DialogFooter className="border-t border-border/30 px-5 py-4">
+        <DialogFooter className="border-t border-border/25 bg-muted/10 px-6 py-4">
           <Button type="button" variant="ghost" className="h-8 rounded-md text-[12px]" onClick={onClose}>
             {t("common.cancel")}
           </Button>
           <Button
             type="button"
-            className="h-8 rounded-md text-[12px]"
+            className="h-8 min-w-[116px] rounded-md text-[12px]"
             disabled={saveDisabled}
             onClick={() => onSave(state)}
           >
@@ -882,6 +891,37 @@ function UserEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PermissionSwitch({
+  checked,
+  disabled,
+  title,
+  description,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  title: string;
+  description: string;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={cn(
+      "flex items-center gap-3 px-3 py-2.5 text-[12px]",
+      disabled ? "cursor-not-allowed opacity-55" : "cursor-pointer"
+    )}>
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(next) => onCheckedChange(next === true)}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium text-foreground">{title}</span>
+        <span className="block text-[11px] text-muted-foreground">{description}</span>
+      </span>
+    </label>
   );
 }
 
