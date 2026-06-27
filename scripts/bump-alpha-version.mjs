@@ -76,6 +76,19 @@ function replaceCargoLockVersion(contents, version) {
   return nextContents;
 }
 
+function toTauriBundleVersion(version) {
+  const parsed = parseVersion(version);
+  if (parsed.alpha === null) {
+    return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+  }
+
+  if (parsed.alpha > 65535) {
+    throw new Error("MSI prerelease version must be less than or equal to 65535.");
+  }
+
+  return `${parsed.major}.${parsed.minor}.${parsed.patch}-${parsed.alpha}`;
+}
+
 const packagePath = path.join(root, "package.json");
 const packageLockPath = path.join(root, "package-lock.json");
 const cargoTomlPath = path.join(root, "src-tauri", "Cargo.toml");
@@ -104,7 +117,7 @@ if (fs.existsSync(cargoLockPath)) {
 }
 
 const tauriConfig = readJson(tauriConfigPath);
-tauriConfig.version = next;
+tauriConfig.version = toTauriBundleVersion(next);
 writeJson(tauriConfigPath, tauriConfig);
 
 console.log(next);
