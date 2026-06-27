@@ -14,6 +14,7 @@ import { Connection } from "@/lib/useConnections";
 interface AppSidebarProps {
   width: number;
   connections: Connection[];
+  totalConnections: number;
   loading: boolean;
   selectedConn: Connection | null;
   selectedTable: string | null;
@@ -34,6 +35,7 @@ interface AppSidebarProps {
 export function AppSidebar({
   width,
   connections,
+  totalConnections,
   loading,
   selectedConn,
   selectedTable,
@@ -70,7 +72,7 @@ export function AppSidebar({
             Connections
           </span>
           <span className="rounded bg-background/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
-            {connections.length}
+            {totalConnections}
           </span>
         </div>
         <div className="flex items-center gap-1">

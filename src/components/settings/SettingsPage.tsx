@@ -43,7 +43,7 @@ const sections = [
   { key: "query", icon: TerminalSquare, enabled: true },
   { key: "editor", icon: SlidersHorizontal, enabled: true },
   { key: "dataView", icon: Table2, enabled: true },
-  { key: "connections", icon: Database, enabled: false },
+  { key: "connections", icon: Database, enabled: true },
   { key: "security", icon: Lock, enabled: true },
   { key: "appearance", icon: Brush, enabled: false },
   { key: "updates", icon: DownloadCloud, enabled: false },
@@ -263,6 +263,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
               <SettingsGroup>
                 <SettingToggle title={t("settings.connections.auto_connect")} description={t("settings.connections.auto_connect_desc")} checked={data.connections.autoConnect} onChange={(autoConnect) => patchSettings({ connections: { ...data.connections, autoConnect } })} />
                 <SettingToggle title={t("settings.connections.remember_last_workspace")} description={t("settings.connections.remember_last_workspace_desc")} checked={data.connections.rememberLastWorkspace} onChange={(rememberLastWorkspace) => patchSettings({ connections: { ...data.connections, rememberLastWorkspace } })} />
+                <SettingToggle title={t("settings.connections.hide_others")} description={t("settings.connections.hide_others_desc")} checked={data.connections.hideOtherConnectionsWhenConnected} onChange={(hideOtherConnectionsWhenConnected) => patchSettings({ connections: { ...data.connections, hideOtherConnectionsWhenConnected } })} />
                 <SettingToggle title={t("settings.connections.schema_cache")} description={t("settings.connections.schema_cache_desc")} checked={data.connections.schemaCache} onChange={(schemaCache) => patchSettings({ connections: { ...data.connections, schemaCache } })} />
                 <SettingToggle title={t("settings.connections.refresh_metadata")} description={t("settings.connections.refresh_metadata_desc")} checked={data.connections.refreshMetadataOnConnect} onChange={(refreshMetadataOnConnect) => patchSettings({ connections: { ...data.connections, refreshMetadataOnConnect } })} />
               </SettingsGroup>

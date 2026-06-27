@@ -116,6 +116,8 @@
       "auto_connect_desc": "Tries to open the last connection when the app starts.",
       "remember_last_workspace": "Remember last workspace",
       "remember_last_workspace_desc": "Keeps the last connection, database and table.",
+      "hide_others": "Hide other clusters when connected",
+      "hide_others_desc": "When a connection is open, only that cluster stays visible in the sidebar. Disconnecting shows all again.",
       "schema_cache": "Schema cache",
       "schema_cache_desc": "Reuses metadata to reduce repeated reads.",
       "refresh_metadata": "Refresh metadata on connect",

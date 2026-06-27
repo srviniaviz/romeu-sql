@@ -12,6 +12,8 @@ import { WorkspacePanel } from "./components/layout/WorkspacePanel";
 import { clearPasswordMemoryCache } from "./domain/connections/repository";
 import { warmStronghold } from "./domain/connections/secretsRepository";
 import { loadSettings } from "./domain/settings/repository";
+import { DEFAULT_APP_SETTINGS } from "./domain/settings/types";
+import { useSettings } from "./domain/settings/useSettings";
 import { useConnections, Connection } from "./lib/useConnections";
 
 const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
@@ -31,6 +33,8 @@ function getInitialSidebarWidth() {
 function App() {
   const { t } = useTranslation();
   const { connections, loading, removeConnection, refresh } = useConnections();
+  const { settings } = useSettings();
+  const appSettings = settings ?? DEFAULT_APP_SETTINGS;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -50,16 +54,21 @@ function App() {
     }
   }, [connections]);
 
+  const visibleConnections = useMemo(() => {
+    if (!selectedConn || !appSettings.connections.hideOtherConnectionsWhenConnected) return connections;
+    return connections.filter((conn) => conn.id === selectedConn.id);
+  }, [appSettings.connections.hideOtherConnectionsWhenConnected, connections, selectedConn]);
+
   const filteredConnections = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return connections;
+    if (!term) return visibleConnections;
 
-    return connections.filter((conn) =>
+    return visibleConnections.filter((conn) =>
       [conn.name, conn.host, conn.database, conn.type, conn.group]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
     );
-  }, [connections, search]);
+  }, [search, visibleConnections]);
 
   const selectOverview = () => {
     setActiveView("workspace");
@@ -182,6 +191,7 @@ function App() {
             <AppSidebar
               width={sidebarWidth}
               connections={filteredConnections}
+              totalConnections={connections.length}
               loading={loading}
               selectedConn={selectedConn}
               selectedTable={selectedTable}

@@ -23,6 +23,7 @@ export interface DataViewSettings {
 export interface ConnectionSettings {
   autoConnect: boolean;
   rememberLastWorkspace: boolean;
+  hideOtherConnectionsWhenConnected: boolean;
   schemaCache: boolean;
   refreshMetadataOnConnect: boolean;
 }
@@ -88,6 +89,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   connections: {
     autoConnect: false,
     rememberLastWorkspace: true,
+    hideOtherConnectionsWhenConnected: true,
     schemaCache: true,
     refreshMetadataOnConnect: false,
   },
