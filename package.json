@@ -4,6 +4,9 @@
   "version": "0.1.0-alpha.0",
   "license": "GPL-3.0-only",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
