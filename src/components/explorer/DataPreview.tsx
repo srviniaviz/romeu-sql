@@ -64,6 +64,7 @@ interface DataPreviewProps {
   onFilterReset: () => void;
   onOptionsApply: (options: RowQueryOptions) => void;
   onFind: () => void;
+  onValidateWhere: (whereClause: string) => Promise<unknown>;
   onRunQuery: (query: string) => Promise<unknown>;
   onExportQuery: (query: string, path: string, format: ExportFormat) => Promise<{ rows: number }>;
   onExportStatusChange: (status: string | null) => void;
@@ -109,6 +110,35 @@ function sortRowEntries(row: Record<string, unknown>) {
   });
 }
 
+function sortRowKeys(row: Record<string, unknown>) {
+  return Object.keys(row).sort((left, right) => {
+    const rankDiff = fieldRank(left) - fieldRank(right);
+    if (rankDiff !== 0) return rankDiff;
+    return left.localeCompare(right);
+  });
+}
+
+function sortRowObject(row: Record<string, unknown>) {
+  return Object.fromEntries(sortRowKeys(row).map((key) => [key, row[key]]));
+}
+
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 function looksLikeDate(value: string, fieldName?: string) {
   const nameHint = fieldName ? /(date|time|created|updated|deleted|at)$/i.test(fieldName) : false;
   return nameHint && !Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}/.test(value);
@@ -136,6 +166,10 @@ function truncateText(value: string, length: number) {
   return value.length > length ? `${value.slice(0, Math.max(1, length - 3))}...` : value;
 }
 
+function compactJson(value: unknown) {
+  return JSON.stringify(value);
+}
+
 function sanitizeRow(row: Record<string, unknown>, settings: AppSettings) {
   if (!settings.security.maskSensitiveFields) return row;
 
@@ -151,42 +185,92 @@ function sanitizeRows(rows: Record<string, unknown>[], settings: AppSettings) {
   return rows.map((row) => sanitizeRow(row, settings));
 }
 
+const valueTone = {
+  string: "text-neutral-950 dark:text-stone-200",
+  id: "font-medium text-slate-700 dark:text-neutral-400",
+  number: "font-semibold tabular-nums text-blue-900 dark:text-sky-300",
+  money: "font-semibold tabular-nums text-emerald-950 dark:text-emerald-300",
+  booleanTrue: "font-semibold text-indigo-900 dark:text-violet-300",
+  booleanFalse: "font-semibold text-neutral-800 dark:text-neutral-400",
+  date: "font-semibold text-stone-900 dark:text-cyan-300",
+  link: "font-medium text-sky-800 dark:text-blue-300",
+  json: "font-medium text-violet-950 dark:text-fuchsia-300",
+  nullish: "text-neutral-600 dark:text-neutral-500",
+};
+
 function FieldValue({
   value,
   fieldName,
   settings,
+  expanded,
 }: {
   value: unknown;
   fieldName?: string;
   settings: AppSettings;
+  expanded?: boolean;
 }) {
+  const truncateLength = expanded ? 1000 : settings.dataView.truncateLength;
+
   if (settings.security.maskSensitiveFields && isSensitiveField(fieldName)) {
     return <span className="text-muted-foreground">"••••••••"</span>;
   }
-  if (value === null) return <span className="text-muted-foreground/70">null</span>;
-  if (value === undefined) return <span className="text-muted-foreground/70">undefined</span>;
+  if (value === null) return <span className={valueTone.nullish}>null</span>;
+  if (value === undefined) return <span className={valueTone.nullish}>undefined</span>;
   if (typeof value === "boolean") {
-    return <span className={cn("font-semibold", value ? "text-primary" : "text-muted-foreground")}>{String(value)}</span>;
+    return (
+      <span className={value ? valueTone.booleanTrue : valueTone.booleanFalse}>
+        {String(value)}
+      </span>
+    );
   }
   if (typeof value === "number") {
     const isMoney = fieldName && /(amount|price|cost|total|subtotal|tax|discount|shipping|unitprice)$/i.test(fieldName);
-    return <span className={cn("tabular-nums", isMoney ? "text-primary" : "text-primary")}>{isMoney ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}</span>;
+    return (
+      <span className={isMoney ? valueTone.money : valueTone.number}>
+        {isMoney ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}
+      </span>
+    );
   }
   if (typeof value === "string") {
     const kind = stringKind(value, fieldName);
     const displayValue = kind === "date" && settings.dataView.dateDisplay === "local"
       ? new Date(value).toLocaleString()
-      : truncateText(value, settings.dataView.truncateLength);
-    if (kind === "date") return <span className="text-foreground">{displayValue}</span>;
-    if (kind === "id") return <span className="text-muted-foreground">"{displayValue}"</span>;
-    if (kind === "email") return <span className="text-foreground">"{displayValue}"</span>;
-    if (kind === "url") return <span className="text-foreground">"{displayValue}"</span>;
+      : truncateText(value, truncateLength);
+    if (kind === "date") return <span className={valueTone.date}>{displayValue}</span>;
+    if (kind === "id") return <span className={valueTone.id}>"{displayValue}"</span>;
+    if (kind === "email") return <span className={valueTone.link}>"{displayValue}"</span>;
+    if (kind === "url") return <span className={valueTone.link}>"{displayValue}"</span>;
     if (kind === "enum") return <span className="rounded bg-primary/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-primary">{value}</span>;
-    if (kind === "money") return <span className="text-primary">"{displayValue}"</span>;
-    return <span className="text-foreground">"{displayValue}"</span>;
+    if (kind === "money") return <span className={valueTone.money}>"{displayValue}"</span>;
+    return <span className={valueTone.string}>"{displayValue}"</span>;
   }
-  if (Array.isArray(value)) return <span className="text-muted-foreground">Array({value.length})</span>;
-  return <span className="text-muted-foreground">{JSON.stringify(value)}</span>;
+  if (Array.isArray(value)) {
+    if (expanded) {
+      return (
+        <pre className={cn("whitespace-pre-wrap break-words", valueTone.json)}>
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      );
+    }
+    const preview = value
+      .slice(0, 3)
+      .map((item) => compactJson(item))
+      .join(", ");
+    const suffix = value.length > 3 ? ", ..." : "";
+    return (
+      <span className={valueTone.json}>
+        Array({value.length}) [{truncateText(`${preview}${suffix}`, truncateLength)}]
+      </span>
+    );
+  }
+  if (expanded && typeof value === "object") {
+    return (
+      <pre className={cn("whitespace-pre-wrap break-words", valueTone.json)}>
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    );
+  }
+  return <span className={valueTone.json}>{compactJson(value)}</span>;
 }
 
 function serializeValue(value: unknown) {
@@ -330,7 +414,7 @@ function RowActions({
       <IconButton title={t("data_preview.edit_row")} disabled={busy} onClick={() => onEdit(row)}>
         <Edit3 size={12} />
       </IconButton>
-      <IconButton title={t("data_preview.copy_json")} onClick={() => navigator.clipboard?.writeText(JSON.stringify(row, null, 2))}>
+      <IconButton title={t("data_preview.copy_json")} onClick={() => void copyText(JSON.stringify(sortRowObject(row), null, 2))}>
         <Copy size={12} />
       </IconButton>
       <IconButton title={t("data_preview.delete_row")} disabled={busy} onClick={() => onDelete(row)}>
@@ -362,7 +446,18 @@ function DocumentRow({
 
   return (
     <article className="group/row relative overflow-hidden rounded-md bg-muted/25 hover:bg-muted/35">
-      <div className="absolute right-3 top-3 z-10">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
+        <IconButton
+          title={expanded
+            ? t("data_preview.collapse_row")
+            : hiddenCount > 0
+              ? t("data_preview.show_more_fields", { count: hiddenCount })
+              : t("data_preview.expand_row")}
+          active={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <ChevronDown size={12} className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} />
+        </IconButton>
         <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
       </div>
 
@@ -376,13 +471,13 @@ function DocumentRow({
           >
             <ChevronRight size={12} className={cn("transition-transform", expanded && "rotate-90")} />
           </button>
-          <div className="min-w-0 flex-1 pr-28">
+          <div className="min-w-0 flex-1 pr-36">
             {visibleEntries.map(([key, value], index) => (
-              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", index === 2 && "bg-muted/45")}>
+              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", expanded && "items-start", index === 2 && "bg-muted/45")}>
                 <span className="shrink-0 font-semibold text-foreground">{key}</span>
                 <span className="shrink-0 text-muted-foreground">:</span>
-                <span className="min-w-0 truncate">
-                  <FieldValue value={value} fieldName={key} settings={settings} />
+                <span className={cn("min-w-0", expanded ? "break-all" : "truncate")}>
+                  <FieldValue value={value} fieldName={key} settings={settings} expanded={expanded} />
                 </span>
               </div>
             ))}
@@ -423,7 +518,7 @@ function RowsTable({
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
-  const columns = useMemo(() => (rows[0] ? Object.keys(rows[0]) : []), [rows]);
+  const columns = useMemo(() => (rows[0] ? sortRowKeys(rows[0]) : []), [rows]);
   return (
     <div className={cn("h-full w-full max-w-full overflow-auto rounded-md bg-background", fill && "min-w-0")}>
       <table className="min-w-max border-separate border-spacing-0 text-left text-[12px]">
@@ -618,6 +713,7 @@ export function DataPreview({
   onFilterReset,
   onOptionsApply,
   onFind,
+  onValidateWhere,
   onRunQuery,
   onExportQuery,
   onExportStatusChange,
@@ -638,6 +734,11 @@ export function DataPreview({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [validatingFilter, setValidatingFilter] = useState(false);
+  const [whereSuggestOpen, setWhereSuggestOpen] = useState(false);
+  const [whereSuggestIndex, setWhereSuggestIndex] = useState(0);
+  const [whereCursor, setWhereCursor] = useState(0);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [activeTab, setActiveTab] = useState<DataTab>("rows");
   const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
@@ -649,6 +750,21 @@ export function DataPreview({
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const startRow = totalRows === 0 ? 0 : page * pageSize + 1;
   const endRow = Math.min(totalRows, (page + 1) * pageSize);
+  const whereInputRef = useRef<HTMLInputElement | null>(null);
+  const whereToken = useMemo(() => {
+    const left = query.slice(0, whereCursor);
+    return left.match(/[a-zA-Z_][\w.]*$/)?.[0] ?? "";
+  }, [query, whereCursor]);
+  const whereSuggestions = useMemo(() => {
+    if (!whereToken) return [];
+    const needle = whereToken.toLowerCase();
+    return schemaColumns
+      .filter((column) => column.name.toLowerCase().includes(needle))
+      .slice(0, 8);
+  }, [schemaColumns, whereToken]);
+  useEffect(() => {
+    setWhereSuggestIndex(0);
+  }, [whereToken]);
 
   useEffect(() => setQuery(whereClause), [whereClause]);
   useEffect(() => {
@@ -685,16 +801,26 @@ export function DataPreview({
     setLastQuerySql("");
   }, [selectedTable]);
 
-  function applyRows() {
-    onOptionsApply({
-      project: project.trim() || undefined,
-      sort: sort.trim() || undefined,
-      skip: Number(skip) > 0 ? Number(skip) : undefined,
-      limit: Number(limit) > 0 ? Number(limit) : undefined,
-    });
-    onFilterApply(query.trim());
-    onFind();
-    setMessage(null);
+  async function applyRows() {
+    const nextWhere = query.trim();
+    setValidatingFilter(true);
+    setFilterError(null);
+    try {
+      await onValidateWhere(nextWhere);
+      onOptionsApply({
+        project: project.trim() || undefined,
+        sort: sort.trim() || undefined,
+        skip: Number(skip) > 0 ? Number(skip) : undefined,
+        limit: Number(limit) > 0 ? Number(limit) : undefined,
+      });
+      onFilterApply(nextWhere);
+      onFind();
+      setMessage(null);
+    } catch (err) {
+      setFilterError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setValidatingFilter(false);
+    }
   }
 
   function resetRows() {
@@ -704,8 +830,27 @@ export function DataPreview({
     setSkip("");
     setLimit("");
     setMessage(null);
+    setFilterError(null);
     onFilterReset();
     onFind();
+  }
+
+  function insertWhereSuggestion(columnName: string) {
+    const input = whereInputRef.current;
+    const cursor = input?.selectionStart ?? whereCursor;
+    const before = query.slice(0, cursor);
+    const after = query.slice(cursor);
+    const match = before.match(/[a-zA-Z_][\w.]*$/);
+    const start = match ? cursor - match[0].length : cursor;
+    const next = `${query.slice(0, start)}${columnName}${after}`;
+    const nextCursor = start + columnName.length;
+    setQuery(next);
+    setWhereCursor(nextCursor);
+    setWhereSuggestOpen(false);
+    requestAnimationFrame(() => {
+      whereInputRef.current?.focus();
+      whereInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
   }
 
   async function handleExport(query: string, format: ExportFormat) {
@@ -846,13 +991,48 @@ export function DataPreview({
           <>
             <div className="space-y-2 px-5 py-2">
               <div className="flex min-h-8 items-center gap-3">
-                <div className="flex h-8 flex-1 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+                <div className="relative flex h-8 flex-1 items-center rounded-md bg-muted/25 px-2 text-[12px]">
                   <Search size={14} className="mr-2 text-muted-foreground" />
                   <span className="mr-2 font-semibold text-foreground">WHERE</span>
                   <input
+                    ref={whereInputRef}
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    onKeyDown={(event) => event.key === "Enter" && applyRows()}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setWhereCursor(event.target.selectionStart ?? event.target.value.length);
+                      setWhereSuggestOpen(true);
+                      setFilterError(null);
+                    }}
+                    onClick={(event) => {
+                      setWhereCursor(event.currentTarget.selectionStart ?? 0);
+                      setWhereSuggestOpen(true);
+                    }}
+                    onKeyUp={(event) => setWhereCursor(event.currentTarget.selectionStart ?? 0)}
+                    onFocus={() => setWhereSuggestOpen(true)}
+                    onBlur={() => window.setTimeout(() => setWhereSuggestOpen(false), 120)}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowDown" && whereSuggestOpen && whereSuggestions.length > 0) {
+                        event.preventDefault();
+                        setWhereSuggestIndex((index) => Math.min(whereSuggestions.length - 1, index + 1));
+                        return;
+                      }
+                      if (event.key === "ArrowUp" && whereSuggestOpen && whereSuggestions.length > 0) {
+                        event.preventDefault();
+                        setWhereSuggestIndex((index) => Math.max(0, index - 1));
+                        return;
+                      }
+                      if (event.key === "Enter" && whereSuggestOpen && whereSuggestions[whereSuggestIndex]) {
+                        event.preventDefault();
+                        insertWhereSuggestion(whereSuggestions[whereSuggestIndex].name);
+                        return;
+                      }
+                      if (event.key === "Enter") void applyRows();
+                      if (event.key === "Escape") setWhereSuggestOpen(false);
+                      if (event.key === "Tab" && whereSuggestions[0]) {
+                        event.preventDefault();
+                        insertWhereSuggestion(whereSuggestions[whereSuggestIndex]?.name ?? whereSuggestions[0].name);
+                      }
+                    }}
                     placeholder={t("data_preview.where_placeholder")}
                     className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                   />
@@ -861,12 +1041,34 @@ export function DataPreview({
                       <X size={13} />
                     </button>
                   ) : null}
+                  {whereSuggestOpen && whereSuggestions.length > 0 && (
+                    <div className="absolute left-20 top-9 z-50 w-[360px] overflow-hidden rounded-md bg-popover p-1 shadow-xl ring-1 ring-border">
+                      {whereSuggestions.map((column, index) => (
+                        <button
+                          key={column.name}
+                          type="button"
+                          onMouseEnter={() => setWhereSuggestIndex(index)}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            insertWhereSuggestion(column.name);
+                          }}
+                          className={cn(
+                            "flex h-7 w-full items-center justify-between rounded px-2 text-left font-mono text-[12px] hover:bg-muted/45",
+                            index === whereSuggestIndex && "bg-muted/45"
+                          )}
+                        >
+                          <span className="font-semibold text-foreground">{column.name}</span>
+                          <span className="text-muted-foreground">{column.type}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <ToolbarButton primary disabled={busy} onClick={applyRows}>
-                  {refreshing ? (
+                <ToolbarButton primary disabled={busy || validatingFilter} onClick={() => void applyRows()}>
+                  {refreshing || validatingFilter ? (
                     <>
                       <RefreshCw size={12} className="animate-spin" />
-                      {t("data_preview.loading")}
+                      {validatingFilter ? t("data_preview.validating_where") : t("data_preview.loading")}
                     </>
                   ) : (
                     t("data_preview.find")
@@ -877,6 +1079,11 @@ export function DataPreview({
                   <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />
                 </ToolbarButton>
               </div>
+              {filterError && (
+                <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-[12px] text-destructive">
+                  {filterError}
+                </p>
+              )}
               <div className="flex h-8 items-center rounded-md bg-muted/25 px-2 text-[12px]">
                 <span className="mr-2 font-semibold text-foreground">ORDER BY</span>
                 <input
@@ -1109,7 +1316,7 @@ export function DataPreview({
           <div className="space-y-2 overflow-auto">
             {rows.map((row, rowIndex) => (
               <pre key={rowIndex} className="rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 text-foreground">
-                {JSON.stringify(sanitizeRow(row, appSettings), null, 2)}
+                {JSON.stringify(sortRowObject(sanitizeRow(row, appSettings)), null, 2)}
               </pre>
             ))}
           </div>

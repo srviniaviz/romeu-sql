@@ -1,10 +1,13 @@
 use super::dialect::connection_string;
 use super::types::{ConnectionInput, DbEngine, ExportFormat, JsonRow};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use futures_util::TryStreamExt;
+use rust_decimal::Decimal;
 use serde_json::{json, Value};
 use sqlx::mysql::{MySqlPoolOptions, MySqlRow};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
+use sqlx::types::{Json, Uuid};
 use sqlx::{Column, MySqlPool, PgPool, Row, SqlitePool, TypeInfo, ValueRef};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -79,7 +82,10 @@ impl DbPoolState {
         let started = Instant::now();
         match self.get(connection).await? {
             DatabasePool::Postgres(pool) => {
-                let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                let rows = sqlx::query(&postgres_text_wrapped_query(sql))
+                    .fetch_all(&pool)
+                    .await
+                    .map_err(to_error)?;
                 log_slow("select", started, sql);
                 rows.iter().map(pg_row_to_json).collect()
             }
@@ -159,7 +165,8 @@ impl DbPoolState {
 
         let rows = match self.get(connection).await? {
             DatabasePool::Postgres(pool) => {
-                let mut rows = sqlx::query(sql).fetch(&pool);
+                let wrapped_sql = postgres_text_wrapped_query(sql);
+                let mut rows = sqlx::query(&wrapped_sql).fetch(&pool);
                 let mut count = 0;
                 while let Some(row) = rows.try_next().await.map_err(to_error)? {
                     writer.write_row(&pg_row_to_json(&row)?).await?;
@@ -352,6 +359,16 @@ fn log_slow(kind: &str, started: Instant, detail: &str) {
     }
 }
 
+fn postgres_text_wrapped_query(sql: &str) -> String {
+    let trimmed = sql.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("select ") && !lower.starts_with("with ") {
+        return trimmed.to_string();
+    }
+
+    format!("SELECT to_jsonb(row_data) AS row FROM ({trimmed}) AS row_data")
+}
+
 fn to_error(error: sqlx::Error) -> String {
     error.to_string()
 }
@@ -402,6 +419,14 @@ fn bind_sqlite<'q>(
 }
 
 fn pg_row_to_json(row: &PgRow) -> Result<JsonRow, String> {
+    if row.len() == 1 && row.column(0).name() == "row" {
+        if let Ok(value) = row.try_get::<Json<Value>, _>(0) {
+            if let Value::Object(map) = value.0 {
+                return Ok(map.into_iter().collect());
+            }
+        }
+    }
+
     let mut out = JsonRow::new();
     for (index, column) in row.columns().iter().enumerate() {
         out.insert(column.name().to_string(), pg_value(row, index)?);
@@ -428,6 +453,37 @@ fn sqlite_row_to_json(row: &SqliteRow) -> Result<JsonRow, String> {
 fn pg_value(row: &PgRow, index: usize) -> Result<Value, String> {
     if row.try_get_raw(index).map_err(to_error)?.is_null() {
         return Ok(Value::Null);
+    }
+    if let Ok(value) = row.try_get::<Json<Value>, _>(index) {
+        return Ok(value.0);
+    }
+    if let Ok(value) = row.try_get::<Uuid, _>(index) {
+        return Ok(Value::String(value.to_string()));
+    }
+    if let Ok(value) = row.try_get::<DateTime<Utc>, _>(index) {
+        return Ok(Value::String(value.to_rfc3339()));
+    }
+    if let Ok(value) = row.try_get::<NaiveDateTime, _>(index) {
+        return Ok(Value::String(value.to_string()));
+    }
+    if let Ok(value) = row.try_get::<NaiveDate, _>(index) {
+        return Ok(Value::String(value.to_string()));
+    }
+    if let Ok(value) = row.try_get::<NaiveTime, _>(index) {
+        return Ok(Value::String(value.to_string()));
+    }
+    if let Ok(value) = row.try_get::<Decimal, _>(index) {
+        return Ok(value
+            .to_string()
+            .parse::<f64>()
+            .map(Value::from)
+            .unwrap_or_else(|_| Value::String(value.to_string())));
+    }
+    if let Ok(value) = row.try_get::<Vec<u8>, _>(index) {
+        return Ok(Value::String(format!("<bytea {} bytes>", value.len())));
+    }
+    if let Ok(value) = row.try_get::<&str, _>(index) {
+        return Ok(Value::String(value.to_string()));
     }
     if let Ok(value) = row.try_get::<String, _>(index) {
         return Ok(Value::String(value));

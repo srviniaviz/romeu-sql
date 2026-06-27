@@ -19,6 +19,7 @@ import {
   clearDatabaseMetadataCache,
   deleteRow,
   executeSql,
+  explainRows,
   exportQuery,
   insertRow,
   listColumns,
@@ -431,6 +432,7 @@ export function DatabaseExplorer({
               queryClient.invalidateQueries({ queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable] });
               queryClient.invalidateQueries({ queryKey: ["tableData", connection.id, connection.database, selectedTable] });
             }}
+            onValidateWhere={(nextWhereClause) => explainRows(connection, selectedTable, nextWhereClause)}
             onRunQuery={(query) => queryMutation.mutateAsync(query)}
             onExportQuery={(query, path, format) => exportQuery(connection, query, path, format)}
             onExportStatusChange={setActiveTask}
