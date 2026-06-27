@@ -32,8 +32,14 @@ pub async fn db_list_databases(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
 ) -> DbResult<Vec<String>> {
-    let rows = state.select(&connection, &dialect::list_databases(&connection)).await?;
-    Ok(names_from(&rows, &["name", "datname", "Database"], &connection.database))
+    let rows = state
+        .select(&connection, &dialect::list_databases(&connection))
+        .await?;
+    Ok(names_from(
+        &rows,
+        &["name", "datname", "Database"],
+        &connection.database,
+    ))
 }
 
 #[tauri::command]
@@ -41,7 +47,9 @@ pub async fn db_list_tables(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
 ) -> DbResult<Vec<String>> {
-    let rows = state.select(&connection, &dialect::list_tables(&connection)).await?;
+    let rows = state
+        .select(&connection, &dialect::list_tables(&connection))
+        .await?;
     Ok(names_from(&rows, &["name", "table_name", "TABLE_NAME"], ""))
 }
 
@@ -50,7 +58,9 @@ pub async fn db_list_table_stats(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
 ) -> DbResult<Vec<TableInfo>> {
-    let rows = state.select(&connection, &dialect::list_table_stats(&connection)).await?;
+    let rows = state
+        .select(&connection, &dialect::list_table_stats(&connection))
+        .await?;
     Ok(rows.iter().map(normalize_table_stats).collect())
 }
 
@@ -60,17 +70,28 @@ pub async fn db_benchmark_analyze(
     connection: ConnectionInput,
 ) -> DbResult<BenchmarkAnalyzeResult> {
     let started = Instant::now();
-    let stats_rows = state.select(&connection, &dialect::list_table_stats(&connection)).await?;
-    let stats = stats_rows.iter().map(normalize_table_stats).collect::<Vec<_>>();
+    let stats_rows = state
+        .select(&connection, &dialect::list_table_stats(&connection))
+        .await?;
+    let stats = stats_rows
+        .iter()
+        .map(normalize_table_stats)
+        .collect::<Vec<_>>();
     let mut tables = Vec::new();
 
-    for table in stats.iter().filter(|table| !table.table_type.contains("view")) {
+    for table in stats
+        .iter()
+        .filter(|table| !table.table_type.contains("view"))
+    {
         let table_started = Instant::now();
         let mut notes = Vec::new();
 
         let index_started = Instant::now();
         let index_count = match state
-            .select(&connection, &dialect::list_indexes(&connection, &table.name))
+            .select(
+                &connection,
+                &dialect::list_indexes(&connection, &table.name),
+            )
             .await
         {
             Ok(rows) => rows.len() as i64,
@@ -139,7 +160,11 @@ pub async fn db_benchmark_analyze(
         });
     }
 
-    tables.sort_by(|left, right| left.score.cmp(&right.score).then_with(|| right.total_ms.total_cmp(&left.total_ms)));
+    tables.sort_by(|left, right| {
+        left.score
+            .cmp(&right.score)
+            .then_with(|| right.total_ms.total_cmp(&left.total_ms))
+    });
 
     let average_score = if tables.is_empty() {
         0
@@ -166,7 +191,9 @@ pub async fn db_list_cluster_users(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
 ) -> DbResult<Vec<ClusterUserInfo>> {
-    let rows = state.select(&connection, &dialect::list_cluster_users(&connection)).await?;
+    let rows = state
+        .select(&connection, &dialect::list_cluster_users(&connection))
+        .await?;
     Ok(rows.iter().map(normalize_cluster_user).collect())
 }
 
@@ -232,7 +259,10 @@ pub async fn db_list_columns(
     table_name: String,
 ) -> DbResult<Vec<ColumnInfo>> {
     let rows = state
-        .select(&connection, &dialect::list_columns(&connection, &table_name))
+        .select(
+            &connection,
+            &dialect::list_columns(&connection, &table_name),
+        )
         .await?;
     Ok(rows.iter().map(normalize_column).collect())
 }
@@ -244,7 +274,10 @@ pub async fn db_list_indexes(
     table_name: String,
 ) -> DbResult<Vec<IndexInfo>> {
     let rows = state
-        .select(&connection, &dialect::list_indexes(&connection, &table_name))
+        .select(
+            &connection,
+            &dialect::list_indexes(&connection, &table_name),
+        )
         .await?;
     Ok(rows.iter().map(normalize_index).collect())
 }
@@ -309,7 +342,11 @@ pub async fn db_delete_row(
     row: BTreeMap<String, Value>,
 ) -> DbResult<String> {
     let sql = dialect::delete_row(&connection, &table_name, &row);
-    let values = row.values().filter(|value| !value.is_null()).cloned().collect::<Vec<_>>();
+    let values = row
+        .values()
+        .filter(|value| !value.is_null())
+        .cloned()
+        .collect::<Vec<_>>();
     state.execute(&connection, &sql, &values).await?;
     Ok(sql)
 }
@@ -380,9 +417,9 @@ fn normalize_index(row: &JsonRow) -> IndexInfo {
     IndexInfo {
         name: get_string(row, &["name", "indexname", "Key_name", "INDEX_NAME"]),
         columns: get_string(row, &["columns", "indexdef", "Column_name", "COLUMN_NAME"]),
-        unique: non_unique.map(|value| value == 0).unwrap_or_else(|| {
-            get_bool(row, &["unique", "is_unique"]).unwrap_or(false)
-        }),
+        unique: non_unique
+            .map(|value| value == 0)
+            .unwrap_or_else(|| get_bool(row, &["unique", "is_unique"]).unwrap_or(false)),
         index_type: get_string(row, &["type", "index_type", "Index_type", "type_desc"]),
     }
 }
@@ -400,20 +437,42 @@ fn normalize_cluster_user(row: &JsonRow) -> ClusterUserInfo {
     ClusterUserInfo {
         name: get_string(row, &["name", "user", "User", "username", "principal"]),
         role: get_string(row, &["role", "type", "Type", "principal_type"]),
-        can_login: get_bool(row, &["canLogin", "can_login", "login", "can_connect"]).unwrap_or(true),
-        is_admin: get_bool(row, &["isAdmin", "is_admin", "admin", "superuser", "rolsuper"]).unwrap_or(false),
+        can_login: get_bool(row, &["canLogin", "can_login", "login", "can_connect"])
+            .unwrap_or(true),
+        is_admin: get_bool(
+            row,
+            &["isAdmin", "is_admin", "admin", "superuser", "rolsuper"],
+        )
+        .unwrap_or(false),
     }
 }
 
 fn normalize_cluster_permission(row: &JsonRow) -> ClusterPermissionInfo {
     ClusterPermissionInfo {
         principal: get_string(row, &["principal", "grantee", "user", "User", "name"]),
-        object_name: get_string(row, &["objectName", "object_name", "table_name", "database", "Db"]),
-        privilege: get_string(row, &["privilege", "privilege_type", "permission_name", "Privilege", "permission"]),
+        object_name: get_string(
+            row,
+            &["objectName", "object_name", "table_name", "database", "Db"],
+        ),
+        privilege: get_string(
+            row,
+            &[
+                "privilege",
+                "privilege_type",
+                "permission_name",
+                "Privilege",
+                "permission",
+            ],
+        ),
     }
 }
 
-fn table_score(estimated_rows: Option<i64>, index_count: i64, count_ms: f64, sample_ms: f64) -> i64 {
+fn table_score(
+    estimated_rows: Option<i64>,
+    index_count: i64,
+    count_ms: f64,
+    sample_ms: f64,
+) -> i64 {
     let mut score = 100.0;
     score -= (count_ms / 25.0).min(35.0);
     score -= (sample_ms / 10.0).min(30.0);
@@ -448,11 +507,15 @@ fn get_string(row: &JsonRow, keys: &[&str]) -> String {
 }
 
 fn get_number(row: &JsonRow, keys: &[&str]) -> Option<i64> {
-    keys.iter().find_map(|key| row.get(*key)).and_then(value_to_i64)
+    keys.iter()
+        .find_map(|key| row.get(*key))
+        .and_then(value_to_i64)
 }
 
 fn get_bool(row: &JsonRow, keys: &[&str]) -> Option<bool> {
-    keys.iter().find_map(|key| row.get(*key)).and_then(value_to_bool)
+    keys.iter()
+        .find_map(|key| row.get(*key))
+        .and_then(value_to_bool)
 }
 
 fn first_number(row: &JsonRow) -> Option<i64> {
@@ -475,7 +538,9 @@ fn value_to_string(value: &Value) -> Option<String> {
 
 fn value_to_i64(value: &Value) -> Option<i64> {
     match value {
-        Value::Number(value) => value.as_i64().or_else(|| value.as_u64().map(|value| value as i64)),
+        Value::Number(value) => value
+            .as_i64()
+            .or_else(|| value.as_u64().map(|value| value as i64)),
         Value::String(value) => value.parse::<i64>().ok(),
         Value::Bool(value) => Some(if *value { 1 } else { 0 }),
         _ => None,

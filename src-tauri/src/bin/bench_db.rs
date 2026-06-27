@@ -18,7 +18,14 @@ async fn run() -> Result<(), String> {
     println!("Romeu SQL DB benchmark");
     println!("engine  : {}", config.engine);
     println!("target  : {}", config.redacted_url());
-    println!("count   : {}", if config.run_count { "enabled" } else { "disabled" });
+    println!(
+        "count   : {}",
+        if config.run_count {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
     println!();
 
     match config.engine.as_str() {
@@ -101,7 +108,10 @@ async fn bench_postgres(config: &BenchConfig) -> Result<(), String> {
     .await?;
 
     step("select 1", || async {
-        sqlx::query("SELECT 1 as ok").fetch_all(&pool).await.map_err(to_error)
+        sqlx::query("SELECT 1 as ok")
+            .fetch_all(&pool)
+            .await
+            .map_err(to_error)
     })
     .await?;
 
@@ -128,12 +138,20 @@ async fn bench_postgres(config: &BenchConfig) -> Result<(), String> {
 
 async fn bench_mysql(config: &BenchConfig) -> Result<(), String> {
     let pool = step("connect", || async {
-        timeout(MySqlPoolOptions::new().max_connections(5).connect(&config.url)).await
+        timeout(
+            MySqlPoolOptions::new()
+                .max_connections(5)
+                .connect(&config.url),
+        )
+        .await
     })
     .await?;
 
     step("select 1", || async {
-        sqlx::query("SELECT 1 as ok").fetch_all(&pool).await.map_err(to_error)
+        sqlx::query("SELECT 1 as ok")
+            .fetch_all(&pool)
+            .await
+            .map_err(to_error)
     })
     .await?;
 
@@ -160,12 +178,20 @@ async fn bench_mysql(config: &BenchConfig) -> Result<(), String> {
 
 async fn bench_sqlite(config: &BenchConfig) -> Result<(), String> {
     let pool = step("connect", || async {
-        timeout(SqlitePoolOptions::new().max_connections(1).connect(&config.url)).await
+        timeout(
+            SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&config.url),
+        )
+        .await
     })
     .await?;
 
     step("select 1", || async {
-        sqlx::query("SELECT 1 as ok").fetch_all(&pool).await.map_err(to_error)
+        sqlx::query("SELECT 1 as ok")
+            .fetch_all(&pool)
+            .await
+            .map_err(to_error)
     })
     .await?;
 
@@ -182,7 +208,11 @@ async fn bench_sqlite(config: &BenchConfig) -> Result<(), String> {
     bench_table_sqlite(&pool, config, tables.first()).await
 }
 
-async fn bench_table_postgres(pool: &PgPool, config: &BenchConfig, first_table: Option<&String>) -> Result<(), String> {
+async fn bench_table_postgres(
+    pool: &PgPool,
+    config: &BenchConfig,
+    first_table: Option<&String>,
+) -> Result<(), String> {
     let Some(table) = config.table.as_ref().or(first_table) else {
         return Ok(());
     };
@@ -206,7 +236,11 @@ async fn bench_table_postgres(pool: &PgPool, config: &BenchConfig, first_table: 
     Ok(())
 }
 
-async fn bench_table_mysql(pool: &MySqlPool, config: &BenchConfig, first_table: Option<&String>) -> Result<(), String> {
+async fn bench_table_mysql(
+    pool: &MySqlPool,
+    config: &BenchConfig,
+    first_table: Option<&String>,
+) -> Result<(), String> {
     let Some(table) = config.table.as_ref().or(first_table) else {
         return Ok(());
     };
@@ -230,7 +264,11 @@ async fn bench_table_mysql(pool: &MySqlPool, config: &BenchConfig, first_table: 
     Ok(())
 }
 
-async fn bench_table_sqlite(pool: &SqlitePool, config: &BenchConfig, first_table: Option<&String>) -> Result<(), String> {
+async fn bench_table_sqlite(
+    pool: &SqlitePool,
+    config: &BenchConfig,
+    first_table: Option<&String>,
+) -> Result<(), String> {
     let Some(table) = config.table.as_ref().or(first_table) else {
         return Ok(());
     };
@@ -263,12 +301,17 @@ where
     let elapsed = started.elapsed();
     match &result {
         Ok(_) => println!("{name:<16} {:>8.2} ms", elapsed.as_secs_f64() * 1000.0),
-        Err(error) => println!("{name:<16} FAILED after {:.2} ms: {error}", elapsed.as_secs_f64() * 1000.0),
+        Err(error) => println!(
+            "{name:<16} FAILED after {:.2} ms: {error}",
+            elapsed.as_secs_f64() * 1000.0
+        ),
     }
     result
 }
 
-async fn timeout<T>(future: impl std::future::Future<Output = Result<T, sqlx::Error>>) -> Result<T, String> {
+async fn timeout<T>(
+    future: impl std::future::Future<Output = Result<T, sqlx::Error>>,
+) -> Result<T, String> {
     tokio::time::timeout(Duration::from_secs(8), future)
         .await
         .map_err(|_| "timed out after 8s".to_string())?
@@ -276,7 +319,9 @@ async fn timeout<T>(future: impl std::future::Future<Output = Result<T, sqlx::Er
 }
 
 fn pg_names(rows: &[PgRow]) -> Vec<String> {
-    rows.iter().filter_map(|row| row.try_get::<String, _>("name").ok()).collect()
+    rows.iter()
+        .filter_map(|row| row.try_get::<String, _>("name").ok())
+        .collect()
 }
 
 fn mysql_names(rows: &[MySqlRow]) -> Vec<String> {
@@ -286,7 +331,9 @@ fn mysql_names(rows: &[MySqlRow]) -> Vec<String> {
 }
 
 fn sqlite_names(rows: &[SqliteRow]) -> Vec<String> {
-    rows.iter().filter_map(|row| row.try_get::<String, _>("name").ok()).collect()
+    rows.iter()
+        .filter_map(|row| row.try_get::<String, _>("name").ok())
+        .collect()
 }
 
 fn print_tables(tables: &[String]) {

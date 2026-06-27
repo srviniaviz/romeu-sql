@@ -68,7 +68,11 @@ impl DbPoolState {
         Ok(pool)
     }
 
-    pub async fn select(&self, connection: &ConnectionInput, sql: &str) -> Result<Vec<JsonRow>, String> {
+    pub async fn select(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+    ) -> Result<Vec<JsonRow>, String> {
         let started = Instant::now();
         match self.get(connection).await? {
             DatabasePool::Postgres(pool) => {
@@ -102,7 +106,11 @@ impl DbPoolState {
                 for value in values {
                     query = bind_pg(query, value);
                 }
-                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                let rows = query
+                    .execute(&pool)
+                    .await
+                    .map(|done| done.rows_affected())
+                    .map_err(to_error)?;
                 log_slow("execute", started, sql);
                 Ok(rows)
             }
@@ -111,7 +119,11 @@ impl DbPoolState {
                 for value in values {
                     query = bind_mysql(query, value);
                 }
-                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                let rows = query
+                    .execute(&pool)
+                    .await
+                    .map(|done| done.rows_affected())
+                    .map_err(to_error)?;
                 log_slow("execute", started, sql);
                 Ok(rows)
             }
@@ -120,7 +132,11 @@ impl DbPoolState {
                 for value in values {
                     query = bind_sqlite(query, value);
                 }
-                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                let rows = query
+                    .execute(&pool)
+                    .await
+                    .map(|done| done.rows_affected())
+                    .map_err(to_error)?;
                 log_slow("execute", started, sql);
                 Ok(rows)
             }
@@ -131,7 +147,11 @@ impl DbPoolState {
 fn log_slow(kind: &str, started: Instant, detail: &str) {
     let elapsed = started.elapsed();
     if elapsed.as_millis() >= 250 {
-        let compact = detail.split_whitespace().take(18).collect::<Vec<_>>().join(" ");
+        let compact = detail
+            .split_whitespace()
+            .take(18)
+            .collect::<Vec<_>>()
+            .join(" ");
         eprintln!("[romeu-sql][db:{kind}] {}ms {compact}", elapsed.as_millis());
     }
 }
@@ -228,7 +248,10 @@ fn pg_value(row: &PgRow, index: usize) -> Result<Value, String> {
     if let Ok(value) = row.try_get::<bool, _>(index) {
         return Ok(json!(value));
     }
-    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+    Ok(Value::String(format!(
+        "<{}>",
+        row.column(index).type_info().name()
+    )))
 }
 
 fn mysql_value(row: &MySqlRow, index: usize) -> Result<Value, String> {
@@ -250,7 +273,10 @@ fn mysql_value(row: &MySqlRow, index: usize) -> Result<Value, String> {
     if let Ok(value) = row.try_get::<bool, _>(index) {
         return Ok(json!(value));
     }
-    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+    Ok(Value::String(format!(
+        "<{}>",
+        row.column(index).type_info().name()
+    )))
 }
 
 fn sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, String> {
@@ -269,5 +295,82 @@ fn sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, String> {
     if let Ok(value) = row.try_get::<bool, _>(index) {
         return Ok(json!(value));
     }
-    Ok(Value::String(format!("<{}>", row.column(index).type_info().name())))
+    Ok(Value::String(format!(
+        "<{}>",
+        row.column(index).type_info().name()
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn postgres_connection_from_env() -> Option<ConnectionInput> {
+        if std::env::var("ROMEU_SQL_TEST_POSTGRES").ok().as_deref() != Some("1") {
+            return None;
+        }
+
+        Some(ConnectionInput {
+            engine: DbEngine::Postgres,
+            host: std::env::var("ROMEU_SQL_TEST_PG_HOST").unwrap_or_else(|_| "localhost".into()),
+            port: std::env::var("ROMEU_SQL_TEST_PG_PORT").unwrap_or_else(|_| "5432".into()),
+            database: std::env::var("ROMEU_SQL_TEST_PG_DATABASE")
+                .unwrap_or_else(|_| "postgres".into()),
+            username: std::env::var("ROMEU_SQL_TEST_PG_USERNAME")
+                .unwrap_or_else(|_| "postgres".into()),
+            password: Some(
+                std::env::var("ROMEU_SQL_TEST_PG_PASSWORD").unwrap_or_else(|_| "postgres".into()),
+            ),
+        })
+    }
+
+    #[tokio::test]
+    async fn postgres_pool_executes_parameterized_crud_when_enabled() {
+        let Some(connection) = postgres_connection_from_env() else {
+            eprintln!(
+                "skipping postgres integration test; set ROMEU_SQL_TEST_POSTGRES=1 to enable"
+            );
+            return;
+        };
+
+        let state = DbPoolState::new();
+        state
+            .execute(
+                &connection,
+                "CREATE TABLE IF NOT EXISTS romeu_sql_ci_items (id INT PRIMARY KEY, name TEXT NOT NULL, active BOOLEAN NOT NULL)",
+                &[],
+            )
+            .await
+            .expect("create test table");
+        state
+            .execute(&connection, "TRUNCATE TABLE romeu_sql_ci_items", &[])
+            .await
+            .expect("truncate test table");
+        state
+            .execute(
+                &connection,
+                "INSERT INTO romeu_sql_ci_items (id, name, active) VALUES ($1, $2, $3)",
+                &[json!(1), json!("alpha"), json!(true)],
+            )
+            .await
+            .expect("insert test row");
+
+        let rows = state
+            .select(
+                &connection,
+                "SELECT id, name, active FROM romeu_sql_ci_items WHERE id = 1",
+            )
+            .await
+            .expect("select test row");
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("id"), Some(&json!(1)));
+        assert_eq!(rows[0].get("name"), Some(&json!("alpha")));
+        assert_eq!(rows[0].get("active"), Some(&json!(true)));
+
+        state
+            .execute(&connection, "DROP TABLE romeu_sql_ci_items", &[])
+            .await
+            .expect("drop test table");
+    }
 }

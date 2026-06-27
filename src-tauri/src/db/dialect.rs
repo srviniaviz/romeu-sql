@@ -23,7 +23,10 @@ fn quote_qualified(identifier: &str, quote: fn(&str) -> String) -> String {
 }
 
 fn clean_where(where_clause: Option<&str>) -> Result<String, String> {
-    let Some(trimmed) = where_clause.map(str::trim).filter(|value| !value.is_empty()) else {
+    let Some(trimmed) = where_clause
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
         return Ok(String::new());
     };
     let without_where = trimmed
@@ -80,13 +83,21 @@ fn clean_order_by(value: Option<&str>, quote: fn(&str) -> String) -> Result<Stri
         {
             return Err("Invalid sort option.".into());
         }
-        parts.push(format!("{} {}", quote_qualified(tokens[0], quote), direction));
+        parts.push(format!(
+            "{} {}",
+            quote_qualified(tokens[0], quote),
+            direction
+        ));
     }
 
     Ok(format!(" ORDER BY {}", parts.join(", ")))
 }
 
-fn page_limit(default_limit: i64, default_offset: i64, options: Option<&RowQueryOptions>) -> (i64, i64) {
+fn page_limit(
+    default_limit: i64,
+    default_offset: i64,
+    options: Option<&RowQueryOptions>,
+) -> (i64, i64) {
     let option_limit = options.and_then(|opts| opts.limit).unwrap_or(0);
     let option_skip = options.and_then(|opts| opts.skip).unwrap_or(0);
     (
@@ -116,7 +127,11 @@ fn build_select_rows(
         quote_qualified(table_name, quote),
         clean_where(where_clause)?,
         sort,
-        paging(next_limit, next_offset, options.and_then(|opts| opts.sort.as_deref()).is_some())
+        paging(
+            next_limit,
+            next_offset,
+            options.and_then(|opts| opts.sort.as_deref()).is_some()
+        )
     ))
 }
 
@@ -147,7 +162,11 @@ fn build_insert(
     quote: fn(&str) -> String,
     placeholder: impl Fn(usize) -> String,
 ) -> String {
-    let columns = data.keys().map(|key| quote(key)).collect::<Vec<_>>().join(", ");
+    let columns = data
+        .keys()
+        .map(|key| quote(key))
+        .collect::<Vec<_>>()
+        .join(", ");
     let values = data
         .keys()
         .enumerate()
@@ -213,7 +232,9 @@ pub fn connection_string(connection: &ConnectionInput) -> Result<String, String>
             urlencoding::encode(&connection.database)
         ),
         DbEngine::Sqlite => format!("sqlite:{}", connection.host),
-        DbEngine::Sqlserver => return Err("SQL Server is not supported by the Rust database backend yet.".into()),
+        DbEngine::Sqlserver => {
+            return Err("SQL Server is not supported by the Rust database backend yet.".into())
+        }
     })
 }
 
@@ -236,7 +257,12 @@ pub fn list_tables(connection: &ConnectionInput) -> String {
 }
 
 pub fn list_columns(connection: &ConnectionInput, table_name: &str) -> String {
-    let pure_table = table_name.replace(['\'', '"', '`', '[', ']'], "").split('.').last().unwrap_or(table_name).to_string();
+    let pure_table = table_name
+        .replace(['\'', '"', '`', '[', ']'], "")
+        .split('.')
+        .last()
+        .unwrap_or(table_name)
+        .to_string();
     match connection.engine {
         DbEngine::Postgres => format!("SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as \"defaultValue\" FROM information_schema.columns WHERE table_name = '{}' ORDER BY ordinal_position", pure_table.replace('\'', "''")),
         DbEngine::Mysql => format!("DESCRIBE {}", quote_qualified(table_name, quote_backtick)),
@@ -246,7 +272,12 @@ pub fn list_columns(connection: &ConnectionInput, table_name: &str) -> String {
 }
 
 pub fn list_indexes(connection: &ConnectionInput, table_name: &str) -> String {
-    let pure_table = table_name.replace(['\'', '"', '`', '[', ']'], "").split('.').last().unwrap_or(table_name).to_string();
+    let pure_table = table_name
+        .replace(['\'', '"', '`', '[', ']'], "")
+        .split('.')
+        .last()
+        .unwrap_or(table_name)
+        .to_string();
     match connection.engine {
         DbEngine::Postgres => format!("SELECT indexname as name, indexdef as columns, indexdef ILIKE '%unique%' as unique, 'btree' as type FROM pg_indexes WHERE schemaname = 'public' AND tablename = '{}' ORDER BY indexname", pure_table.replace('\'', "''")),
         DbEngine::Mysql => format!("SHOW INDEX FROM {}", quote_qualified(table_name, quote_backtick)),
@@ -282,7 +313,11 @@ pub fn list_cluster_permissions(connection: &ConnectionInput) -> String {
     }
 }
 
-pub fn count_rows(connection: &ConnectionInput, table_name: &str, where_clause: Option<&str>) -> Result<String, String> {
+pub fn count_rows(
+    connection: &ConnectionInput,
+    table_name: &str,
+    where_clause: Option<&str>,
+) -> Result<String, String> {
     let quote = quote_for(connection.engine);
     Ok(format!(
         "SELECT COUNT(*) as count FROM {}{}",
@@ -300,14 +335,59 @@ pub fn select_rows(
     options: Option<&RowQueryOptions>,
 ) -> Result<String, String> {
     match connection.engine {
-        DbEngine::Postgres => build_select_rows(table_name, limit, offset, where_clause, options, quote_double, |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}")),
-        DbEngine::Mysql => build_select_rows(table_name, limit, offset, where_clause, options, quote_backtick, |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}")),
-        DbEngine::Sqlite => build_select_rows(table_name, limit, offset, where_clause, options, quote_double, |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}")),
-        DbEngine::Sqlserver => build_select_rows(table_name, limit, offset, where_clause, options, quote_bracket, |limit, offset, has_sort| format!("{} OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY", if has_sort { "" } else { " ORDER BY (SELECT NULL)" })),
+        DbEngine::Postgres => build_select_rows(
+            table_name,
+            limit,
+            offset,
+            where_clause,
+            options,
+            quote_double,
+            |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}"),
+        ),
+        DbEngine::Mysql => build_select_rows(
+            table_name,
+            limit,
+            offset,
+            where_clause,
+            options,
+            quote_backtick,
+            |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}"),
+        ),
+        DbEngine::Sqlite => build_select_rows(
+            table_name,
+            limit,
+            offset,
+            where_clause,
+            options,
+            quote_double,
+            |limit, offset, _| format!(" LIMIT {limit} OFFSET {offset}"),
+        ),
+        DbEngine::Sqlserver => build_select_rows(
+            table_name,
+            limit,
+            offset,
+            where_clause,
+            options,
+            quote_bracket,
+            |limit, offset, has_sort| {
+                format!(
+                    "{} OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY",
+                    if has_sort {
+                        ""
+                    } else {
+                        " ORDER BY (SELECT NULL)"
+                    }
+                )
+            },
+        ),
     }
 }
 
-pub fn explain_rows(connection: &ConnectionInput, table_name: &str, where_clause: Option<&str>) -> Result<String, String> {
+pub fn explain_rows(
+    connection: &ConnectionInput,
+    table_name: &str,
+    where_clause: Option<&str>,
+) -> Result<String, String> {
     let quote = quote_for(connection.engine);
     let base = format!(
         "SELECT * FROM {}{}",
@@ -317,34 +397,61 @@ pub fn explain_rows(connection: &ConnectionInput, table_name: &str, where_clause
     Ok(match connection.engine {
         DbEngine::Postgres | DbEngine::Mysql => format!("EXPLAIN {base} LIMIT 25"),
         DbEngine::Sqlite => format!("EXPLAIN QUERY PLAN {base} LIMIT 25"),
-        DbEngine::Sqlserver => format!("{base} ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY"),
+        DbEngine::Sqlserver => {
+            format!("{base} ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 25 ROWS ONLY")
+        }
     })
 }
 
-pub fn insert_row(connection: &ConnectionInput, table_name: &str, data: &BTreeMap<String, Value>) -> String {
+pub fn insert_row(
+    connection: &ConnectionInput,
+    table_name: &str,
+    data: &BTreeMap<String, Value>,
+) -> String {
     match connection.engine {
-        DbEngine::Postgres => build_insert(table_name, data, quote_double, |index| format!("${index}")),
+        DbEngine::Postgres => {
+            build_insert(table_name, data, quote_double, |index| format!("${index}"))
+        }
         DbEngine::Mysql => build_insert(table_name, data, quote_backtick, |_| "?".into()),
         DbEngine::Sqlite => build_insert(table_name, data, quote_double, |_| "?".into()),
-        DbEngine::Sqlserver => build_insert(table_name, data, quote_bracket, |index| format!("@P{index}")),
+        DbEngine::Sqlserver => build_insert(table_name, data, quote_bracket, |index| {
+            format!("@P{index}")
+        }),
     }
 }
 
-pub fn update_row(connection: &ConnectionInput, table_name: &str, original: &BTreeMap<String, Value>, next: &BTreeMap<String, Value>) -> String {
+pub fn update_row(
+    connection: &ConnectionInput,
+    table_name: &str,
+    original: &BTreeMap<String, Value>,
+    next: &BTreeMap<String, Value>,
+) -> String {
     match connection.engine {
-        DbEngine::Postgres => build_update(table_name, original, next, quote_double, |index| format!("${index}")),
+        DbEngine::Postgres => build_update(table_name, original, next, quote_double, |index| {
+            format!("${index}")
+        }),
         DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_| "?".into()),
         DbEngine::Sqlite => build_update(table_name, original, next, quote_double, |_| "?".into()),
-        DbEngine::Sqlserver => build_update(table_name, original, next, quote_bracket, |index| format!("@P{index}")),
+        DbEngine::Sqlserver => build_update(table_name, original, next, quote_bracket, |index| {
+            format!("@P{index}")
+        }),
     }
 }
 
-pub fn delete_row(connection: &ConnectionInput, table_name: &str, row: &BTreeMap<String, Value>) -> String {
+pub fn delete_row(
+    connection: &ConnectionInput,
+    table_name: &str,
+    row: &BTreeMap<String, Value>,
+) -> String {
     match connection.engine {
-        DbEngine::Postgres => build_delete(table_name, row, quote_double, |index| format!("${index}")),
+        DbEngine::Postgres => {
+            build_delete(table_name, row, quote_double, |index| format!("${index}"))
+        }
         DbEngine::Mysql => build_delete(table_name, row, quote_backtick, |_| "?".into()),
         DbEngine::Sqlite => build_delete(table_name, row, quote_double, |_| "?".into()),
-        DbEngine::Sqlserver => build_delete(table_name, row, quote_bracket, |index| format!("@P{index}")),
+        DbEngine::Sqlserver => {
+            build_delete(table_name, row, quote_bracket, |index| format!("@P{index}"))
+        }
     }
 }
 
@@ -352,7 +459,11 @@ pub fn create_database(connection: &ConnectionInput, name: &str) -> String {
     match connection.engine {
         DbEngine::Postgres => format!("CREATE DATABASE {}", quote_double(name)),
         DbEngine::Mysql => format!("CREATE DATABASE {}", quote_backtick(name)),
-        DbEngine::Sqlite => format!("ATTACH DATABASE {} AS {}", quote_double(name), quote_double(name)),
+        DbEngine::Sqlite => format!(
+            "ATTACH DATABASE {} AS {}",
+            quote_double(name),
+            quote_double(name)
+        ),
         DbEngine::Sqlserver => format!("CREATE SCHEMA {}", quote_bracket(name)),
     }
 }
@@ -362,5 +473,103 @@ fn quote_for(engine: DbEngine) -> fn(&str) -> String {
         DbEngine::Postgres | DbEngine::Sqlite => quote_double,
         DbEngine::Mysql => quote_backtick,
         DbEngine::Sqlserver => quote_bracket,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn postgres_connection() -> ConnectionInput {
+        ConnectionInput {
+            engine: DbEngine::Postgres,
+            host: "localhost".into(),
+            port: "5432".into(),
+            database: "postgres".into(),
+            username: "postgres".into(),
+            password: Some("postgres".into()),
+        }
+    }
+
+    #[test]
+    fn builds_postgres_connection_string_with_encoded_credentials() {
+        let connection = ConnectionInput {
+            username: "user@example.com".into(),
+            password: Some("p@ss word".into()),
+            ..postgres_connection()
+        };
+
+        let value = connection_string(&connection).expect("connection string");
+
+        assert_eq!(
+            value,
+            "postgres://user%40example.com:p%40ss%20word@localhost:5432/postgres"
+        );
+    }
+
+    #[test]
+    fn builds_paginated_select_with_where_project_sort_and_skip() {
+        let connection = postgres_connection();
+        let options = RowQueryOptions {
+            project: Some("id, profile.name".into()),
+            sort: Some("created_at desc, id asc".into()),
+            skip: Some(5),
+            limit: Some(10),
+        };
+
+        let sql = select_rows(
+            &connection,
+            "public.users",
+            25,
+            20,
+            Some("WHERE active = true"),
+            Some(&options),
+        )
+        .expect("select sql");
+
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"profile\".\"name\" FROM \"public\".\"users\" WHERE active = true ORDER BY \"created_at\" DESC, \"id\" ASC LIMIT 10 OFFSET 25"
+        );
+    }
+
+    #[test]
+    fn rejects_semicolons_in_where_clauses() {
+        let connection = postgres_connection();
+
+        let error = count_rows(&connection, "users", Some("id = 1; DROP TABLE users"))
+            .expect_err("where clause should be rejected");
+
+        assert!(error.contains("semicolons"));
+    }
+
+    #[test]
+    fn builds_mutation_sql_with_null_safe_exact_where() {
+        let connection = postgres_connection();
+        let original = BTreeMap::from([
+            ("id".to_string(), Value::from(1)),
+            ("deleted_at".to_string(), Value::Null),
+        ]);
+        let next = BTreeMap::from([
+            ("id".to_string(), Value::from(1)),
+            ("name".to_string(), Value::from("Romeu")),
+        ]);
+
+        let sql = update_row(&connection, "users", &original, &next);
+
+        assert_eq!(
+            sql,
+            "UPDATE \"users\" SET \"id\" = $1, \"name\" = $2 WHERE \"deleted_at\" IS NULL AND \"id\" = $3"
+        );
+    }
+
+    #[test]
+    fn quotes_identifier_parts_and_strips_dangerous_delimiters() {
+        let connection = postgres_connection();
+
+        let sql =
+            select_rows(&connection, "public.\"users\"", 10, 0, None, None).expect("select sql");
+
+        assert_eq!(sql, "SELECT * FROM \"public\".\"users\" LIMIT 10 OFFSET 0");
     }
 }

@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "tauri": "tauri",
     "bench:db": "cargo run --manifest-path src-tauri/Cargo.toml --bin bench_db",
     "bench:db:fast": "src-tauri\\target\\debug\\bench_db.exe"
@@ -57,11 +60,17 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.4.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "jsdom": "^29.1.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.9"
   }
 }
