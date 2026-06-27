@@ -192,7 +192,12 @@ fn build_update(
         .map(|(index, (key, value))| format!("{} = {}", quote(key), placeholder(index + 1, value)))
         .collect::<Vec<_>>()
         .join(", ");
-    let where_clause = exact_where(original, quote, |index| placeholder(index, &Value::Null), next.len() + 1);
+    let where_clause = exact_where(
+        original,
+        quote,
+        |index| placeholder(index, &Value::Null),
+        next.len() + 1,
+    );
     format!(
         "UPDATE {} SET {assignments} WHERE {where_clause}",
         quote_qualified(table_name, quote)
@@ -434,9 +439,7 @@ pub fn insert_row(
     data: &BTreeMap<String, Value>,
 ) -> String {
     match connection.engine {
-        DbEngine::Postgres => {
-            build_insert(table_name, data, quote_double, pg_placeholder)
-        }
+        DbEngine::Postgres => build_insert(table_name, data, quote_double, pg_placeholder),
         DbEngine::Mysql => build_insert(table_name, data, quote_backtick, |_, _| "?".into()),
         DbEngine::Sqlite => build_insert(table_name, data, quote_double, |_, _| "?".into()),
         DbEngine::Sqlserver => build_insert(table_name, data, quote_bracket, |index, _| {
@@ -452,12 +455,20 @@ pub fn update_row(
     next: &BTreeMap<String, Value>,
 ) -> String {
     match connection.engine {
-        DbEngine::Postgres => build_update(table_name, original, next, quote_double, pg_placeholder),
-        DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_, _| "?".into()),
-        DbEngine::Sqlite => build_update(table_name, original, next, quote_double, |_, _| "?".into()),
-        DbEngine::Sqlserver => build_update(table_name, original, next, quote_bracket, |index, _| {
-            format!("@P{index}")
+        DbEngine::Postgres => {
+            build_update(table_name, original, next, quote_double, pg_placeholder)
+        }
+        DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_, _| {
+            "?".into()
         }),
+        DbEngine::Sqlite => {
+            build_update(table_name, original, next, quote_double, |_, _| "?".into())
+        }
+        DbEngine::Sqlserver => {
+            build_update(table_name, original, next, quote_bracket, |index, _| {
+                format!("@P{index}")
+            })
+        }
     }
 }
 

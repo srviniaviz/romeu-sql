@@ -684,12 +684,9 @@ fn get_string_array(row: &JsonRow, keys: &[&str]) -> Vec<String> {
     keys.iter()
         .find_map(|key| row.get(*key))
         .and_then(|value| match value {
-            Value::Array(items) => Some(
-                items
-                    .iter()
-                    .filter_map(value_to_string)
-                    .collect::<Vec<_>>(),
-            ),
+            Value::Array(items) => {
+                Some(items.iter().filter_map(value_to_string).collect::<Vec<_>>())
+            }
             Value::String(value) => serde_json::from_str::<Vec<String>>(value).ok(),
             _ => None,
         })

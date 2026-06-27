@@ -160,7 +160,9 @@ impl DbPoolState {
         format: ExportFormat,
     ) -> Result<u64, String> {
         let started = Instant::now();
-        let file = File::create(path).await.map_err(|error| error.to_string())?;
+        let file = File::create(path)
+            .await
+            .map_err(|error| error.to_string())?;
         let mut writer = ExportWriter::new(BufWriter::new(file), format);
 
         let rows = match self.get(connection).await? {
@@ -262,7 +264,11 @@ impl ExportWriter {
         let line = self
             .columns
             .iter()
-            .map(|column| escape_csv(&value_to_export_string(row.get(column).unwrap_or(&Value::Null))))
+            .map(|column| {
+                escape_csv(&value_to_export_string(
+                    row.get(column).unwrap_or(&Value::Null),
+                ))
+            })
             .collect::<Vec<_>>()
             .join(",");
         self.write_line(&line).await
@@ -284,7 +290,9 @@ impl ExportWriter {
             .map(|column| {
                 format!(
                     "<td>{}</td>",
-                    escape_html(&value_to_export_string(row.get(column).unwrap_or(&Value::Null)))
+                    escape_html(&value_to_export_string(
+                        row.get(column).unwrap_or(&Value::Null)
+                    ))
                 )
             })
             .collect::<Vec<_>>()
