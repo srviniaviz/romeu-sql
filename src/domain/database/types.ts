@@ -8,6 +8,7 @@ export interface ColumnInfo {
   nullable: boolean;
   defaultValue: unknown;
   isPrimaryKey: boolean;
+  enumValues?: string[];
 }
 
 export interface IndexInfo {
@@ -57,6 +58,14 @@ export interface ClusterPermissionInfo {
   principal: string;
   objectName: string;
   privilege: string;
+}
+
+export interface DeleteCascadeImpact {
+  constraintName: string;
+  sourceTable: string;
+  sourceColumns: string;
+  targetTable: string;
+  targetColumns: string;
 }
 
 export interface RowQueryOptions {

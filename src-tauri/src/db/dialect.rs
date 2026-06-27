@@ -160,7 +160,7 @@ fn build_insert(
     table_name: &str,
     data: &BTreeMap<String, Value>,
     quote: fn(&str) -> String,
-    placeholder: impl Fn(usize) -> String,
+    placeholder: impl Fn(usize, &Value) -> String,
 ) -> String {
     let columns = data
         .keys()
@@ -168,9 +168,9 @@ fn build_insert(
         .collect::<Vec<_>>()
         .join(", ");
     let values = data
-        .keys()
+        .iter()
         .enumerate()
-        .map(|(index, _)| placeholder(index + 1))
+        .map(|(index, (_, value))| placeholder(index + 1, value))
         .collect::<Vec<_>>()
         .join(", ");
     format!(
@@ -184,19 +184,28 @@ fn build_update(
     original: &BTreeMap<String, Value>,
     next: &BTreeMap<String, Value>,
     quote: fn(&str) -> String,
-    placeholder: impl Fn(usize) -> String + Copy,
+    placeholder: impl Fn(usize, &Value) -> String + Copy,
 ) -> String {
     let assignments = next
-        .keys()
+        .iter()
         .enumerate()
-        .map(|(index, key)| format!("{} = {}", quote(key), placeholder(index + 1)))
+        .map(|(index, (key, value))| format!("{} = {}", quote(key), placeholder(index + 1, value)))
         .collect::<Vec<_>>()
         .join(", ");
-    let where_clause = exact_where(original, quote, placeholder, next.len() + 1);
+    let where_clause = exact_where(original, quote, |index| placeholder(index, &Value::Null), next.len() + 1);
     format!(
         "UPDATE {} SET {assignments} WHERE {where_clause}",
         quote_qualified(table_name, quote)
     )
+}
+
+fn pg_placeholder(index: usize, value: &Value) -> String {
+    let placeholder = format!("${index}");
+    value
+        .get("__romeuSqlEnum")
+        .and_then(Value::as_str)
+        .map(|enum_type| format!("{placeholder}::{}", quote_double(enum_type)))
+        .unwrap_or(placeholder)
 }
 
 fn build_delete(
@@ -264,7 +273,7 @@ pub fn list_columns(connection: &ConnectionInput, table_name: &str) -> String {
         .unwrap_or(table_name)
         .to_string();
     match connection.engine {
-        DbEngine::Postgres => format!("SELECT column_name as name, data_type as type, is_nullable as nullable, column_default as \"defaultValue\" FROM information_schema.columns WHERE table_name = '{}' ORDER BY ordinal_position", pure_table.replace('\'', "''")),
+        DbEngine::Postgres => format!("SELECT c.column_name as name, COALESCE(NULLIF(c.udt_name, ''), c.data_type) as type, c.is_nullable as nullable, c.column_default as \"defaultValue\", COALESCE((SELECT jsonb_agg(e.enumlabel ORDER BY e.enumsortorder) FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = c.udt_name AND n.nspname = c.udt_schema), '[]'::jsonb) as \"enumValues\" FROM information_schema.columns c WHERE c.table_name = '{}' ORDER BY c.ordinal_position", pure_table.replace('\'', "''")),
         DbEngine::Mysql => format!("DESCRIBE {}", quote_qualified(table_name, quote_backtick)),
         DbEngine::Sqlite => format!("PRAGMA table_info({})", quote_qualified(table_name, quote_double)),
         DbEngine::Sqlserver => format!("SELECT COLUMN_NAME as name, DATA_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{}'", pure_table.replace('\'', "''")),
@@ -283,6 +292,22 @@ pub fn list_indexes(connection: &ConnectionInput, table_name: &str) -> String {
         DbEngine::Mysql => format!("SHOW INDEX FROM {}", quote_qualified(table_name, quote_backtick)),
         DbEngine::Sqlite => format!("PRAGMA index_list({})", quote_qualified(table_name, quote_double)),
         DbEngine::Sqlserver => format!("SELECT i.name, COL_NAME(ic.object_id, ic.column_id) as columns, i.is_unique as unique, i.type_desc as type FROM sys.indexes i JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id JOIN sys.tables t ON t.object_id = i.object_id WHERE t.name = '{}' AND i.name IS NOT NULL ORDER BY i.name", pure_table.replace('\'', "''")),
+    }
+}
+
+pub fn list_delete_cascade_impacts(connection: &ConnectionInput, table_name: &str) -> String {
+    let pure_table = table_name
+        .replace(['\'', '"', '`', '[', ']'], "")
+        .split('.')
+        .last()
+        .unwrap_or(table_name)
+        .to_string();
+    match connection.engine {
+        DbEngine::Postgres => format!(
+            "SELECT c.conname AS \"constraintName\", ns.nspname || '.' || src.relname AS \"sourceTable\", string_agg(src_att.attname, ', ' ORDER BY src_ord.ord) AS \"sourceColumns\", nt.nspname || '.' || tgt.relname AS \"targetTable\", string_agg(tgt_att.attname, ', ' ORDER BY tgt_ord.ord) AS \"targetColumns\" FROM pg_constraint c JOIN pg_class src ON src.oid = c.conrelid JOIN pg_namespace ns ON ns.oid = src.relnamespace JOIN pg_class tgt ON tgt.oid = c.confrelid JOIN pg_namespace nt ON nt.oid = tgt.relnamespace JOIN unnest(c.conkey) WITH ORDINALITY AS src_ord(attnum, ord) ON true JOIN pg_attribute src_att ON src_att.attrelid = src.oid AND src_att.attnum = src_ord.attnum JOIN unnest(c.confkey) WITH ORDINALITY AS tgt_ord(attnum, ord) ON tgt_ord.ord = src_ord.ord JOIN pg_attribute tgt_att ON tgt_att.attrelid = tgt.oid AND tgt_att.attnum = tgt_ord.attnum WHERE c.contype = 'f' AND c.confdeltype = 'c' AND nt.nspname = 'public' AND tgt.relname = '{}' GROUP BY c.conname, ns.nspname, src.relname, nt.nspname, tgt.relname ORDER BY ns.nspname, src.relname, c.conname",
+            pure_table.replace('\'', "''")
+        ),
+        DbEngine::Mysql | DbEngine::Sqlite | DbEngine::Sqlserver => "SELECT NULL WHERE 1 = 0".into(),
     }
 }
 
@@ -410,11 +435,11 @@ pub fn insert_row(
 ) -> String {
     match connection.engine {
         DbEngine::Postgres => {
-            build_insert(table_name, data, quote_double, |index| format!("${index}"))
+            build_insert(table_name, data, quote_double, pg_placeholder)
         }
-        DbEngine::Mysql => build_insert(table_name, data, quote_backtick, |_| "?".into()),
-        DbEngine::Sqlite => build_insert(table_name, data, quote_double, |_| "?".into()),
-        DbEngine::Sqlserver => build_insert(table_name, data, quote_bracket, |index| {
+        DbEngine::Mysql => build_insert(table_name, data, quote_backtick, |_, _| "?".into()),
+        DbEngine::Sqlite => build_insert(table_name, data, quote_double, |_, _| "?".into()),
+        DbEngine::Sqlserver => build_insert(table_name, data, quote_bracket, |index, _| {
             format!("@P{index}")
         }),
     }
@@ -427,12 +452,10 @@ pub fn update_row(
     next: &BTreeMap<String, Value>,
 ) -> String {
     match connection.engine {
-        DbEngine::Postgres => build_update(table_name, original, next, quote_double, |index| {
-            format!("${index}")
-        }),
-        DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_| "?".into()),
-        DbEngine::Sqlite => build_update(table_name, original, next, quote_double, |_| "?".into()),
-        DbEngine::Sqlserver => build_update(table_name, original, next, quote_bracket, |index| {
+        DbEngine::Postgres => build_update(table_name, original, next, quote_double, pg_placeholder),
+        DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_, _| "?".into()),
+        DbEngine::Sqlite => build_update(table_name, original, next, quote_double, |_, _| "?".into()),
+        DbEngine::Sqlserver => build_update(table_name, original, next, quote_bracket, |index, _| {
             format!("@P{index}")
         }),
     }

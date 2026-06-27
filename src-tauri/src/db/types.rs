@@ -41,6 +41,7 @@ pub struct ColumnInfo {
     pub nullable: bool,
     pub default_value: Value,
     pub is_primary_key: bool,
+    pub enum_values: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,6 +79,16 @@ pub struct ClusterPermissionInfo {
     pub principal: String,
     pub object_name: String,
     pub privilege: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteCascadeImpact {
+    pub constraint_name: String,
+    pub source_table: String,
+    pub source_columns: String,
+    pub target_table: String,
+    pub target_columns: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

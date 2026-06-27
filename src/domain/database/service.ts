@@ -7,6 +7,7 @@ import type {
   ClusterPermissionInfo,
   ClusterUserInfo,
   ColumnInfo,
+  DeleteCascadeImpact,
   ExportFormat,
   ExportResult,
   IndexInfo,
@@ -159,6 +160,10 @@ export async function listColumns(connection: Connection, tableName: string) {
 
 export async function listIndexes(connection: Connection, tableName: string) {
   return dbInvoke<IndexInfo[]>("db_list_indexes", connection, { tableName });
+}
+
+export async function listDeleteCascadeImpacts(connection: Connection, tableName: string) {
+  return dbInvoke<DeleteCascadeImpact[]>("db_list_delete_cascade_impacts", connection, { tableName });
 }
 
 export async function executeSql(connection: Connection, query: string) {

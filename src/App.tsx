@@ -7,6 +7,7 @@ import { AppSidebar } from "./components/layout/AppSidebar";
 import { ClusterManagerModal } from "./components/ClusterManagerModal";
 import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDialog";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { ToastViewport } from "./components/ui/toast";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
 import { clearPasswordMemoryCache } from "./domain/connections/repository";
 import { warmStronghold } from "./domain/connections/secretsRepository";
@@ -241,6 +242,7 @@ function App() {
           if (!open) setManagingConn(null);
         }}
       />
+      <ToastViewport />
     </div>
   );
 }

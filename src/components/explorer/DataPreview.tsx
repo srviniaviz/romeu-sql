@@ -21,9 +21,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import type { ColumnInfo, ExportFormat, IndexInfo, RowQueryOptions } from "@/domain/database/types";
+import type { ColumnInfo, DeleteCascadeImpact, ExportFormat, IndexInfo, RowQueryOptions } from "@/domain/database/types";
 import { pickSaveFile, saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
+import { RowDataEditor } from "@/components/explorer/RowDataEditor";
+import { toast } from "@/components/ui/toast";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
 import type { AppSettings } from "@/domain/settings/types";
@@ -48,6 +50,8 @@ interface DataPreviewProps {
   columnCount?: number;
   columns?: ColumnInfo[];
   indexes?: IndexInfo[];
+  deleteCascadeImpacts?: DeleteCascadeImpact[];
+  loadingDeleteCascadeImpacts?: boolean;
   refreshing: boolean;
   whereClause: string;
   rowOptions: RowQueryOptions;
@@ -120,6 +124,28 @@ function sortRowKeys(row: Record<string, unknown>) {
 
 function sortRowObject(row: Record<string, unknown>) {
   return Object.fromEntries(sortRowKeys(row).map((key) => [key, row[key]]));
+}
+
+function valuesEqual(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function changedRowValues(original: Record<string, unknown>, next: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(next).filter(([key, value]) => !valuesEqual(original[key], value))
+  );
+}
+
+function rowIdentityWhere(row: Record<string, unknown>, columns: ColumnInfo[]) {
+  const primaryKeys = columns.filter((column) => column.isPrimaryKey && Object.prototype.hasOwnProperty.call(row, column.name));
+  if (primaryKeys.length > 0) {
+    return Object.fromEntries(primaryKeys.map((column) => [column.name, row[column.name]]));
+  }
+
+  const fallbackKey = ["id", "_id", "uuid"].find((key) => Object.prototype.hasOwnProperty.call(row, key));
+  if (fallbackKey) return { [fallbackKey]: row[fallbackKey] };
+
+  return row;
 }
 
 async function copyText(text: string) {
@@ -400,11 +426,13 @@ function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode:
 function RowActions({
   row,
   busy,
+  allowDelete,
   onEdit,
   onDelete,
 }: {
   row: Record<string, unknown>;
   busy: boolean;
+  allowDelete: boolean;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
@@ -417,9 +445,11 @@ function RowActions({
       <IconButton title={t("data_preview.copy_json")} onClick={() => void copyText(JSON.stringify(sortRowObject(row), null, 2))}>
         <Copy size={12} />
       </IconButton>
-      <IconButton title={t("data_preview.delete_row")} disabled={busy} onClick={() => onDelete(row)}>
-        <Trash2 size={12} />
-      </IconButton>
+      {allowDelete && (
+        <IconButton title={t("data_preview.delete_row")} disabled={busy} onClick={() => onDelete(row)}>
+          <Trash2 size={12} />
+        </IconButton>
+      )}
     </div>
   );
 }
@@ -458,7 +488,7 @@ function DocumentRow({
         >
           <ChevronDown size={12} className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} />
         </IconButton>
-        <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
+        <RowActions row={row} busy={busy} allowDelete={settings.security.allowDeleteRows} onEdit={onEdit} onDelete={onDelete} />
       </div>
 
       <div className="overflow-auto px-3 py-2 font-mono text-[12px] leading-[1.45]">
@@ -544,7 +574,7 @@ function RowsTable({
               ))}
               {!readOnly && (
                 <td className="sticky right-0 z-10 bg-background px-2 py-1.5 group-hover/row:bg-muted/25">
-                  <RowActions row={row} busy={busy} onEdit={onEdit} onDelete={onDelete} />
+                  <RowActions row={row} busy={busy} allowDelete={settings.security.allowDeleteRows} onEdit={onEdit} onDelete={onDelete} />
                 </td>
               )}
             </tr>
@@ -557,25 +587,24 @@ function RowsTable({
 
 function RowEditor({
   row,
+  columns,
   saving,
   onClose,
   onSave,
 }: {
   row: Record<string, unknown>;
+  columns: ColumnInfo[];
   saving: boolean;
   onClose: () => void;
   onSave: (next: Record<string, unknown>) => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [value, setValue] = useState(() => JSON.stringify(row, null, 2));
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSave() {
+  async function handleSave(next: Record<string, unknown>) {
     try {
-      const parsed = JSON.parse(value);
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error(t("data_preview.row_json_error"));
       setError(null);
-      await onSave(parsed as Record<string, unknown>);
+      await onSave(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -583,28 +612,118 @@ function RowEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
-      <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-background shadow-xl">
-        <div className="flex h-12 items-center justify-between px-4">
+      <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-background shadow-xl">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/45 px-5">
           <div>
             <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.edit_row")}</h2>
-            <p className="text-[12px] text-muted-foreground">{t("data_preview.update_json")}</p>
+            <p className="text-[12px] text-muted-foreground">{t("data_preview.update_typed_fields")}</p>
           </div>
           <IconButton title={t("common.close")} disabled={saving} onClick={onClose}>
             <X size={14} />
           </IconButton>
         </div>
-        <div className="p-4">
-          <textarea
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            spellCheck={false}
-            className="h-[360px] w-full resize-none rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 outline-none focus:ring-2 focus:ring-primary/15"
-          />
-          {error && <p className="mt-2 text-[12px] text-destructive">{error}</p>}
+        <RowDataEditor
+          key={JSON.stringify(row)}
+          mode="edit"
+          columns={columns.length ? columns : Object.keys(row).map((name) => ({
+            name,
+            type: typeof row[name],
+            nullable: true,
+            defaultValue: null,
+            isPrimaryKey: name === "id" || name === "_id",
+          }))}
+          initialValue={row}
+          disabled={saving}
+          cancelLabel={t("common.cancel")}
+          onCancel={onClose}
+          submitLabel={saving ? t("data_preview.saving") : t("common.save")}
+          onSubmit={handleSave}
+        />
+        {error && <p className="border-t border-border/40 px-5 py-3 text-[12px] text-destructive">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+function DeleteRowDialog({
+  row,
+  busy,
+  error,
+  cascadeImpacts,
+  loadingCascadeImpacts,
+  onCancel,
+  onConfirm,
+}: {
+  row: Record<string, unknown>;
+  busy: boolean;
+  error: string | null;
+  cascadeImpacts: DeleteCascadeImpact[];
+  loadingCascadeImpacts: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+  const identity = ["id", "_id", "uuid", "name", "email"].find((key) => Object.prototype.hasOwnProperty.call(row, key));
+  const identityValue = identity ? `${identity}: ${serializeValue(row[identity])}` : serializeValue(Object.values(row)[0]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
+      <div className="w-full max-w-md overflow-hidden rounded-lg bg-background shadow-xl">
+        <div className="flex items-start justify-between gap-4 px-5 py-4">
+          <div className="flex gap-3">
+            <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+              <Trash2 size={17} />
+            </div>
+            <div>
+              <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.confirm_delete")}</h2>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{t("data_preview.confirm_delete_desc")}</p>
+            </div>
+          </div>
+          <IconButton title={t("common.close")} disabled={busy} onClick={onCancel}>
+            <X size={14} />
+          </IconButton>
         </div>
-        <div className="flex h-14 items-center justify-end gap-2 px-4">
-          <ToolbarButton disabled={saving} onClick={onClose}>{t("common.cancel")}</ToolbarButton>
-          <ToolbarButton primary disabled={saving} onClick={handleSave}>{saving ? t("data_preview.saving") : t("common.save")}</ToolbarButton>
+        <div className="mx-5 rounded-md bg-muted/25 px-3 py-2 font-mono text-[12px] text-muted-foreground">
+          {identityValue}
+        </div>
+        <div className="mx-5 mt-3 rounded-md bg-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold text-foreground">{t("data_preview.cascade_impact")}</p>
+            {loadingCascadeImpacts && <RefreshCw size={12} className="animate-spin text-muted-foreground" />}
+          </div>
+          {loadingCascadeImpacts ? (
+            <p className="mt-1 text-[12px] text-muted-foreground">{t("data_preview.cascade_loading")}</p>
+          ) : cascadeImpacts.length ? (
+            <div className="mt-2 max-h-32 space-y-1 overflow-auto pr-1 custom-scrollbar">
+              {cascadeImpacts.map((impact) => (
+                <div key={impact.constraintName} className="rounded bg-background/70 px-2 py-1.5 text-[12px]">
+                  <div className="font-mono font-semibold text-foreground">{impact.sourceTable}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                    {impact.sourceColumns} {"->"} {impact.targetTable}.{impact.targetColumns}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-[12px] text-muted-foreground">{t("data_preview.cascade_none")}</p>
+          )}
+        </div>
+        {error && (
+          <div className="mx-5 mt-3 max-h-28 overflow-auto rounded-md bg-destructive/10 px-3 py-2 font-mono text-[12px] leading-5 text-destructive custom-scrollbar">
+            {error}
+          </div>
+        )}
+        <div className="flex h-14 items-center justify-end gap-2 px-5">
+          <ToolbarButton disabled={busy} onClick={onCancel}>{t("common.cancel")}</ToolbarButton>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-destructive px-3 text-[12px] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {busy ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
+            {t("common.delete")}
+          </button>
         </div>
       </div>
     </div>
@@ -697,6 +816,8 @@ export function DataPreview({
   columnCount = 0,
   columns: schemaColumns = [],
   indexes = [],
+  deleteCascadeImpacts = [],
+  loadingDeleteCascadeImpacts = false,
   refreshing,
   whereClause,
   rowOptions,
@@ -734,12 +855,18 @@ export function DataPreview({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [schemaMessage, setSchemaMessage] = useState<string | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [validatingFilter, setValidatingFilter] = useState(false);
   const [whereSuggestOpen, setWhereSuggestOpen] = useState(false);
   const [whereSuggestIndex, setWhereSuggestIndex] = useState(0);
   const [whereCursor, setWhereCursor] = useState(0);
+  const [sortSuggestOpen, setSortSuggestOpen] = useState(false);
+  const [sortSuggestIndex, setSortSuggestIndex] = useState(0);
+  const [sortCursor, setSortCursor] = useState(0);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
+  const [deleteRow, setDeleteRow] = useState<Record<string, unknown> | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DataTab>("rows");
   const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
   const [lastQuerySql, setLastQuerySql] = useState("");
@@ -751,10 +878,16 @@ export function DataPreview({
   const startRow = totalRows === 0 ? 0 : page * pageSize + 1;
   const endRow = Math.min(totalRows, (page + 1) * pageSize);
   const whereInputRef = useRef<HTMLInputElement | null>(null);
+  const sortInputRef = useRef<HTMLInputElement | null>(null);
   const whereToken = useMemo(() => {
     const left = query.slice(0, whereCursor);
     return left.match(/[a-zA-Z_][\w.]*$/)?.[0] ?? "";
   }, [query, whereCursor]);
+  const sortToken = useMemo(() => {
+    const left = sort.slice(0, sortCursor);
+    const currentTerm = left.split(",").pop() ?? "";
+    return currentTerm.match(/[a-zA-Z_][\w.]*$/)?.[0] ?? "";
+  }, [sort, sortCursor]);
   const whereSuggestions = useMemo(() => {
     if (!whereToken) return [];
     const needle = whereToken.toLowerCase();
@@ -762,9 +895,19 @@ export function DataPreview({
       .filter((column) => column.name.toLowerCase().includes(needle))
       .slice(0, 8);
   }, [schemaColumns, whereToken]);
+  const sortSuggestions = useMemo(() => {
+    if (!sortToken) return [];
+    const needle = sortToken.toLowerCase();
+    return schemaColumns
+      .filter((column) => column.name.toLowerCase().includes(needle))
+      .slice(0, 8);
+  }, [schemaColumns, sortToken]);
   useEffect(() => {
     setWhereSuggestIndex(0);
   }, [whereToken]);
+  useEffect(() => {
+    setSortSuggestIndex(0);
+  }, [sortToken]);
 
   useEffect(() => setQuery(whereClause), [whereClause]);
   useEffect(() => {
@@ -835,6 +978,29 @@ export function DataPreview({
     onFind();
   }
 
+  async function copySchemaJson() {
+    const schema = {
+      table: selectedTable,
+      columns: schemaColumns.map((column) => ({
+        name: column.name,
+        type: column.type,
+        nullable: column.nullable,
+        defaultValue: column.defaultValue,
+        primaryKey: column.isPrimaryKey,
+        enumValues: column.enumValues ?? [],
+      })),
+      indexes: indexes.map((index) => ({
+        name: index.name,
+        columns: index.columns,
+        unique: index.unique,
+        type: index.type,
+      })),
+    };
+    await copyText(JSON.stringify(schema, null, 2));
+    setSchemaMessage(t("data_preview.schema_copied"));
+    window.setTimeout(() => setSchemaMessage(null), 1800);
+  }
+
   function insertWhereSuggestion(columnName: string) {
     const input = whereInputRef.current;
     const cursor = input?.selectionStart ?? whereCursor;
@@ -850,6 +1016,26 @@ export function DataPreview({
     requestAnimationFrame(() => {
       whereInputRef.current?.focus();
       whereInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  }
+
+  function insertSortSuggestion(columnName: string) {
+    const input = sortInputRef.current;
+    const cursor = input?.selectionStart ?? sortCursor;
+    const before = sort.slice(0, cursor);
+    const after = sort.slice(cursor);
+    const currentTerm = before.split(",").pop() ?? "";
+    const termStart = cursor - currentTerm.length;
+    const match = currentTerm.match(/[a-zA-Z_][\w.]*$/);
+    const start = match ? cursor - match[0].length : termStart + currentTerm.length;
+    const next = `${sort.slice(0, start)}${columnName}${after}`;
+    const nextCursor = start + columnName.length;
+    setSort(next);
+    setSortCursor(nextCursor);
+    setSortSuggestOpen(false);
+    requestAnimationFrame(() => {
+      sortInputRef.current?.focus();
+      sortInputRef.current?.setSelectionRange(nextCursor, nextCursor);
     });
   }
 
@@ -872,7 +1058,9 @@ export function DataPreview({
         }
 
         const result = await onExportQuery(query, path, format);
-        setExportMessage(t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() }));
+        const successMessage = t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() });
+        setExportMessage(successMessage);
+        toast({ title: t("toast.export_done"), description: successMessage, variant: "success" });
         return;
       }
 
@@ -886,9 +1074,17 @@ export function DataPreview({
             : toCsv(safeRows),
         format,
       });
-      setExportMessage(saved ? t("data_preview.exported_rows", { count: rows.length, format: format === "xls" ? "EXCEL" : format.toUpperCase() }) : t("data_preview.export_canceled"));
+      if (saved) {
+        const successMessage = t("data_preview.exported_rows", { count: rows.length, format: format === "xls" ? "EXCEL" : format.toUpperCase() });
+        setExportMessage(successMessage);
+        toast({ title: t("toast.export_done"), description: successMessage, variant: "success" });
+      } else {
+        setExportMessage(t("data_preview.export_canceled"));
+      }
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : String(err));
+      const error = err instanceof Error ? err.message : String(err);
+      setExportError(error);
+      toast({ title: t("toast.export_failed"), description: error, variant: "error" });
     } finally {
       setExporting(false);
       onExportStatusChange(null);
@@ -915,9 +1111,13 @@ export function DataPreview({
         return;
       }
       const result = await onExportQuery(lastQuerySql || sql, path, format);
-      setExportMessage(t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() }));
+      const successMessage = t("data_preview.exported_rows", { count: result.rows, format: format === "xls" ? "EXCEL" : format.toUpperCase() });
+      setExportMessage(successMessage);
+      toast({ title: t("toast.export_done"), description: successMessage, variant: "success" });
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : String(err));
+      const error = err instanceof Error ? err.message : String(err);
+      setExportError(error);
+      toast({ title: t("toast.export_failed"), description: error, variant: "error" });
     } finally {
       setExporting(false);
       onExportStatusChange(null);
@@ -936,18 +1136,34 @@ export function DataPreview({
     try {
       await action();
       setMessage(t("data_preview.done"));
-      return true;
+      return { ok: true };
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : String(err));
-      return false;
+      const error = err instanceof Error ? err.message : String(err);
+      setMessage(error);
+      return { ok: false, error };
     } finally {
       setBusy(false);
     }
   }
 
   function handleDelete(row: Record<string, unknown>) {
-    if (appSettings.security.confirmDestructiveActions && !window.confirm(t("data_preview.confirm_delete"))) return;
-    void runAction(() => onDeleteRow(row));
+    if (!appSettings.security.allowDeleteRows) return;
+    setDeleteError(null);
+    setDeleteRow(row);
+  }
+
+  async function confirmDeleteRow() {
+    if (!deleteRow) return;
+    setDeleteError(null);
+    const where = rowIdentityWhere(deleteRow, schemaColumns);
+    const result = await runAction(() => onDeleteRow(where));
+    if (result.ok) {
+      setDeleteRow(null);
+      toast({ title: t("toast.row_deleted"), variant: "success" });
+      return;
+    }
+    setDeleteError(result.error ?? t("common.error"));
+    toast({ title: t("toast.delete_failed"), description: result.error ?? t("common.error"), variant: "error" });
   }
 
   const tabs: Array<{ id: DataTab; label: string; count?: number }> = [
@@ -1084,15 +1300,71 @@ export function DataPreview({
                   {filterError}
                 </p>
               )}
-              <div className="flex h-8 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+              <div className="relative flex h-8 items-center rounded-md bg-muted/25 px-2 text-[12px]">
                 <span className="mr-2 font-semibold text-foreground">ORDER BY</span>
                 <input
+                  ref={sortInputRef}
                   value={sort}
-                  onChange={(event) => setSort(event.target.value)}
-                  onKeyDown={(event) => event.key === "Enter" && applyRows()}
+                  onChange={(event) => {
+                    setSort(event.target.value);
+                    setSortCursor(event.target.selectionStart ?? event.target.value.length);
+                    setSortSuggestOpen(true);
+                  }}
+                  onClick={(event) => {
+                    setSortCursor(event.currentTarget.selectionStart ?? 0);
+                    setSortSuggestOpen(true);
+                  }}
+                  onKeyUp={(event) => setSortCursor(event.currentTarget.selectionStart ?? 0)}
+                  onFocus={() => setSortSuggestOpen(true)}
+                  onBlur={() => window.setTimeout(() => setSortSuggestOpen(false), 120)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" && sortSuggestOpen && sortSuggestions.length > 0) {
+                      event.preventDefault();
+                      setSortSuggestIndex((index) => Math.min(sortSuggestions.length - 1, index + 1));
+                      return;
+                    }
+                    if (event.key === "ArrowUp" && sortSuggestOpen && sortSuggestions.length > 0) {
+                      event.preventDefault();
+                      setSortSuggestIndex((index) => Math.max(0, index - 1));
+                      return;
+                    }
+                    if (event.key === "Enter" && sortSuggestOpen && sortSuggestions[sortSuggestIndex]) {
+                      event.preventDefault();
+                      insertSortSuggestion(sortSuggestions[sortSuggestIndex].name);
+                      return;
+                    }
+                    if (event.key === "Enter") void applyRows();
+                    if (event.key === "Escape") setSortSuggestOpen(false);
+                    if (event.key === "Tab" && sortSuggestions[0]) {
+                      event.preventDefault();
+                      insertSortSuggestion(sortSuggestions[sortSuggestIndex]?.name ?? sortSuggestions[0].name);
+                    }
+                  }}
                   placeholder={t("data_preview.order_placeholder")}
                   className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                 />
+                {sortSuggestOpen && sortSuggestions.length > 0 && (
+                  <div className="absolute left-24 top-9 z-50 w-[360px] overflow-hidden rounded-md bg-popover p-1 shadow-xl ring-1 ring-border">
+                    {sortSuggestions.map((column, index) => (
+                      <button
+                        key={column.name}
+                        type="button"
+                        onMouseEnter={() => setSortSuggestIndex(index)}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          insertSortSuggestion(column.name);
+                        }}
+                        className={cn(
+                          "flex h-7 w-full items-center justify-between rounded px-2 text-left font-mono text-[12px] hover:bg-muted/45",
+                          index === sortSuggestIndex && "bg-muted/45"
+                        )}
+                      >
+                        <span className="font-semibold text-foreground">{column.name}</span>
+                        <span className="text-muted-foreground">{column.type}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {message && <pre className="max-h-32 overflow-auto rounded-md bg-muted/25 p-2 font-mono text-[11px] leading-4 text-foreground">{message}</pre>}
               {optionsOpen && (
@@ -1248,6 +1520,13 @@ export function DataPreview({
           </div>
         ) : activeTab === "schema" ? (
           <div className="rounded-md bg-muted/25 p-2">
+            <div className="mb-2 flex items-center justify-end gap-2">
+              {schemaMessage && <span className="text-[11px] text-muted-foreground">{schemaMessage}</span>}
+              <ToolbarButton onClick={() => void copySchemaJson()}>
+                <Copy size={13} />
+                {t("data_preview.copy_schema")}
+              </ToolbarButton>
+            </div>
             <table className="w-full text-left text-[12px]">
               <thead>
                 <tr className="text-muted-foreground">
@@ -1332,12 +1611,37 @@ export function DataPreview({
       {editingRow && (
         <RowEditor
           row={editingRow}
+          columns={schemaColumns}
           saving={busy}
           onClose={() => setEditingRow(null)}
           onSave={async (next) => {
-            const saved = await runAction(() => onUpdateRow(editingRow, next));
-            if (saved) setEditingRow(null);
+            const changed = changedRowValues(editingRow, next);
+            if (Object.keys(changed).length === 0) {
+              setEditingRow(null);
+              return;
+            }
+            const where = rowIdentityWhere(editingRow, schemaColumns);
+            const result = await runAction(() => onUpdateRow(where, changed));
+            if (result.ok) {
+              setEditingRow(null);
+              return;
+            }
+            throw new Error(result.error ?? t("common.error"));
           }}
+        />
+      )}
+      {deleteRow && (
+        <DeleteRowDialog
+          row={deleteRow}
+          busy={busy}
+          error={deleteError}
+          cascadeImpacts={deleteCascadeImpacts}
+          loadingCascadeImpacts={loadingDeleteCascadeImpacts}
+          onCancel={() => {
+            setDeleteError(null);
+            setDeleteRow(null);
+          }}
+          onConfirm={() => void confirmDeleteRow()}
         />
       )}
       {exportOpen && (

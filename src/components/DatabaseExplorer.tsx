@@ -10,6 +10,7 @@ import { ExplorerHeader } from "./explorer/ExplorerHeader";
 import { SqlConsole } from "./explorer/SqlConsole";
 import { TableBrowser } from "./explorer/TableBrowser";
 import { DataPreview } from "./explorer/DataPreview";
+import { toast } from "@/components/ui/toast";
 import { Connection } from "../lib/useConnections";
 import {
   benchmarkAnalyze,
@@ -23,6 +24,7 @@ import {
   exportQuery,
   insertRow,
   listColumns,
+  listDeleteCascadeImpacts,
   listIndexes,
   listTables,
   listTableStats,
@@ -224,6 +226,12 @@ export function DatabaseExplorer({
     enabled: !!selectedTable,
   });
 
+  const { data: deleteCascadeImpacts = [], isFetching: loadingDeleteCascadeImpacts } = useQuery({
+    queryKey: ["deleteCascadeImpacts", connection.id, connection.database, selectedTable],
+    queryFn: () => (selectedTable ? listDeleteCascadeImpacts(connection, selectedTable) : []),
+    enabled: !!selectedTable,
+  });
+
   const executeMutation = useMutation({
     mutationFn: (query: string) => executeSql(connection, query),
     onSuccess: (res) => {
@@ -407,6 +415,8 @@ export function DatabaseExplorer({
             columnCount={columns.length}
             columns={columns}
             indexes={indexes}
+            deleteCascadeImpacts={deleteCascadeImpacts}
+            loadingDeleteCascadeImpacts={loadingDeleteCascadeImpacts}
             refreshing={fetchingRows || countingRows}
             whereClause={whereClause}
             rowOptions={rowOptions}
@@ -548,6 +558,7 @@ export function DatabaseExplorer({
         columns={columns}
         onInsert={async (data) => {
           await insertMutation.mutateAsync(data);
+          toast({ title: t("toast.row_inserted"), variant: "success" });
         }}
       />
     </div>

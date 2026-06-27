@@ -30,6 +30,7 @@ export interface ConnectionSettings {
 export interface SecuritySettings {
   maskSensitiveFields: boolean;
   confirmDestructiveActions: boolean;
+  allowDeleteRows: boolean;
   allowExports: boolean;
   clearSecretsOnDisconnect: boolean;
 }
@@ -93,6 +94,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   security: {
     maskSensitiveFields: true,
     confirmDestructiveActions: true,
+    allowDeleteRows: true,
     allowExports: true,
     clearSecretsOnDisconnect: false,
   },

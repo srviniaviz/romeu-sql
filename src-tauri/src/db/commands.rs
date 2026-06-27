@@ -2,8 +2,8 @@ use super::dialect;
 use super::pool::DbPoolState;
 use super::types::{
     BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
-    ColumnInfo, ConnectionInput, ExportFormat, ExportResult, IndexInfo, JsonRow, RowQueryOptions,
-    TableInfo,
+    ColumnInfo, ConnectionInput, DeleteCascadeImpact, ExportFormat, ExportResult, IndexInfo,
+    JsonRow, RowQueryOptions, TableInfo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -355,6 +355,25 @@ pub async fn db_list_indexes(
 }
 
 #[tauri::command]
+pub async fn db_list_delete_cascade_impacts(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
+    table_name: String,
+) -> DbResult<Vec<DeleteCascadeImpact>> {
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(
+                &connection,
+                &dialect::list_delete_cascade_impacts(&connection, &table_name),
+            )
+            .await?;
+        Ok(rows.iter().map(normalize_delete_cascade_impact).collect())
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn db_execute_sql(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
@@ -420,7 +439,7 @@ pub async fn db_insert_row(
 ) -> DbResult<String> {
     with_query_timeout(query_timeout_ms, async {
         let sql = dialect::insert_row(&connection, &table_name, &data);
-        let values = data.values().cloned().collect::<Vec<_>>();
+        let values = data.values().map(bind_value).collect::<Vec<_>>();
         state.execute(&connection, &sql, &values).await?;
         Ok(sql)
     })
@@ -438,12 +457,20 @@ pub async fn db_update_row(
 ) -> DbResult<String> {
     with_query_timeout(query_timeout_ms, async {
         let sql = dialect::update_row(&connection, &table_name, &original, &next);
-        let mut values = next.values().cloned().collect::<Vec<_>>();
+        let mut values = next.values().map(bind_value).collect::<Vec<_>>();
         values.extend(original.values().filter(|value| !value.is_null()).cloned());
         state.execute(&connection, &sql, &values).await?;
         Ok(sql)
     })
     .await
+}
+
+fn bind_value(value: &Value) -> Value {
+    value
+        .get("value")
+        .filter(|_| value.get("__romeuSqlEnum").is_some())
+        .cloned()
+        .unwrap_or_else(|| value.clone())
 }
 
 #[tauri::command]
@@ -533,6 +560,7 @@ fn normalize_column(row: &JsonRow) -> ColumnInfo {
             || number_eq(row.get("pk"), 0),
         default_value: default_value.unwrap_or(Value::Null),
         is_primary_key,
+        enum_values: get_string_array(row, &["enumValues"]),
     }
 }
 
@@ -591,6 +619,16 @@ fn normalize_cluster_permission(row: &JsonRow) -> ClusterPermissionInfo {
     }
 }
 
+fn normalize_delete_cascade_impact(row: &JsonRow) -> DeleteCascadeImpact {
+    DeleteCascadeImpact {
+        constraint_name: get_string(row, &["constraintName"]),
+        source_table: get_string(row, &["sourceTable"]),
+        source_columns: get_string(row, &["sourceColumns"]),
+        target_table: get_string(row, &["targetTable"]),
+        target_columns: get_string(row, &["targetColumns"]),
+    }
+}
+
 fn table_score(
     estimated_rows: Option<i64>,
     index_count: i64,
@@ -640,6 +678,22 @@ fn get_bool(row: &JsonRow, keys: &[&str]) -> Option<bool> {
     keys.iter()
         .find_map(|key| row.get(*key))
         .and_then(value_to_bool)
+}
+
+fn get_string_array(row: &JsonRow, keys: &[&str]) -> Vec<String> {
+    keys.iter()
+        .find_map(|key| row.get(*key))
+        .and_then(|value| match value {
+            Value::Array(items) => Some(
+                items
+                    .iter()
+                    .filter_map(value_to_string)
+                    .collect::<Vec<_>>(),
+            ),
+            Value::String(value) => serde_json::from_str::<Vec<String>>(value).ok(),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 fn first_number(row: &JsonRow) -> Option<i64> {
