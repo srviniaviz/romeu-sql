@@ -212,7 +212,7 @@ export function DatabaseExplorer({
 
   const insertMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => {
-      if (!selectedTable) throw new Error("No table selected");
+      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
       return insertRow(connection, selectedTable, data);
     },
     onSuccess: (res) => {
@@ -234,57 +234,57 @@ export function DatabaseExplorer({
     onSuccess: (rows, query) => {
       setQueryRows(rows);
       setQueryError(null);
-      addHistory({ action: "Query", query, status: "success", message: `${rows.length} rows returned` });
+      addHistory({ action: t("data_preview.query"), query, status: "success", message: `${rows.length} rows returned` });
     },
     onError: (err: unknown, query) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setQueryRows([]);
       setQueryError(msg);
-      addHistory({ action: "Query", query, status: "error", message: msg });
+      addHistory({ action: t("data_preview.query"), query, status: "error", message: msg });
     },
   });
 
   const benchmarkMutation = useMutation({
     mutationFn: () => benchmarkAnalyze(connection),
-    onMutate: () => setActiveTask("Running benchmark analyse"),
+    onMutate: () => setActiveTask(t("table_browser.benchmark")),
     onSettled: () => setActiveTask(null),
   });
 
   const updateRowMutation = useMutation({
     mutationFn: ({ original, next }: { original: Record<string, unknown>; next: Record<string, unknown> }) => {
-      if (!selectedTable) throw new Error("No table selected");
+      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
       return updateRow(connection, selectedTable, original, next);
     },
     onSuccess: (res) => {
       const msg = t("explorer.sync_success");
       setExecResult({ success: true, message: msg });
-      addHistory({ action: "Update row", query: res.query, status: "success", message: msg });
+      addHistory({ action: t("data_preview.edit_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setExecResult({ success: false, message: msg });
-      addHistory({ action: "Update row", status: "error", message: msg });
+      addHistory({ action: t("data_preview.edit_row"), status: "error", message: msg });
     },
   });
 
   const deleteRowMutation = useMutation({
     mutationFn: (row: Record<string, unknown>) => {
-      if (!selectedTable) throw new Error("No table selected");
+      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
       return deleteRow(connection, selectedTable, row);
     },
     onSuccess: (res) => {
       const msg = t("explorer.sync_success");
       setExecResult({ success: true, message: msg });
-      addHistory({ action: "Delete row", query: res.query, status: "success", message: msg });
+      addHistory({ action: t("data_preview.delete_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setExecResult({ success: false, message: msg });
-      addHistory({ action: "Delete row", status: "error", message: msg });
+      addHistory({ action: t("data_preview.delete_row"), status: "error", message: msg });
     },
   });
 
@@ -454,21 +454,21 @@ export function DatabaseExplorer({
               <span className="inline-flex items-center gap-1 text-primary">
                 <Loader2 size={10} className="animate-spin" />
                 {activeTask ||
-                  (executeMutation.isPending && "Running SQL") ||
-                  (queryMutation.isPending && "Running query") ||
-                  (insertMutation.isPending && "Saving row") ||
-                  (updateRowMutation.isPending && "Updating row") ||
-                  (deleteRowMutation.isPending && "Deleting row") ||
-                  (createTableMutation.isPending && "Creating table") ||
-                  (createDbMutation.isPending && "Creating database") ||
-                  "Syncing data"}
+                  (executeMutation.isPending && t("explorer.run_script")) ||
+                  (queryMutation.isPending && t("data_preview.running")) ||
+                  (insertMutation.isPending && t("data_preview.saving")) ||
+                  (updateRowMutation.isPending && t("data_preview.saving")) ||
+                  (deleteRowMutation.isPending && t("data_preview.delete_row")) ||
+                  (createTableMutation.isPending && t("modal_create_table.submit")) ||
+                  (createDbMutation.isPending && t("modal_create_db.submit")) ||
+                  t("data_preview.syncing_rows")}
               </span>
             </>
           ) : execResult && (
             <>
               <span className="text-muted-foreground/40">•</span>
               <span className={execResult.success ? "text-primary" : "text-destructive"}>
-                {execResult.success ? "Last command ok" : "Last command failed"}
+                {execResult.success ? t("common.success") : t("common.error")}
               </span>
             </>
           )}

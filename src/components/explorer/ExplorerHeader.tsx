@@ -1,4 +1,5 @@
 import { Database, LogOut, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Connection } from "@/lib/useConnections";
 
@@ -19,6 +20,7 @@ export function ExplorerHeader({
   refreshing,
   onDisconnect,
 }: ExplorerHeaderProps) {
+  const { t } = useTranslation();
   return (
     <header className="border-b border-border/40 bg-background">
       <div className="flex h-16 items-center justify-between px-5">
@@ -38,7 +40,7 @@ export function ExplorerHeader({
 
         <div className="flex items-center gap-2">
           <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 text-[12px] text-muted-foreground">
-            <span>{selectedTable ? "Rows" : "Tables"}</span>
+            <span>{selectedTable ? t("data_preview.rows") : t("table_browser.title")}</span>
             <strong className="text-foreground">{selectedTable ? rowCount : tableCount}</strong>
             {refreshing && <RefreshCw size={12} className="animate-spin text-primary" />}
           </div>

@@ -4,6 +4,7 @@ import {
   Search,
 } from "lucide-react";
 import type { MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -49,6 +50,7 @@ export function AppSidebar({
   onCreateDatabase,
   onManageConnection,
 }: AppSidebarProps) {
+  const { t } = useTranslation();
   return (
     <aside
       className="hidden shrink-0 bg-muted/25 lg:flex lg:flex-col"
@@ -56,8 +58,8 @@ export function AppSidebar({
     >
       <div className="flex h-16 items-center justify-between px-4">
         <div>
-          <h1 className="text-[18px] font-semibold tracking-tight">Workspace</h1>
-          <p className="text-[11px] text-muted-foreground">Connections and schema browser</p>
+          <h1 className="text-[18px] font-semibold tracking-tight">{t("shell.workspace")}</h1>
+          <p className="text-[11px] text-muted-foreground">{t("shell.workspace_desc")}</p>
         </div>
         <Database size={18} className="text-primary" />
       </div>
@@ -76,7 +78,7 @@ export function AppSidebar({
             <RefreshCw size={14} />
           </Button>
           <Button variant="ghost" size="sm" className="h-7 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-primary" onClick={onCreateConnection}>
-            New
+            {t("shell.new")}
           </Button>
         </div>
       </div>
@@ -88,7 +90,7 @@ export function AppSidebar({
             <Input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search connections"
+              placeholder={t("shell.search_connections")}
               className="h-9 rounded-md border-border/60 bg-background/80 pl-8 text-[13px] shadow-none focus-visible:ring-1 focus-visible:ring-primary"
             />
           </div>
@@ -100,15 +102,15 @@ export function AppSidebar({
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-muted-foreground">
               <RefreshCw size={14} className="animate-spin" />
-              Loading connections
+              {t("shell.loading_connections")}
             </div>
           ) : connections.length === 0 ? (
             <button
               className="mx-2 flex w-[calc(100%-1rem)] flex-col items-start rounded-md bg-background/60 px-3 py-4 text-left text-muted-foreground hover:text-foreground"
               onClick={onCreateConnection}
             >
-              <span className="text-[13px] font-semibold">No connections</span>
-              <span className="mt-1 text-[12px]">Create your first SQL connection</span>
+              <span className="text-[13px] font-semibold">{t("shell.no_connections")}</span>
+              <span className="mt-1 text-[12px]">{t("shell.create_first_connection")}</span>
             </button>
           ) : (
             connections.map((conn) => (

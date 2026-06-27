@@ -57,7 +57,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
       await onInsert(formData);
       onClose();
     } catch (err: any) {
-      setError(err.message || "Failed to insert record");
+      setError(err.message || t("modal_insert.failed"));
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
                   id={col.name}
                   value={formData[col.name] || ""}
                   onChange={(e) => handleInputChange(col.name, e.target.value)}
-                  placeholder={`Enter ${col.name.toLowerCase()}...`}
+                  placeholder={t("modal_insert.placeholder", { field: col.name.toLowerCase() })}
                   className="h-9 rounded-md border-border/70 bg-background text-[13px] focus-visible:ring-1 focus-visible:ring-primary/25"
                 />
               </div>

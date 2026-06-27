@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Shuffle,
   Terminal,
   Users,
   X,
@@ -26,6 +28,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -58,7 +61,56 @@ interface UserEditorState {
   canLogin: boolean;
   isAdmin: boolean;
   roleInfo: string;
+  permissionPreset: PermissionPreset;
+  permissions: UserPermission[];
 }
+
+type PermissionPreset = "viewer" | "editor" | "admin" | "custom";
+type UserPermission =
+  | "connect"
+  | "schemaUsage"
+  | "schemaCreate"
+  | "select"
+  | "insert"
+  | "update"
+  | "delete"
+  | "truncate"
+  | "references"
+  | "trigger"
+  | "sequences";
+
+const PERMISSION_OPTIONS: Array<{ value: UserPermission; labelKey: string; descriptionKey: string }> = [
+  { value: "connect", labelKey: "connect", descriptionKey: "connect" },
+  { value: "schemaUsage", labelKey: "schemaUsage", descriptionKey: "schemaUsage" },
+  { value: "schemaCreate", labelKey: "schemaCreate", descriptionKey: "schemaCreate" },
+  { value: "select", labelKey: "select", descriptionKey: "select" },
+  { value: "insert", labelKey: "insert", descriptionKey: "insert" },
+  { value: "update", labelKey: "update", descriptionKey: "update" },
+  { value: "delete", labelKey: "delete", descriptionKey: "delete" },
+  { value: "truncate", labelKey: "truncate", descriptionKey: "truncate" },
+  { value: "references", labelKey: "references", descriptionKey: "references" },
+  { value: "trigger", labelKey: "trigger", descriptionKey: "trigger" },
+  { value: "sequences", labelKey: "sequences", descriptionKey: "sequences" },
+];
+
+const PRESET_PERMISSIONS: Record<PermissionPreset, UserPermission[]> = {
+  viewer: ["connect", "schemaUsage", "select"],
+  editor: ["connect", "schemaUsage", "select", "insert", "update", "delete", "sequences"],
+  admin: [
+    "connect",
+    "schemaUsage",
+    "schemaCreate",
+    "select",
+    "insert",
+    "update",
+    "delete",
+    "truncate",
+    "references",
+    "trigger",
+    "sequences",
+  ],
+  custom: ["connect", "schemaUsage"],
+};
 
 function quoteDouble(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
@@ -88,6 +140,36 @@ function adminTemplate(connection: Connection) {
   return "-- SQLite does not have cluster users. Use file permissions outside the database.";
 }
 
+function buildPostgresPermissionSql(connection: Connection, username: string, state: UserEditorState) {
+  const role = quoteDouble(username);
+  const database = quoteDouble(connection.database || "postgres");
+  const statements: string[] = [];
+  const tablePrivileges: string[] = [];
+
+  if (state.permissions.includes("connect")) {
+    statements.push(`GRANT CONNECT ON DATABASE ${database} TO ${role};`);
+  }
+  if (state.permissions.includes("schemaUsage")) {
+    statements.push(`GRANT USAGE ON SCHEMA public TO ${role};`);
+  }
+  if (state.permissions.includes("schemaCreate")) {
+    statements.push(`GRANT CREATE ON SCHEMA public TO ${role};`);
+  }
+  for (const privilege of ["select", "insert", "update", "delete", "truncate", "references", "trigger"] as const) {
+    if (state.permissions.includes(privilege)) tablePrivileges.push(privilege.toUpperCase());
+  }
+  if (tablePrivileges.length) {
+    statements.push(`GRANT ${tablePrivileges.join(", ")} ON ALL TABLES IN SCHEMA public TO ${role};`);
+    statements.push(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ${tablePrivileges.join(", ")} ON TABLES TO ${role};`);
+  }
+  if (state.permissions.includes("sequences")) {
+    statements.push(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${role};`);
+    statements.push(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${role};`);
+  }
+
+  return statements;
+}
+
 function buildCreateUserSql(connection: Connection, state: UserEditorState) {
   const username = state.username.trim();
   const host = state.host.trim() || "%";
@@ -96,7 +178,10 @@ function buildCreateUserSql(connection: Connection, state: UserEditorState) {
   if (connection.type === "postgres") {
     const attrs = [state.canLogin ? "LOGIN" : "NOLOGIN", state.isAdmin ? "SUPERUSER" : "NOSUPERUSER"];
     if (password) attrs.push(`PASSWORD ${quoteSingle(password)}`);
-    return `CREATE ROLE ${quoteDouble(username)} WITH ${attrs.join(" ")};`;
+    return [
+      `CREATE ROLE ${quoteDouble(username)} WITH ${attrs.join(" ")};`,
+      ...buildPostgresPermissionSql(connection, username, state),
+    ].join("\n");
   }
 
   if (connection.type === "mysql") {
@@ -130,7 +215,10 @@ function buildEditUserSql(connection: Connection, state: UserEditorState) {
   if (connection.type === "postgres") {
     const attrs = [state.canLogin ? "LOGIN" : "NOLOGIN", state.isAdmin ? "SUPERUSER" : "NOSUPERUSER"];
     if (state.password) attrs.push(`PASSWORD ${quoteSingle(state.password)}`);
-    return `ALTER ROLE ${quoteDouble(username)} WITH ${attrs.join(" ")};`;
+    return [
+      `ALTER ROLE ${quoteDouble(username)} WITH ${attrs.join(" ")};`,
+      ...buildPostgresPermissionSql(connection, username, state),
+    ].join("\n");
   }
 
   if (connection.type === "mysql") {
@@ -179,6 +267,8 @@ function userEditorFromUser(user: ClusterUserInfo): UserEditorState {
     canLogin: user.canLogin,
     isAdmin: user.isAdmin,
     roleInfo: user.role,
+    permissionPreset: user.isAdmin ? "admin" : "custom",
+    permissions: PRESET_PERMISSIONS.custom,
   };
 }
 
@@ -191,7 +281,16 @@ function newUserEditor(): UserEditorState {
     canLogin: true,
     isAdmin: false,
     roleInfo: "%",
+    permissionPreset: "viewer",
+    permissions: PRESET_PERMISSIONS.viewer,
   };
+}
+
+function generateSecurePassword(length = 28) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+[]{}";
+  const random = new Uint32Array(length);
+  crypto.getRandomValues(random);
+  return Array.from(random, (value) => chars[value % chars.length]).join("");
 }
 
 function clampPage(page: number, totalPages: number) {
@@ -212,6 +311,7 @@ function getErrorMessage(error: unknown) {
 }
 
 export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const [search, setSearch] = useState("");
@@ -258,10 +358,10 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
 
   const userMutation = useMutation({
     mutationFn: (state: UserEditorState) => {
-      if (!connection) throw new Error("No active connection.");
+      if (!connection) throw new Error(t("cluster.no_active_connection"));
       const query = buildUserEditorSql(connection, state);
       if (!query.trim()) {
-        throw new Error("User management is not supported for this connection type.");
+        throw new Error(t("cluster.unsupported_user_management"));
       }
       return executeSql(connection, query);
     },
@@ -345,7 +445,7 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
               </div>
               <div className="min-w-0">
                 <DialogTitle className="truncate text-[18px] font-semibold tracking-tight">
-                  Cluster manager
+                  {t("cluster.manager")}
                 </DialogTitle>
                 <DialogDescription className="truncate text-[12px] text-muted-foreground">
                   {connection.name} · {connection.host}:{connection.port} · {connection.type}
@@ -360,10 +460,10 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                 className="size-7 rounded-[5px] text-muted-foreground hover:bg-background hover:text-foreground"
                 onClick={refreshAll}
                 disabled={loading}
-                title="Refresh users and permissions"
+                title={t("cluster.refresh")}
               >
                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-                <span className="sr-only">Refresh users and permissions</span>
+                <span className="sr-only">{t("cluster.refresh")}</span>
               </Button>
               <Button
                 type="button"
@@ -371,10 +471,10 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                 size="icon-sm"
                 className="size-7 rounded-[5px] text-muted-foreground hover:bg-background hover:text-foreground"
                 onClick={() => onOpenChange(false)}
-                title="Close"
+                title={t("common.cancel")}
               >
                 <X size={14} />
-                <span className="sr-only">Close</span>
+                <span className="sr-only">{t("common.cancel")}</span>
               </Button>
             </div>
           </div>
@@ -383,17 +483,17 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between gap-4 border-b border-border/25 px-6 py-3">
             <TabsList className="bg-muted/35">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="members">Users {loginUsers.length > 0 && <span className="rounded bg-muted px-1 text-[11px]">{loginUsers.length}</span>}</TabsTrigger>
-              <TabsTrigger value="permissions">Permissions {permissions.length > 0 && <span className="rounded bg-muted px-1 text-[11px]">{permissions.length}</span>}</TabsTrigger>
-              <TabsTrigger value="sql">Admin SQL</TabsTrigger>
+              <TabsTrigger value="overview">{t("common.overview")}</TabsTrigger>
+              <TabsTrigger value="members">{t("cluster.users")} {loginUsers.length > 0 && <span className="rounded bg-muted px-1 text-[11px]">{loginUsers.length}</span>}</TabsTrigger>
+              <TabsTrigger value="permissions">{t("cluster.permissions")} {permissions.length > 0 && <span className="rounded bg-muted px-1 text-[11px]">{permissions.length}</span>}</TabsTrigger>
+              <TabsTrigger value="sql">{t("cluster.admin_sql")}</TabsTrigger>
             </TabsList>
             <div className="relative w-[300px] max-w-[40vw]">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder={activeTab === "permissions" ? "Search principal, object, privilege" : "Search user, role, admin"}
+                placeholder={activeTab === "permissions" ? t("cluster.search_permissions") : t("cluster.search_users")}
                 className="h-8 rounded-md border-border/50 bg-background pl-8 text-[12px] shadow-none"
               />
             </div>
@@ -410,17 +510,17 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg bg-muted/35 p-4">
                   <Database className="mb-3 text-primary" size={18} />
-                  <div className="text-[11px] text-muted-foreground">Database</div>
+                  <div className="text-[11px] text-muted-foreground">{t("cluster.database")}</div>
                   <div className="mt-1 truncate text-[15px] font-semibold">{connection.database}</div>
                 </div>
                 <div className="rounded-lg bg-muted/35 p-4">
                   <Users className="mb-3 text-primary" size={18} />
-                  <div className="text-[11px] text-muted-foreground">Login users</div>
+                  <div className="text-[11px] text-muted-foreground">{t("cluster.login_users")}</div>
                   <div className="mt-1 text-[15px] font-semibold">{loginUsers.length}</div>
                 </div>
                 <div className="rounded-lg bg-muted/35 p-4">
                   <KeyRound className="mb-3 text-primary" size={18} />
-                  <div className="text-[11px] text-muted-foreground">Permission entries</div>
+                  <div className="text-[11px] text-muted-foreground">{t("cluster.permission_entries")}</div>
                   <div className="mt-1 text-[15px] font-semibold">{permissions.length}</div>
                 </div>
               </div>
@@ -434,34 +534,34 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
             <TabsContent value="members" className="m-0">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="text-[12px] text-muted-foreground">
-                  {filteredUsers.length} login users
+                  {t("cluster.users_count", { count: filteredUsers.length })}
                 </div>
                 <Button type="button" size="sm" className="h-8 rounded-md text-[12px]" onClick={startNewUser}>
                   <Plus size={14} />
-                  New user
+                  {t("cluster.new_user")}
                 </Button>
               </div>
               <div className="overflow-hidden rounded-lg bg-muted/20">
                 <div className="grid grid-cols-[minmax(160px,1fr)_150px_90px_90px_80px] gap-3 px-4 py-2 text-[11px] font-medium text-muted-foreground">
-                  <span>User / role</span>
-                  <span>Type</span>
-                  <span>Login</span>
-                  <span>Admin</span>
-                  <span className="text-right">Actions</span>
+                  <span>{t("cluster.user_role")}</span>
+                  <span>{t("data_preview.type")}</span>
+                  <span>{t("cluster.login")}</span>
+                  <span>{t("cluster.admin")}</span>
+                  <span className="text-right">{t("cluster.actions")}</span>
                 </div>
                 {pagedUsers.map((user) => (
                   <div key={`${user.name}:${user.role}`} className="group grid grid-cols-[minmax(160px,1fr)_150px_90px_90px_80px] items-center gap-3 px-4 py-2 text-[12px] transition-colors hover:bg-muted/35">
                     <span className="truncate font-medium">{user.name}</span>
                     <span className="truncate text-muted-foreground">{user.role}</span>
-                    <span>{user.canLogin ? "Yes" : "No"}</span>
-                    <span className={user.isAdmin ? "text-primary" : "text-muted-foreground"}>{user.isAdmin ? "Yes" : "No"}</span>
+                    <span>{user.canLogin ? t("data_preview.yes") : t("data_preview.no")}</span>
+                    <span className={user.isAdmin ? "text-primary" : "text-muted-foreground"}>{user.isAdmin ? t("data_preview.yes") : t("data_preview.no")}</span>
                     <span className="flex justify-end">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-xs"
                         className="opacity-70 hover:opacity-100"
-                        title={`Edit ${user.name}`}
+                        title={t("cluster.edit_user", { name: user.name })}
                         onClick={() => startEditUser(user)}
                       >
                         <Pencil size={13} />
@@ -470,7 +570,7 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                   </div>
                 ))}
                 {!loading && pagedUsers.length === 0 && (
-                  <div className="px-4 py-8 text-center text-[12px] text-muted-foreground">No users found</div>
+                  <div className="px-4 py-8 text-center text-[12px] text-muted-foreground">{t("cluster.no_users")}</div>
                 )}
               </div>
               <div className="mt-3 flex items-center justify-between">
@@ -486,13 +586,13 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
 
             <TabsContent value="permissions" className="m-0">
               <div className="mb-3 text-[12px] text-muted-foreground">
-                {filteredPermissions.length} permission entries
+                {t("cluster.permission_entries_count", { count: filteredPermissions.length })}
               </div>
               <div className="overflow-hidden rounded-lg bg-muted/20">
                 <div className="grid grid-cols-[180px_1fr_180px] gap-3 px-4 py-2 text-[11px] font-medium text-muted-foreground">
-                  <span>Principal</span>
-                  <span>Object</span>
-                  <span>Privilege</span>
+                  <span>{t("cluster.principal")}</span>
+                  <span>{t("cluster.object")}</span>
+                  <span>{t("cluster.privilege")}</span>
                 </div>
                 {pagedPermissions.map((permission, index) => (
                   <div key={`${permission.principal}:${permission.objectName}:${permission.privilege}:${index}`} className="grid grid-cols-[180px_1fr_180px] gap-3 px-4 py-2 text-[12px] transition-colors hover:bg-muted/35">
@@ -502,7 +602,7 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                   </div>
                 ))}
                 {!loading && pagedPermissions.length === 0 && (
-                  <div className="px-4 py-8 text-center text-[12px] text-muted-foreground">No permissions found</div>
+                  <div className="px-4 py-8 text-center text-[12px] text-muted-foreground">{t("cluster.no_permissions")}</div>
                 )}
               </div>
               <div className="mt-3 flex items-center justify-between">
@@ -530,9 +630,9 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                   {executeMutation.isError ? (
                     <span className="text-destructive">{getErrorMessage(executeMutation.error)}</span>
                   ) : executeMutation.isSuccess ? (
-                    <span className="text-primary">Command executed. Lists refreshed.</span>
+                    <span className="text-primary">{t("cluster.command_ok")}</span>
                   ) : (
-                    "Run administrative SQL against the current connection."
+                    t("cluster.admin_sql_hint")
                   )}
                 </div>
                 <Button
@@ -542,7 +642,7 @@ export function ClusterManagerModal({ connection, open, onOpenChange }: Props) {
                   onClick={() => executeMutation.mutate(adminSql.trim())}
                 >
                   <Terminal size={14} />
-                  Run SQL
+                  {t("cluster.run_sql")}
                 </Button>
               </div>
             </TabsContent>
@@ -579,33 +679,49 @@ function UserEditorDialog({
   onClose: () => void;
   onSave: (state: UserEditorState) => void;
 }) {
+  const { t } = useTranslation();
   if (!state) return null;
 
   const isCreate = state.mode === "create";
   const supportsLoginToggle = connection.type === "postgres" || connection.type === "sqlserver";
   const supportsAdminToggle = connection.type !== "sqlite";
   const supportsHost = connection.type === "mysql";
-  const saveDisabled = loading || !state.username.trim();
+  const saveDisabled = loading || !state.username.trim() || (isCreate && !state.password.trim());
 
   const update = (patch: Partial<UserEditorState>) => {
     onChange({ ...state, ...patch });
+  };
+  const applyPreset = (preset: PermissionPreset) => {
+    onChange({
+      ...state,
+      permissionPreset: preset,
+      permissions: PRESET_PERMISSIONS[preset],
+      isAdmin: preset === "admin",
+      canLogin: true,
+    });
+  };
+  const togglePermission = (permission: UserPermission, checked: boolean) => {
+    const next = checked
+      ? Array.from(new Set([...state.permissions, permission]))
+      : state.permissions.filter((item) => item !== permission);
+    update({ permissions: next, permissionPreset: "custom" });
   };
 
   return (
     <Dialog open onOpenChange={(nextOpen) => {
       if (!nextOpen) onClose();
     }}>
-      <DialogContent className="w-[520px] gap-0 overflow-hidden rounded-lg border-border/50 p-0 shadow-2xl">
+      <DialogContent className="flex max-h-[86vh] w-[640px] flex-col gap-0 overflow-hidden rounded-lg border-border/50 p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/30 px-5 py-4">
           <DialogTitle className="text-[16px] font-semibold">
-            {isCreate ? "New cluster user" : `Edit ${state.originalName}`}
+            {isCreate ? t("cluster.new_cluster_user") : t("cluster.edit_user", { name: state.originalName })}
           </DialogTitle>
           <DialogDescription className="text-[12px]">
             {connection.name} · {connection.type}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 custom-scrollbar">
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {error}
@@ -614,7 +730,7 @@ function UserEditorDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>User name</Label>
+              <Label>{t("cluster.user_name")}</Label>
               <Input
                 value={state.username}
                 disabled={!isCreate}
@@ -626,7 +742,7 @@ function UserEditorDialog({
 
             {supportsHost ? (
               <div className="space-y-2">
-                <Label>Host</Label>
+                <Label>{t("cluster.host")}</Label>
                 <Input
                   value={state.host}
                   disabled={!isCreate}
@@ -637,7 +753,7 @@ function UserEditorDialog({
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>Role type</Label>
+                <Label>{t("cluster.role_type")}</Label>
                 <Input
                   value={state.roleInfo}
                   disabled
@@ -648,14 +764,49 @@ function UserEditorDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>{isCreate ? "Password" : "New password"}</Label>
-            <Input
-              type="password"
-              value={state.password}
-              onChange={(event) => update({ password: event.target.value })}
-              placeholder={isCreate ? "Set initial password" : "Leave empty to keep current password"}
-              className="h-9 rounded-md border-border/60 text-[13px]"
-            />
+            <Label>{isCreate ? t("cluster.password") : t("cluster.new_password")}</Label>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={state.password}
+                onChange={(event) => update({ password: event.target.value })}
+                placeholder={isCreate ? t("cluster.set_initial_password") : t("cluster.keep_password")}
+                className="h-9 rounded-md border-border/60 font-mono text-[13px]"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-md px-3 text-[12px]"
+                onClick={() => update({ password: generateSecurePassword() })}
+              >
+                <Shuffle size={13} />
+                {t("cluster.generate")}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("cluster.permission_preset")}</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: "viewer" as const, label: t("cluster.viewer"), description: t("cluster.viewer_desc") },
+                { value: "editor" as const, label: t("cluster.editor"), description: t("cluster.editor_desc") },
+                { value: "admin" as const, label: t("cluster.admin"), description: t("cluster.admin_desc") },
+              ].map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => applyPreset(preset.value)}
+                  className={cn(
+                    "rounded-lg bg-muted/25 p-3 text-left transition-colors hover:bg-muted/40",
+                    state.permissionPreset === preset.value && "bg-primary/10 text-primary ring-1 ring-primary/30"
+                  )}
+                >
+                  <span className="block text-[12px] font-semibold">{preset.label}</span>
+                  <span className="mt-1 block text-[11px] text-muted-foreground">{preset.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -666,9 +817,9 @@ function UserEditorDialog({
                 onCheckedChange={(checked) => update({ canLogin: checked === true })}
               />
               <span className="space-y-1">
-                <span className="block font-medium text-foreground">Can login</span>
+                <span className="block font-medium text-foreground">{t("cluster.can_login")}</span>
                 <span className="block text-muted-foreground">
-                  {supportsLoginToggle ? "Allow direct database login." : "This engine reports login access automatically."}
+                  {supportsLoginToggle ? t("cluster.can_login_desc") : t("cluster.login_auto_desc")}
                 </span>
               </span>
             </label>
@@ -680,15 +831,33 @@ function UserEditorDialog({
                 onCheckedChange={(checked) => update({ isAdmin: checked === true })}
               />
               <span className="space-y-1">
-                <span className="block font-medium text-foreground">Admin</span>
+                <span className="block font-medium text-foreground">{t("cluster.admin")}</span>
                 <span className="block text-muted-foreground">
-                  {connection.type === "postgres" && "Maps to SUPERUSER."}
-                  {connection.type === "mysql" && "Grants all privileges with grant option."}
-                  {connection.type === "sqlserver" && "Maps to sysadmin server role."}
-                  {connection.type === "sqlite" && "SQLite uses file permissions."}
+                  {connection.type === "postgres" && t("cluster.admin_pg_desc")}
+                  {connection.type === "mysql" && t("cluster.admin_mysql_desc")}
+                  {connection.type === "sqlserver" && t("cluster.admin_sqlserver_desc")}
+                  {connection.type === "sqlite" && t("cluster.admin_sqlite_desc")}
                 </span>
               </span>
             </label>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("cluster.specific_permissions")}</Label>
+            <div className="grid max-h-48 gap-2 overflow-auto rounded-lg bg-muted/20 p-2 sm:grid-cols-2">
+              {PERMISSION_OPTIONS.map((permission) => (
+                <label key={permission.value} className="flex items-start gap-3 rounded-md p-2 text-[12px] hover:bg-background/70">
+                  <Checkbox
+                    checked={state.permissions.includes(permission.value)}
+                    onCheckedChange={(checked) => togglePermission(permission.value, checked === true)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">{t(`cluster.permission_labels.${permission.labelKey}`)}</span>
+                    <span className="block text-[11px] text-muted-foreground">{t(`cluster.permission_descriptions.${permission.descriptionKey}`)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {!isCreate && connection.type === "mysql" && !state.password && !state.isAdmin && (
@@ -700,7 +869,7 @@ function UserEditorDialog({
 
         <DialogFooter className="border-t border-border/30 px-5 py-4">
           <Button type="button" variant="ghost" className="h-8 rounded-md text-[12px]" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -708,7 +877,7 @@ function UserEditorDialog({
             disabled={saveDisabled}
             onClick={() => onSave(state)}
           >
-            {loading ? "Saving..." : isCreate ? "Create user" : "Save changes"}
+            {loading ? t("cluster.saving") : isCreate ? t("cluster.create_user") : t("cluster.save_changes")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -723,9 +892,10 @@ function PageSizeSelect({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-      <span>Rows</span>
+      <span>{t("cluster.rows")}</span>
       <Select value={String(value)} onValueChange={(next) => onChange(Number(next))}>
         <SelectTrigger className="h-8 w-[76px] rounded-md border-border/50 bg-background text-[12px] shadow-none">
           <SelectValue />
@@ -753,6 +923,7 @@ function Pager({
   label: string;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
       <span>{label}</span>
@@ -762,7 +933,7 @@ function Pager({
         size="icon-xs"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
-        title="Previous page"
+        title={t("cluster.previous_page")}
       >
         <ChevronLeft size={14} />
       </Button>
@@ -775,7 +946,7 @@ function Pager({
         size="icon-xs"
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
-        title="Next page"
+        title={t("cluster.next_page")}
       >
         <ChevronRight size={14} />
       </Button>

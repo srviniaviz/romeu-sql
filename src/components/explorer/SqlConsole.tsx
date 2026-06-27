@@ -1,4 +1,5 @@
 import { AlertCircle, CheckCircle2, Clock, Code, History, Loader2, Play, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { HistoryEntry } from "@/components/DatabaseExplorer";
@@ -28,6 +29,7 @@ export function SqlConsole({
   onClearHistory,
   onClearEditor,
 }: SqlConsoleProps) {
+  const { t } = useTranslation();
   return (
     <section className="overflow-hidden border-t border-border/50 bg-background shadow-[0_-16px_36px_rgba(15,23,42,0.08)]">
       <div className="flex h-8 items-center justify-between bg-muted/20 px-3">
@@ -39,7 +41,7 @@ export function SqlConsole({
             onClick={() => onActiveTabChange("editor")}
           >
             <Code size={13} className="mr-1.5" />
-            Editor
+            {t("explorer.sql_editor")}
           </Button>
           <Button
             variant="ghost"
@@ -48,7 +50,7 @@ export function SqlConsole({
             onClick={() => onActiveTabChange("history")}
           >
             <History size={13} className="mr-1.5" />
-            History
+            {t("explorer.activity_log")}
             {history.length > 0 && <span className="ml-1.5 text-muted-foreground">({history.length})</span>}
           </Button>
         </div>
@@ -56,17 +58,17 @@ export function SqlConsole({
         {activeTab === "editor" ? (
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" className="h-6 rounded px-2 text-[12px] text-muted-foreground" onClick={onClearEditor}>
-              Clear
+              {t("explorer.clear")}
             </Button>
             <Button size="sm" className="h-6 rounded bg-primary px-3 text-[12px] text-primary-foreground hover:bg-primary/90" onClick={onExecute} disabled={executing}>
               {executing ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Play size={12} className="mr-1.5" />}
-              Run
+              {t("explorer.run_script")}
             </Button>
           </div>
         ) : (
           <Button variant="ghost" size="sm" className="h-6 rounded px-2 text-[12px] text-muted-foreground hover:text-destructive" onClick={onClearHistory}>
             <Trash2 size={13} className="mr-1.5" />
-            Clear
+            {t("explorer.clear")}
           </Button>
         )}
       </div>
@@ -92,7 +94,7 @@ export function SqlConsole({
         ) : history.length === 0 ? (
           <div className="flex h-28 flex-col items-center justify-center gap-2 text-muted-foreground/45">
             <Clock size={26} />
-            <span className="text-[12px]">No activity</span>
+            <span className="text-[12px]">{t("explorer.no_activity")}</span>
           </div>
         ) : (
           <div className="max-h-56 space-y-2 overflow-y-auto pr-1">

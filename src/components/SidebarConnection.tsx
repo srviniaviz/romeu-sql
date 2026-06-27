@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import type { DbEngine } from "@/domain/connections/types";
+import { useTranslation } from "react-i18next";
 
 interface DatabaseItemProps {
   conn: Connection;
@@ -28,6 +29,7 @@ interface DatabaseItemProps {
 }
 
 function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken }: DatabaseItemProps) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [tables, setTables] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
               onSelect({ ...conn, database: dbName });
               onCreateAction?.({ ...conn, database: dbName });
           }}
-          title="New Table"
+          title={t("shell.new_table")}
         >
           <PlusIcon size={10} />
         </Button>
@@ -108,7 +110,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
             {loading ? (
               <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-muted-foreground">
                 <RefreshCw size={10} className="animate-spin" />
-                <span>Loading</span>
+                <span>{t("shell.loading")}</span>
               </div>
             ) : tables.length > 0 ? (
               tables.map(table => (
@@ -128,7 +130,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
                 </div>
               ))
             ) : (
-              <span className="px-3 py-1 text-[11px] text-muted-foreground">No tables</span>
+              <span className="px-3 py-1 text-[11px] text-muted-foreground">{t("shell.no_tables")}</span>
             )}
           </motion.div>
         )}
@@ -170,6 +172,7 @@ export function SidebarConnection({
   onSelectTable,
   activeTable
 }: Props) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [databases, setDatabases] = useState<string[]>(() => uniqueDatabases([conn.database]));
   const [loading, setLoading] = useState(false);
@@ -250,7 +253,7 @@ export function SidebarConnection({
                         size="icon"
                         className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
                         onClick={refreshConnection}
-                        title="Refresh databases and tables"
+                        title={t("shell.refresh_databases_tables")}
                         disabled={loading}
                     >
                         <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
@@ -263,7 +266,7 @@ export function SidebarConnection({
                             e.stopPropagation();
                             onCreateDatabase?.(conn);
                         }}
-                        title="New Database"
+                        title={t("shell.new_database")}
                     >
                         <DatabaseIcon size={12} />
                     </Button>
@@ -275,7 +278,7 @@ export function SidebarConnection({
                             e.stopPropagation();
                             onManage?.(conn, e);
                         }}
-                        title="Manager"
+                        title={t("shell.manager")}
                     >
                         <Shield size={12} />
                     </Button>
@@ -328,7 +331,7 @@ export function SidebarConnection({
                 <div className="flex items-center justify-between px-3 py-2 group/empty">
                    <div className="flex items-center gap-2 text-muted-foreground">
                     <DatabaseIcon size={10} />
-                    <span className="text-[11px]">Empty</span>
+                    <span className="text-[11px]">{t("shell.empty")}</span>
                    </div>
                 </div>
               )}

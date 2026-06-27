@@ -159,7 +159,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
 
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 items-center gap-4 rounded-md bg-background/70 px-3">
-                            <div className="flex items-center gap-2" title="Primary Key">
+                            <div className="flex items-center gap-2" title={t("modal_create_table.column_primary")}>
                               <Checkbox 
                                 id={`pk-${col.id}`}
                                 checked={col.isPrimary} 
@@ -171,7 +171,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                             
                             <Separator orientation="vertical" className="h-4 bg-border/50" />
 
-                            <div className="flex items-center gap-2" title="Nullable">
+                            <div className="flex items-center gap-2" title={t("modal_create_table.column_nullable")}>
                               <Checkbox 
                                 id={`null-${col.id}`}
                                 checked={col.isNullable} 
@@ -199,7 +199,7 @@ export function CreateTableModal({ isOpen, onClose, dbType, onCreate }: Props) {
                     <div className="flex items-start gap-3 rounded-md bg-destructive/10 p-3 text-destructive animate-in fade-in slide-in-from-top-1">
                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
                         <div className="space-y-1">
-                            <p className="text-[12px] font-medium">Engine error</p>
+                            <p className="text-[12px] font-medium">{t("explorer.engine_error")}</p>
                             <p className="text-[12px] leading-relaxed whitespace-pre-wrap">{error}</p>
                         </div>
                     </div>

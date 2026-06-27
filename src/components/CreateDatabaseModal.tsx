@@ -70,7 +70,7 @@ export function CreateDatabaseModal({ isOpen, onClose, onCreate }: Props) {
             <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-destructive animate-in fade-in slide-in-from-top-1">
               <AlertCircle size={14} className="mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-[12px] font-medium">Engine error</p>
+                <p className="text-[12px] font-medium">{t("explorer.engine_error")}</p>
                 <p className="text-[12px] leading-relaxed whitespace-pre-wrap">{error}</p>
               </div>
             </div>

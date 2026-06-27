@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, PointerEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Titlebar } from "./components/Titlebar";
 import { CreateConnectionModal } from "./components/CreateConnection";
 import { AppSidebar } from "./components/layout/AppSidebar";
@@ -23,6 +24,7 @@ function getInitialSidebarWidth() {
 }
 
 function App() {
+  const { t } = useTranslation();
   const { connections, loading, removeConnection, refresh } = useConnections();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConn, setEditingConn] = useState<Connection | null>(null);
@@ -178,7 +180,7 @@ function App() {
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize sidebar"
+          aria-label={t("shell.resize_sidebar")}
           className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-muted/25 lg:flex"
           onPointerDown={startSidebarResize}
         >

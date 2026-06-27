@@ -1,4 +1,5 @@
 import { Activity, AlertTriangle, BarChart3, Database, Loader2, Table } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { BenchmarkAnalyzeResult, TableInfo } from "@/domain/database/types";
 
@@ -50,12 +51,13 @@ export function TableBrowser({
   onBenchmark,
   onSelectTable,
 }: TableBrowserProps) {
+  const { t } = useTranslation();
   const statsByName = new Map(tableStats.map((item) => [item.name, item]));
 
   if (tables.length === 0) {
     return (
       <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">
-        No tables found
+        {t("table_browser.no_tables")}
       </div>
     );
   }
@@ -64,8 +66,8 @@ export function TableBrowser({
     <section className="space-y-4">
       <div className="flex items-start justify-between gap-3 px-5 py-4">
         <div>
-          <h3 className="text-[14px] font-semibold text-foreground">Tables</h3>
-          <p className="text-[12px] text-muted-foreground">Objects available in this database.</p>
+          <h3 className="text-[14px] font-semibold text-foreground">{t("table_browser.title")}</h3>
+          <p className="text-[12px] text-muted-foreground">{t("table_browser.description")}</p>
         </div>
         <Button
           type="button"
@@ -75,7 +77,7 @@ export function TableBrowser({
           disabled={benchmarking}
         >
           {benchmarking ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
-          Benchmark analyse
+          {t("table_browser.benchmark")}
         </Button>
       </div>
 
@@ -87,10 +89,10 @@ export function TableBrowser({
         <table className="w-full text-left text-[12px]">
           <thead className="text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 font-medium">Name</th>
-              <th className="px-3 py-2 font-medium">Type</th>
-              <th className="px-3 py-2 font-medium">Rows</th>
-              <th className="px-3 py-2 font-medium">Size</th>
+              <th className="px-3 py-2 font-medium">{t("table_browser.name")}</th>
+              <th className="px-3 py-2 font-medium">{t("table_browser.type")}</th>
+              <th className="px-3 py-2 font-medium">{t("table_browser.rows")}</th>
+              <th className="px-3 py-2 font-medium">{t("table_browser.size")}</th>
               <th className="w-20 px-3 py-2" />
             </tr>
           </thead>
@@ -108,7 +110,7 @@ export function TableBrowser({
                   <td className="px-3 py-2 text-muted-foreground">{stats?.type || "table"}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatRows(stats?.estimatedRows ?? null)}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatBytes(stats?.totalBytes ?? null)}</td>
-                  <td className="px-3 py-2 text-right text-primary opacity-0 transition-opacity group-hover:opacity-100">Open</td>
+                  <td className="px-3 py-2 text-right text-primary opacity-0 transition-opacity group-hover:opacity-100">{t("table_browser.open")}</td>
                 </tr>
               );
             })}
@@ -128,6 +130,7 @@ function BenchmarkPanel({
   benchmarking: boolean;
   error?: string | null;
 }) {
+  const { t } = useTranslation();
   const topTables = benchmark?.tables.slice(0, 6) ?? [];
 
   return (
@@ -136,16 +139,16 @@ function BenchmarkPanel({
         <div className="flex items-center gap-2">
           <BarChart3 size={16} className="text-primary" />
           <div>
-            <div className="text-[13px] font-semibold text-foreground">Benchmark analyse</div>
+            <div className="text-[13px] font-semibold text-foreground">{t("table_browser.benchmark")}</div>
             <div className="text-[11px] text-muted-foreground">
-              Count, sample read, index scan, size and score per table.
+              {t("table_browser.benchmark_desc")}
             </div>
           </div>
         </div>
         {benchmarking && (
           <span className="inline-flex items-center gap-1 text-[12px] text-primary">
             <Loader2 size={13} className="animate-spin" />
-            Running
+            {t("table_browser.running")}
           </span>
         )}
       </div>
@@ -160,10 +163,10 @@ function BenchmarkPanel({
       {benchmark && (
         <>
           <div className="grid gap-3 md:grid-cols-4">
-            <Metric label="Average score" value={`${benchmark.averageScore}/100`} />
-            <Metric label="Tables tested" value={String(benchmark.tableCount)} />
-            <Metric label="Slowest table" value={benchmark.slowestTable || "-"} />
-            <Metric label="Total time" value={formatMs(benchmark.totalMs)} />
+            <Metric label={t("table_browser.average_score")} value={`${benchmark.averageScore}/100`} />
+            <Metric label={t("table_browser.tables_tested")} value={String(benchmark.tableCount)} />
+            <Metric label={t("table_browser.slowest_table")} value={benchmark.slowestTable || "-"} />
+            <Metric label={t("table_browser.total_time")} value={formatMs(benchmark.totalMs)} />
           </div>
 
           <div className="mt-4 grid gap-2">
@@ -173,12 +176,17 @@ function BenchmarkPanel({
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-foreground">{table.tableName}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {formatRows(table.estimatedRows)} rows · {formatBytes(table.totalBytes)} · {table.indexCount} indexes · {formatMs(table.totalMs)}
+                      {t("table_browser.table_summary", {
+                        rows: formatRows(table.estimatedRows),
+                        size: formatBytes(table.totalBytes),
+                        indexes: table.indexCount,
+                        time: formatMs(table.totalMs),
+                      })}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-[13px] font-semibold text-foreground">{table.score}</div>
-                    <div className="text-[11px] text-muted-foreground">grade {table.grade}</div>
+                    <div className="text-[11px] text-muted-foreground">{t("table_browser.grade")} {table.grade}</div>
                   </div>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted">

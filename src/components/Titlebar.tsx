@@ -7,7 +7,7 @@ import appIcon from "@/assets/icon.png";
 
 export function Titlebar() {
   const { theme, toggleTheme } = useTheme();
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const toggleLanguage = () => {
     const nextLang = i18n.language.startsWith('en') ? 'pt' : 'en';
@@ -47,7 +47,7 @@ export function Titlebar() {
           size="sm"
           onClick={toggleLanguage}
           className="h-8 w-8 p-0 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Change Language"
+          title={t("shell.change_language")}
         >
           {i18n.language.startsWith('en') ? 'PT' : 'EN'}
         </Button>
@@ -62,7 +62,7 @@ export function Titlebar() {
             toggleTheme();
           }}
           className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={theme === 'dark' ? "Switch to Light" : "Switch to Dark"}
+          title={theme === 'dark' ? t("shell.switch_to_light") : t("shell.switch_to_dark")}
         >
           {theme === 'dark' ? <Sun size={14} strokeWidth={2.5} /> : <Moon size={14} strokeWidth={2.5} />}
         </Button>

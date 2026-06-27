@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 import type { ColumnInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
 import { saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
@@ -212,10 +213,11 @@ function IconButton({
 }
 
 function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode: DataViewMode) => void }) {
+  const { t } = useTranslation();
   const items: Array<{ value: DataViewMode; title: string; icon: typeof List }> = [
-    { value: "list", title: "Document list", icon: List },
+    { value: "list", title: t("data_preview.document_list"), icon: List },
     { value: "json", title: "JSON", icon: Braces },
-    { value: "table", title: "Table", icon: Table2 },
+    { value: "table", title: t("explorer.table_view"), icon: Table2 },
   ];
 
   return (
@@ -252,15 +254,16 @@ function RowActions({
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100">
-      <IconButton title="Edit row" disabled={busy} onClick={() => onEdit(row)}>
+      <IconButton title={t("data_preview.edit_row")} disabled={busy} onClick={() => onEdit(row)}>
         <Edit3 size={12} />
       </IconButton>
-      <IconButton title="Copy JSON" onClick={() => navigator.clipboard?.writeText(JSON.stringify(row, null, 2))}>
+      <IconButton title={t("data_preview.copy_json")} onClick={() => navigator.clipboard?.writeText(JSON.stringify(row, null, 2))}>
         <Copy size={12} />
       </IconButton>
-      <IconButton title="Delete row" disabled={busy} onClick={() => onDelete(row)}>
+      <IconButton title={t("data_preview.delete_row")} disabled={busy} onClick={() => onDelete(row)}>
         <Trash2 size={12} />
       </IconButton>
     </div>
@@ -278,6 +281,7 @@ function DocumentRow({
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const entries = sortRowEntries(row);
   const hiddenCount = Math.max(0, entries.length - CARD_FIELD_LIMIT);
@@ -315,7 +319,7 @@ function DocumentRow({
                 onClick={() => setExpanded((value) => !value)}
                 className="mt-1 px-1 text-[12px] font-medium text-primary hover:underline"
               >
-                {expanded ? `Hide ${hiddenCount} fields` : `Show ${hiddenCount} more fields`}
+                {expanded ? t("data_preview.hide_fields", { count: hiddenCount }) : t("data_preview.show_more_fields", { count: hiddenCount })}
               </button>
             )}
           </div>
@@ -392,13 +396,14 @@ function RowEditor({
   onClose: () => void;
   onSave: (next: Record<string, unknown>) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(() => JSON.stringify(row, null, 2));
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     try {
       const parsed = JSON.parse(value);
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Row must be a JSON object.");
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error(t("data_preview.row_json_error"));
       setError(null);
       await onSave(parsed as Record<string, unknown>);
     } catch (err) {
@@ -411,10 +416,10 @@ function RowEditor({
       <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-background shadow-xl">
         <div className="flex h-12 items-center justify-between px-4">
           <div>
-            <h2 className="text-[14px] font-semibold text-foreground">Edit row</h2>
-            <p className="text-[12px] text-muted-foreground">Update the JSON object and save.</p>
+            <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.edit_row")}</h2>
+            <p className="text-[12px] text-muted-foreground">{t("data_preview.update_json")}</p>
           </div>
-          <IconButton title="Close" disabled={saving} onClick={onClose}>
+          <IconButton title={t("common.close")} disabled={saving} onClick={onClose}>
             <X size={14} />
           </IconButton>
         </div>
@@ -428,8 +433,8 @@ function RowEditor({
           {error && <p className="mt-2 text-[12px] text-destructive">{error}</p>}
         </div>
         <div className="flex h-14 items-center justify-end gap-2 px-4">
-          <ToolbarButton disabled={saving} onClick={onClose}>Cancel</ToolbarButton>
-          <ToolbarButton primary disabled={saving} onClick={handleSave}>{saving ? "Saving..." : "Save"}</ToolbarButton>
+          <ToolbarButton disabled={saving} onClick={onClose}>{t("common.cancel")}</ToolbarButton>
+          <ToolbarButton primary disabled={saving} onClick={handleSave}>{saving ? t("data_preview.saving") : t("common.save")}</ToolbarButton>
         </div>
       </div>
     </div>
@@ -455,6 +460,7 @@ function ExportModal({
   onClose: () => void;
   onExport: (query: string, format: "csv" | "json") => void;
 }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState(defaultQuery);
   const [format, setFormat] = useState<"csv" | "json">("csv");
 
@@ -463,10 +469,10 @@ function ExportModal({
       <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-background shadow-xl">
         <div className="flex h-12 items-center justify-between px-4">
           <div>
-            <h2 className="text-[14px] font-semibold text-foreground">Export {tableName}</h2>
-            <p className="text-[12px] text-muted-foreground">Use a SELECT query or leave empty to export the current page.</p>
+            <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.export_title", { tableName })}</h2>
+            <p className="text-[12px] text-muted-foreground">{t("data_preview.export_desc")}</p>
           </div>
-          <IconButton title="Close" disabled={exporting} onClick={onClose}>
+          <IconButton title={t("common.close")} disabled={exporting} onClick={onClose}>
             <X size={14} />
           </IconButton>
         </div>
@@ -474,12 +480,12 @@ function ExportModal({
           <SqlEditor
             value={query}
             onChange={setQuery}
-            placeholder="SELECT * FROM table_name LIMIT 1000"
+            placeholder={t("data_preview.export_query_placeholder")}
             minHeight="176px"
             completions={completions}
           />
           <label className="flex items-center gap-2 text-[12px] font-medium text-foreground">
-            Format
+            {t("data_preview.format")}
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as "csv" | "json")}
@@ -493,9 +499,9 @@ function ExportModal({
           {message && <p className="text-[12px] text-primary">{message}</p>}
         </div>
         <div className="flex h-14 items-center justify-end gap-2 px-4">
-          <ToolbarButton disabled={exporting} onClick={onClose}>Cancel</ToolbarButton>
+          <ToolbarButton disabled={exporting} onClick={onClose}>{t("common.cancel")}</ToolbarButton>
           <ToolbarButton primary disabled={exporting} onClick={() => onExport(query, format)}>
-            {exporting ? "Exporting..." : "Export"}
+            {exporting ? t("data_preview.exporting") : t("data_preview.export")}
           </ToolbarButton>
         </div>
       </div>
@@ -536,6 +542,7 @@ export function DataPreview({
   onUpdateRow,
   onDeleteRow,
 }: DataPreviewProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState(whereClause);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [project, setProject] = useState(rowOptions.project || "");
@@ -591,7 +598,7 @@ export function DataPreview({
     setExporting(true);
     setExportError(null);
     setExportMessage(null);
-    onExportStatusChange("Exporting data");
+    onExportStatusChange(t("data_preview.exporting_data"));
     try {
       const exportRows = query.trim() ? await onExportQuery(query) : rows;
       const filename = `${selectedTable}-export.${format}`;
@@ -600,7 +607,7 @@ export function DataPreview({
         contents: format === "csv" ? toCsv(exportRows) : JSON.stringify(exportRows, null, 2),
         format,
       });
-      setExportMessage(saved ? `Exported ${exportRows.length} rows as ${format.toUpperCase()}.` : "Export canceled.");
+      setExportMessage(saved ? t("data_preview.exported_rows", { count: exportRows.length, format: format.toUpperCase() }) : t("data_preview.export_canceled"));
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -614,7 +621,7 @@ export function DataPreview({
     setMessage(null);
     try {
       await action();
-      setMessage("Done.");
+      setMessage(t("data_preview.done"));
       return true;
     } catch (err) {
       setMessage(err instanceof Error ? err.message : String(err));
@@ -625,15 +632,15 @@ export function DataPreview({
   }
 
   function handleDelete(row: Record<string, unknown>) {
-    if (!window.confirm("Delete this row?")) return;
+    if (!window.confirm(t("data_preview.confirm_delete"))) return;
     void runAction(() => onDeleteRow(row));
   }
 
   const tabs: Array<{ id: DataTab; label: string; count?: number }> = [
-    { id: "rows", label: "Rows", count: totalRows },
-    { id: "query", label: "Query" },
-    { id: "schema", label: "Schema", count: columnCount },
-    { id: "indexes", label: "Indexes", count: indexes.length },
+    { id: "rows", label: t("data_preview.rows"), count: totalRows },
+    { id: "query", label: t("data_preview.query") },
+    { id: "schema", label: t("data_preview.schema"), count: columnCount },
+    { id: "indexes", label: t("data_preview.indexes"), count: indexes.length },
   ];
 
   return (
@@ -677,18 +684,18 @@ export function DataPreview({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => event.key === "Enter" && applyRows()}
-                    placeholder="id = 1"
+                    placeholder={t("data_preview.where_placeholder")}
                     className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                   />
                   {query || whereClause || project || sort || skip || limit ? (
-                    <button type="button" title="Reset" onClick={resetRows} className="ml-2 text-muted-foreground/70 hover:text-foreground">
+                    <button type="button" title={t("data_preview.reset")} onClick={resetRows} className="ml-2 text-muted-foreground/70 hover:text-foreground">
                       <X size={13} />
                     </button>
                   ) : null}
                 </div>
-                <ToolbarButton primary disabled={busy} onClick={applyRows}>Find</ToolbarButton>
+                <ToolbarButton primary disabled={busy} onClick={applyRows}>{t("data_preview.find")}</ToolbarButton>
                 <ToolbarButton disabled={busy} onClick={() => setOptionsOpen((open) => !open)}>
-                  Options
+                  {t("data_preview.options")}
                   <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />
                 </ToolbarButton>
               </div>
@@ -698,7 +705,7 @@ export function DataPreview({
                   value={sort}
                   onChange={(event) => setSort(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && applyRows()}
-                  placeholder="createdAt desc"
+                  placeholder={t("data_preview.order_placeholder")}
                   className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                 />
               </div>
@@ -706,16 +713,16 @@ export function DataPreview({
               {optionsOpen && (
                 <div className="grid gap-3 rounded-md bg-muted/25 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
                   <label className="space-y-1">
-                    <span className="font-medium text-foreground">Project</span>
+                    <span className="font-medium text-foreground">{t("data_preview.project")}</span>
                     <input
                       value={project}
                       onChange={(event) => setProject(event.target.value)}
-                      placeholder="id, name, createdAt"
+                      placeholder={t("data_preview.project_placeholder")}
                       className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="font-medium text-foreground">Skip</span>
+                    <span className="font-medium text-foreground">{t("data_preview.skip")}</span>
                     <input
                       value={skip}
                       onChange={(event) => setSkip(event.target.value.replace(/\D/g, ""))}
@@ -724,7 +731,7 @@ export function DataPreview({
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="font-medium text-foreground">Limit</span>
+                    <span className="font-medium text-foreground">{t("data_preview.limit")}</span>
                     <input
                       value={limit}
                       onChange={(event) => setLimit(event.target.value.replace(/\D/g, ""))}
@@ -740,12 +747,12 @@ export function DataPreview({
               <div className="flex items-center gap-2">
                 <ToolbarButton primary disabled={busy} onClick={onInsert}>
                   <Plus size={13} />
-                  Add row
+                  {t("data_preview.add_row")}
                   <ChevronDown size={12} />
                 </ToolbarButton>
                 <ToolbarButton onClick={() => setExportOpen(true)} disabled={!rows.length}>
                   <Download size={13} />
-                  Export
+                  {t("data_preview.export")}
                 </ToolbarButton>
               </div>
 
@@ -753,7 +760,9 @@ export function DataPreview({
                 <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-muted/25 px-2 text-[12px] outline-none">
                   {[10, 25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
                 </select>
-                <span className="min-w-[104px] text-right text-[12px] text-foreground">{startRow} - {endRow} of {totalRows}</span>
+                <span className="min-w-[104px] text-right text-[12px] text-foreground">
+                  {t("data_preview.page_range", { start: startRow, end: endRow, total: totalRows })}
+                </span>
                 <button type="button" onClick={onRefresh} disabled={refreshing} className="text-muted-foreground disabled:opacity-40">
                   <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
                 </button>
@@ -783,12 +792,12 @@ export function DataPreview({
               />
               <div className="mt-3 flex justify-end">
                 <ToolbarButton primary disabled={queryLoading || !sql.trim()} onClick={() => void onRunQuery(sql)}>
-                  {queryLoading ? "Running..." : "Run query"}
+                  {queryLoading ? t("data_preview.running") : t("data_preview.run_query")}
                 </ToolbarButton>
               </div>
             </div>
             <div className="flex min-h-0 flex-col rounded-md bg-muted/25 p-3">
-              <div className="mb-2 shrink-0 text-[12px] font-semibold text-foreground">Result preview</div>
+              <div className="mb-2 shrink-0 text-[12px] font-semibold text-foreground">{t("data_preview.result_preview")}</div>
               {queryError ? (
                 <p className="text-[12px] text-destructive">{queryError}</p>
               ) : queryRows.length ? (
@@ -796,7 +805,7 @@ export function DataPreview({
                   <RowsTable rows={queryRows} page={0} pageSize={queryRows.length} busy={false} readOnly fill onEdit={setEditingRow} onDelete={handleDelete} />
                 </div>
               ) : (
-                <p className="py-10 text-center text-[12px] text-muted-foreground">Run a SELECT query to preview rows.</p>
+                <p className="py-10 text-center text-[12px] text-muted-foreground">{t("data_preview.run_select_preview")}</p>
               )}
             </div>
           </div>
@@ -805,11 +814,11 @@ export function DataPreview({
             <table className="w-full text-left text-[12px]">
               <thead>
                 <tr className="text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Column</th>
-                  <th className="px-3 py-2 font-medium">Type</th>
-                  <th className="px-3 py-2 font-medium">Nullable</th>
-                  <th className="px-3 py-2 font-medium">Default</th>
-                  <th className="px-3 py-2 font-medium">Key</th>
+                  <th className="px-3 py-2 font-medium">{t("data_preview.column")}</th>
+                  <th className="px-3 py-2 font-medium">{t("data_preview.type")}</th>
+                  <th className="px-3 py-2 font-medium">{t("data_preview.nullable")}</th>
+                  <th className="px-3 py-2 font-medium">{t("data_preview.default")}</th>
+                  <th className="px-3 py-2 font-medium">{t("data_preview.key")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -817,9 +826,9 @@ export function DataPreview({
                   <tr key={column.name} className="hover:bg-background">
                     <td className="px-3 py-2 font-mono font-semibold text-foreground">{column.name}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{column.type}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{column.nullable ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{column.nullable ? t("data_preview.yes") : t("data_preview.no")}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{column.defaultValue == null ? "-" : String(column.defaultValue)}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{column.isPrimaryKey ? "Primary" : "-"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{column.isPrimaryKey ? t("data_preview.primary") : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -831,10 +840,10 @@ export function DataPreview({
               <table className="w-full text-left text-[12px]">
                 <thead>
                   <tr className="text-muted-foreground">
-                    <th className="px-3 py-2 font-medium">Index</th>
-                    <th className="px-3 py-2 font-medium">Columns</th>
-                    <th className="px-3 py-2 font-medium">Unique</th>
-                    <th className="px-3 py-2 font-medium">Type</th>
+                    <th className="px-3 py-2 font-medium">{t("data_preview.index")}</th>
+                    <th className="px-3 py-2 font-medium">{t("data_preview.column")}</th>
+                    <th className="px-3 py-2 font-medium">{t("data_preview.unique")}</th>
+                    <th className="px-3 py-2 font-medium">{t("data_preview.type")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -842,28 +851,28 @@ export function DataPreview({
                     <tr key={`${index.name}-${index.columns}`} className="hover:bg-background">
                       <td className="px-3 py-2 font-mono font-semibold">{index.name}</td>
                       <td className="px-3 py-2 font-mono text-muted-foreground">{index.columns || "-"}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{index.unique ? "Yes" : "No"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{index.unique ? t("data_preview.yes") : t("data_preview.no")}</td>
                       <td className="px-3 py-2 text-muted-foreground">{index.type}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <p className="py-16 text-center text-[12px] text-muted-foreground">No indexes found.</p>
+              <p className="py-16 text-center text-[12px] text-muted-foreground">{t("data_preview.no_indexes")}</p>
             )}
           </div>
         ) : loading ? (
           <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md text-muted-foreground">
             <RefreshCw size={24} className="animate-spin" />
-            <span className="text-[12px]">Fetching rows</span>
+            <span className="text-[12px]">{t("data_preview.fetching_rows")}</span>
           </div>
         ) : rows.length === 0 && totalRows > 0 && refreshing ? (
           <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md bg-muted/25 text-muted-foreground">
             <RefreshCw size={24} className="animate-spin" />
-            <span className="text-[12px]">Syncing rows</span>
+            <span className="text-[12px]">{t("data_preview.syncing_rows")}</span>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">No rows found</div>
+          <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">{t("data_preview.no_rows")}</div>
         ) : viewMode === "table" ? (
           <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} onEdit={setEditingRow} onDelete={handleDelete} />
         ) : viewMode === "json" ? (

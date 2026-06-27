@@ -19,15 +19,14 @@ export function EmptyWorkspace({ onCreateConnection }: EmptyWorkspaceProps) {
           {t("dashboard.title")}
         </h2>
         <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-          Select a connection from the sidebar or create a new workspace to inspect databases,
-          tables, and rows.
+          {t("dashboard.empty_desc")}
         </p>
         <Button
           className="mt-6 h-9 rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90"
           onClick={onCreateConnection}
         >
           <Plus size={15} className="mr-2" />
-          New connection
+          {t("dashboard.new_connection")}
         </Button>
       </div>
     </div>
