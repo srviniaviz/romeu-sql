@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: Georgia, "Times New Roman", ui-serif, serif;
+}
+
+html {
+  background: #0f0f0e;
+}
+
+body {
+  margin: 0;
+}
