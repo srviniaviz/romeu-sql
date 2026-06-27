@@ -1,4 +1,5 @@
 mod db;
+mod updates;
 
 use tauri::Manager;
 
@@ -53,7 +54,8 @@ pub fn run() {
             db::commands::db_update_row,
             db::commands::db_delete_row,
             db::commands::db_create_table,
-            db::commands::db_create_database
+            db::commands::db_create_database,
+            updates::download_and_install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

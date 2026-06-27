@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-app",
+  "productName": "Romeu SQL",
   "version": "0.1.0-6",
-  "identifier": "com.vinicius.tauri-app",
+  "identifier": "com.srviniaviz.romeu-sql",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

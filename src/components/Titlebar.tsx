@@ -4,7 +4,7 @@ import { DownloadCloud, Loader2, Minus, Moon, Settings, Square, Sun, X } from "l
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import appIcon from "@/assets/icon.png";
-import { checkForUpdates, type UpdateCheckResult } from "@/lib/updates";
+import { checkForUpdates, downloadAndInstallUpdate, type UpdateCheckResult } from "@/lib/updates";
 import { useState } from "react";
 import { loadSettings, updateSettings } from "@/domain/settings/repository";
 
@@ -12,7 +12,7 @@ interface TitlebarProps {
   onOpenSettings: () => void;
 }
 
-type UpdateStatus = "idle" | "checking" | "available" | "current" | "error";
+type UpdateStatus = "idle" | "checking" | "downloading" | "available" | "current" | "error";
 
 export function Titlebar({ onOpenSettings }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
@@ -26,18 +26,20 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
   };
 
   const checkUpdates = async () => {
-    if (updateStatus === "checking") return;
-    if (updateStatus === "available" && updateResult?.releaseUrl) {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(updateResult.releaseUrl);
-      return;
-    }
+    if (updateStatus === "checking" || updateStatus === "downloading") return;
 
     setUpdateStatus("checking");
     try {
       const result = await checkForUpdates();
       setUpdateResult(result);
-      setUpdateStatus(result.hasUpdate ? "available" : "current");
+      if (!result.hasUpdate) {
+        setUpdateStatus("current");
+        return;
+      }
+
+      setUpdateStatus("downloading");
+      await downloadAndInstallUpdate();
+      setUpdateStatus("available");
     } catch {
       setUpdateResult(null);
       setUpdateStatus("error");
@@ -104,7 +106,9 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
           className="relative h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
           title={
             updateStatus === "available" && updateResult
-              ? t("updates.available", { version: updateResult.latestVersion })
+              ? t("updates.installer_started", { version: updateResult.latestVersion })
+              : updateStatus === "downloading" && updateResult
+                ? t("updates.downloading", { version: updateResult.latestVersion })
               : updateStatus === "current" && updateResult
                 ? t("updates.current", { version: updateResult.currentVersion })
                 : updateStatus === "error"
@@ -112,7 +116,7 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
                   : t("updates.check")
           }
         >
-          {updateStatus === "checking" ? (
+          {updateStatus === "checking" || updateStatus === "downloading" ? (
             <Loader2 size={14} className="animate-spin" strokeWidth={2.4} />
           ) : (
             <DownloadCloud size={14} strokeWidth={2.4} />

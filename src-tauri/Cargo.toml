@@ -1,11 +1,11 @@
 [package]
-name = "tauri-app"
+name = "romeu-sql"
 version = "0.1.0-alpha.6"
-description = "A Tauri App"
-authors = ["you"]
+description = "Desktop PostgreSQL client"
+authors = ["Vinicius"]
 edition = "2021"
 license = "GPL-3.0-only"
-default-run = "tauri-app"
+default-run = "romeu-sql"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,6 +28,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "stream"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "chrono", "uuid", "rust_decimal"] }
 rust_decimal = "1"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread", "time"] }

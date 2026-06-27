@@ -13,6 +13,12 @@ export interface UpdateCheckResult {
   hasUpdate: boolean;
 }
 
+export interface UpdateInstallResult {
+  version: string;
+  installerPath: string;
+  releaseUrl: string;
+}
+
 function normalizeVersion(version: string) {
   return version.trim().replace(/^v/i, "");
 }
@@ -76,4 +82,9 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     releaseUrl: release.html_url || RELEASES_URL,
     hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
   };
+}
+
+export async function downloadAndInstallUpdate(): Promise<UpdateInstallResult> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<UpdateInstallResult>("download_and_install_update");
 }

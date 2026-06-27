@@ -289,7 +289,6 @@ function EditableLiteral({
 
   return (
     <span
-      key={`${parsed.column.name}:${parsed.raw}`}
       ref={ref}
       contentEditable={!onChange ? false : true}
       suppressContentEditableWarning
@@ -395,15 +394,15 @@ function openContextMenu(event: React.MouseEvent, field: ParsedField) {
                       &lt;default&gt;
                     </button>
                   ) : field.raw.trim().toLowerCase() === "null" ? (
-                    <EditableLiteral key={`${field.column.name}:${field.raw}`} parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
+                    <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
                   ) : field.kind === "text" || field.kind === "date" || field.kind === "binary" || field.kind === "enum" ? (
                     <>
                       <span className="text-muted-foreground">"</span>
-                      <EditableLiteral key={`${field.column.name}:${field.raw}`} parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
+                      <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
                       <span className="text-muted-foreground">"</span>
                     </>
                   ) : (
-                    <EditableLiteral key={`${field.column.name}:${field.raw}`} parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
+                    <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
                   )}
                   {index < parsedFields.length - 1 && <span className="text-muted-foreground">,</span>}
                   <span className="ml-2 opacity-0 transition-opacity group-hover:opacity-100">

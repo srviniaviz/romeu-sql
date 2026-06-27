@@ -175,7 +175,9 @@
   "updates": {
     "check": "Check for updates",
     "checking": "Checking...",
-    "available": "Update available: {{version}}. Click to open releases.",
+    "available": "Update available: {{version}}.",
+    "downloading": "Downloading the {{version}} installer...",
+    "installer_started": "{{version}} installer started.",
     "current": "You are on the latest version: {{version}}.",
     "error": "Could not check for updates."
   },

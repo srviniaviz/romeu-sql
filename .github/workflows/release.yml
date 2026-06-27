@@ -153,4 +153,4 @@ jobs:
           releaseName: Romeu SQL ${{ needs.prepare.outputs.version }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
-          prerelease: true
+          prerelease: false
