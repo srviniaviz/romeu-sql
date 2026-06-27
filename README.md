@@ -144,6 +144,8 @@ The CI workflow runs:
 - Rust `cargo check`.
 - PostgreSQL-backed integration tests.
 
+Release builds are intentionally gated. They only run from release commits that start with `[RELEASE]` and when the app version differs from the latest GitHub release. See [RELEASE.md](./RELEASE.md).
+
 ## Database Support
 
 | Engine | Status |

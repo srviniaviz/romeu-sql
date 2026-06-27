@@ -1,7 +1,7 @@
 {
   "name": "tauri-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.0",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "landing:dev": "vite --config docs/vite.config.ts --host 127.0.0.1 --port 4177",
     "landing:build": "vite build --config docs/vite.config.ts",
+    "version:alpha": "node scripts/bump-alpha-version.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
