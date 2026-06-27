@@ -198,6 +198,7 @@
     "indexes": "Índices",
     "reset": "Limpar",
     "find": "Buscar",
+    "loading": "Carregando",
     "options": "Opções",
     "project": "Projetar",
     "where_placeholder": "id = 1",

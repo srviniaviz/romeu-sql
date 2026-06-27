@@ -693,7 +693,16 @@ export function DataPreview({
                     </button>
                   ) : null}
                 </div>
-                <ToolbarButton primary disabled={busy} onClick={applyRows}>{t("data_preview.find")}</ToolbarButton>
+                <ToolbarButton primary disabled={busy} onClick={applyRows}>
+                  {refreshing ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin" />
+                      {t("data_preview.loading")}
+                    </>
+                  ) : (
+                    t("data_preview.find")
+                  )}
+                </ToolbarButton>
                 <ToolbarButton disabled={busy} onClick={() => setOptionsOpen((open) => !open)}>
                   {t("data_preview.options")}
                   <ChevronDown size={12} className={cn("transition-transform", optionsOpen && "rotate-180")} />

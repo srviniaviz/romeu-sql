@@ -198,6 +198,7 @@
     "indexes": "Indexes",
     "reset": "Reset",
     "find": "Find",
+    "loading": "Loading",
     "options": "Options",
     "project": "Project",
     "where_placeholder": "id = 1",
