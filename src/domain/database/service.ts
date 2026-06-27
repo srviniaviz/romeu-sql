@@ -11,7 +11,9 @@ import type {
 } from "./types";
 
 async function prepareConnection(connection: Connection) {
+  const started = performance.now();
   const hydrated = await hydrateConnectionSecrets(connection);
+  logSlow("hydrate password", started, connection);
   if (hydrated.type !== "sqlite" && !hydrated.password) {
     throw new Error("No password is saved for this connection. Edit the connection, enter the password, and save it again.");
   }
@@ -20,26 +22,86 @@ async function prepareConnection(connection: Connection) {
 
 async function dbInvoke<T>(command: string, connection: Connection, args: Record<string, unknown> = {}) {
   const readyConnection = await prepareConnection(connection);
-  return invoke<T>(command, {
+  const started = performance.now();
+  const result = await invoke<T>(command, {
     connection: readyConnection,
     ...args,
   });
+  logSlow(command, started, connection);
+  return result;
+}
+
+function logSlow(label: string, started: number, connection: Connection) {
+  const elapsed = performance.now() - started;
+  if (elapsed >= 250) {
+    console.warn(
+      `[romeu-sql][db] ${label} ${elapsed.toFixed(0)}ms`,
+      `${connection.name}/${connection.database}`
+    );
+  }
+}
+
+const metadataCache = new Map<string, Promise<unknown>>();
+
+function metadataKey(connection: Connection, scope: string, extra = "") {
+  return [scope, connection.id, connection.type, connection.host, connection.port, connection.database, extra].join(":");
+}
+
+async function cachedMetadata<T>(
+  key: string,
+  force: boolean,
+  loader: () => Promise<T>
+) {
+  if (force) metadataCache.delete(key);
+  const existing = metadataCache.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const next = loader().catch((error) => {
+    metadataCache.delete(key);
+    throw error;
+  });
+  metadataCache.set(key, next);
+  return next;
+}
+
+export function clearDatabaseMetadataCache(connection?: Connection) {
+  if (!connection) {
+    metadataCache.clear();
+    return;
+  }
+
+  const marker = `:${connection.id}:`;
+  for (const key of metadataCache.keys()) {
+    if (key.includes(marker)) metadataCache.delete(key);
+  }
 }
 
 export async function testConnection(connection: Connection) {
   await dbInvoke<void>("db_test_connection", connection);
 }
 
-export async function listDatabases(connection: Connection) {
-  return dbInvoke<string[]>("db_list_databases", connection);
+export async function listDatabases(connection: Connection, options: { force?: boolean } = {}) {
+  return cachedMetadata(
+    metadataKey(connection, "databases"),
+    !!options.force,
+    () => dbInvoke<string[]>("db_list_databases", connection)
+  );
 }
 
-export async function listTables(connection: Connection) {
-  return dbInvoke<string[]>("db_list_tables", connection);
+export async function listTables(connection: Connection, options: { force?: boolean } = {}) {
+  return cachedMetadata(
+    metadataKey(connection, "tables"),
+    !!options.force,
+    () => dbInvoke<string[]>("db_list_tables", connection)
+  );
 }
 
-export async function listTableStats(connection: Connection) {
-  return dbInvoke<TableInfo[]>("db_list_table_stats", connection);
+export async function listTableStats(connection: Connection, options: { force?: boolean } = {}) {
+  return cachedMetadata(
+    metadataKey(connection, "tableStats"),
+    !!options.force,
+    () => dbInvoke<TableInfo[]>("db_list_table_stats", connection)
+  );
 }
 
 export async function listClusterUsers(connection: Connection) {
@@ -126,8 +188,10 @@ export async function deleteRow(
 
 export async function createTable(connection: Connection, query: string) {
   await dbInvoke<void>("db_create_table", connection, { query });
+  clearDatabaseMetadataCache(connection);
 }
 
 export async function createDatabase(connection: Connection, name: string) {
   await dbInvoke<void>("db_create_database", connection, { name });
+  clearDatabaseMetadataCache(connection);
 }

@@ -1,12 +1,26 @@
-import { useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent, PointerEvent } from "react";
 import { Titlebar } from "./components/Titlebar";
 import { CreateConnectionModal } from "./components/CreateConnection";
 import { AppSidebar } from "./components/layout/AppSidebar";
 import { ClusterManagerModal } from "./components/ClusterManagerModal";
 import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDialog";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
+import { warmStronghold } from "./domain/connections/secretsRepository";
 import { useConnections, Connection } from "./lib/useConnections";
+
+const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 520;
+
+function clampSidebarWidth(value: number) {
+  return Math.min(Math.max(value, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
+}
+
+function getInitialSidebarWidth() {
+  const stored = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  return Number.isFinite(stored) && stored > 0 ? clampSidebarWidth(stored) : 300;
+}
 
 function App() {
   const { connections, loading, removeConnection, refresh } = useConnections();
@@ -20,6 +34,13 @@ function App() {
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
   const [managingConn, setManagingConn] = useState<Connection | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
+
+  useEffect(() => {
+    if (connections.some((connection) => connection.hasSavedPassword)) {
+      void warmStronghold();
+    }
+  }, [connections]);
 
   const filteredConnections = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -99,12 +120,43 @@ function App() {
     setShouldOpenCreateDbModal(false);
   };
 
+  const startSidebarResize = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    let latestWidth = startWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const resize = (moveEvent: globalThis.PointerEvent) => {
+      const nextWidth = clampSidebarWidth(startWidth + moveEvent.clientX - startX);
+      latestWidth = nextWidth;
+      setSidebarWidth(nextWidth);
+    };
+
+    const stopResize = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(latestWidth));
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stopResize);
+    };
+
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stopResize, { once: true });
+  };
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground font-sans text-[13px]">
       <Titlebar />
 
       <main className="flex min-h-0 flex-1 overflow-hidden">
         <AppSidebar
+          width={sidebarWidth}
           connections={filteredConnections}
           loading={loading}
           selectedConn={selectedConn}
@@ -122,6 +174,16 @@ function App() {
           onCreateDatabase={openCreateDatabase}
           onManageConnection={openClusterManager}
         />
+
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-muted/25 lg:flex"
+          onPointerDown={startSidebarResize}
+        >
+          <div className="h-full w-px bg-border/40 transition-colors group-hover:bg-primary/60" />
+        </div>
 
         <WorkspacePanel
           selectedConn={selectedConn}

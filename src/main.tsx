@@ -4,6 +4,7 @@ import App from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
 import "./index.css";
 import "./i18n/config";
+import { benchmarkStronghold } from "./domain/connections/secretsRepository";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -15,6 +16,14 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+declare global {
+  interface Window {
+    romeuBenchStronghold?: (connectionId: string, iterations?: number) => Promise<Array<{ step: string; ms: number }>>;
+  }
+}
+
+window.romeuBenchStronghold = benchmarkStronghold;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

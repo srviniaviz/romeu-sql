@@ -7,6 +7,7 @@ use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
 use sqlx::{Column, MySqlPool, PgPool, Row, SqlitePool, TypeInfo, ValueRef};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::async_runtime::RwLock;
 
 #[derive(Clone)]
@@ -34,6 +35,7 @@ impl DbPoolState {
             return Ok(pool);
         }
 
+        let started = Instant::now();
         let pool = match connection.engine {
             DbEngine::Postgres => DatabasePool::Postgres(
                 PgPoolOptions::new()
@@ -60,23 +62,28 @@ impl DbPoolState {
                 return Err("SQL Server is not supported by the Rust database backend yet.".into())
             }
         };
+        log_slow("connect", started, &key);
 
         self.pools.write().await.insert(key, pool.clone());
         Ok(pool)
     }
 
     pub async fn select(&self, connection: &ConnectionInput, sql: &str) -> Result<Vec<JsonRow>, String> {
+        let started = Instant::now();
         match self.get(connection).await? {
             DatabasePool::Postgres(pool) => {
                 let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                log_slow("select", started, sql);
                 rows.iter().map(pg_row_to_json).collect()
             }
             DatabasePool::Mysql(pool) => {
                 let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                log_slow("select", started, sql);
                 rows.iter().map(mysql_row_to_json).collect()
             }
             DatabasePool::Sqlite(pool) => {
                 let rows = sqlx::query(sql).fetch_all(&pool).await.map_err(to_error)?;
+                log_slow("select", started, sql);
                 rows.iter().map(sqlite_row_to_json).collect()
             }
         }
@@ -88,29 +95,44 @@ impl DbPoolState {
         sql: &str,
         values: &[Value],
     ) -> Result<u64, String> {
+        let started = Instant::now();
         match self.get(connection).await? {
             DatabasePool::Postgres(pool) => {
                 let mut query = sqlx::query(sql);
                 for value in values {
                     query = bind_pg(query, value);
                 }
-                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                log_slow("execute", started, sql);
+                Ok(rows)
             }
             DatabasePool::Mysql(pool) => {
                 let mut query = sqlx::query(sql);
                 for value in values {
                     query = bind_mysql(query, value);
                 }
-                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                log_slow("execute", started, sql);
+                Ok(rows)
             }
             DatabasePool::Sqlite(pool) => {
                 let mut query = sqlx::query(sql);
                 for value in values {
                     query = bind_sqlite(query, value);
                 }
-                query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)
+                let rows = query.execute(&pool).await.map(|done| done.rows_affected()).map_err(to_error)?;
+                log_slow("execute", started, sql);
+                Ok(rows)
             }
         }
+    }
+}
+
+fn log_slow(kind: &str, started: Instant, detail: &str) {
+    let elapsed = started.elapsed();
+    if elapsed.as_millis() >= 250 {
+        let compact = detail.split_whitespace().take(18).collect::<Vec<_>>().join(" ");
+        eprintln!("[romeu-sql][db:{kind}] {}ms {compact}", elapsed.as_millis());
     }
 }
 

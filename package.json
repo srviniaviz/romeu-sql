@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "bench:db": "cargo run --manifest-path src-tauri/Cargo.toml --bin bench_db",
+    "bench:db:fast": "src-tauri\\target\\debug\\bench_db.exe"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

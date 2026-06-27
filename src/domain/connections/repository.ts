@@ -9,6 +9,7 @@ import {
 const store = new LazyStore("connections.json");
 const REGISTRY_KEY = "registry";
 const passwordCache = new Map<string, string | undefined>();
+const passwordPromiseCache = new Map<string, Promise<string | undefined>>();
 
 function withoutPassword(conn: Connection): StoredConnection {
   const { password: _password, ...profile } = conn;
@@ -61,17 +62,34 @@ export async function hydrateConnectionSecrets(connection: Connection): Promise<
     return connection;
   }
 
-  let password = passwordCache.get(connection.id);
-  if (!passwordCache.has(connection.id)) {
-    password = await getConnectionPassword(connection.id);
-    passwordCache.set(connection.id, password);
-  }
+  const password = await getCachedPassword(connection.id);
 
   return {
     ...connection,
     hasSavedPassword: !!password,
     password,
   };
+}
+
+function getCachedPassword(id: string) {
+  if (passwordCache.has(id)) {
+    return Promise.resolve(passwordCache.get(id));
+  }
+
+  const existing = passwordPromiseCache.get(id);
+  if (existing) return existing;
+
+  const next = getConnectionPassword(id)
+    .then((password) => {
+      passwordCache.set(id, password);
+      return password;
+    })
+    .finally(() => {
+      passwordPromiseCache.delete(id);
+    });
+
+  passwordPromiseCache.set(id, next);
+  return next;
 }
 
 export async function addConnection(conn: NewConnection): Promise<Connection> {
@@ -82,6 +100,7 @@ export async function addConnection(conn: NewConnection): Promise<Connection> {
   if (conn.password && conn.savePassword !== false) {
     await setConnectionPassword(id, conn.password);
     passwordCache.set(id, conn.password);
+    passwordPromiseCache.delete(id);
   }
 
   const next = [...current.filter((item) => item.id !== id), newConn].map(withoutPassword);
@@ -100,9 +119,11 @@ export async function updateConnection(id: string, updates: Partial<Connection>)
   if (shouldSavePassword) {
     await setConnectionPassword(id, updated.password || "");
     passwordCache.set(id, updated.password || "");
+    passwordPromiseCache.delete(id);
   } else {
     await removeConnectionPassword(id);
     passwordCache.delete(id);
+    passwordPromiseCache.delete(id);
   }
 
   const next = current.map((conn) => (conn.id === id ? updated : conn)).map(withoutPassword);
@@ -114,4 +135,5 @@ export async function removeConnection(id: string) {
   await persistProfiles(current.filter((conn) => conn.id !== id).map(withoutPassword));
   await removeConnectionPassword(id);
   passwordCache.delete(id);
+  passwordPromiseCache.delete(id);
 }

@@ -11,6 +11,7 @@ import { SidebarConnection } from "@/components/SidebarConnection";
 import { Connection } from "@/lib/useConnections";
 
 interface AppSidebarProps {
+  width: number;
   connections: Connection[];
   loading: boolean;
   selectedConn: Connection | null;
@@ -30,6 +31,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({
+  width,
   connections,
   loading,
   selectedConn,
@@ -48,7 +50,10 @@ export function AppSidebar({
   onManageConnection,
 }: AppSidebarProps) {
   return (
-    <aside className="hidden w-[300px] shrink-0 border-r border-border/40 bg-muted/25 lg:flex lg:flex-col">
+    <aside
+      className="hidden shrink-0 bg-muted/25 lg:flex lg:flex-col"
+      style={{ width }}
+    >
       <div className="flex h-16 items-center justify-between px-4">
         <div>
           <h1 className="text-[18px] font-semibold tracking-tight">Workspace</h1>

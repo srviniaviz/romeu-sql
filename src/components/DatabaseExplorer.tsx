@@ -15,6 +15,7 @@ import {
   countRows,
   createDatabase,
   createTable,
+  clearDatabaseMetadataCache,
   deleteRow,
   executeSql,
   insertRow,
@@ -123,7 +124,7 @@ export function DatabaseExplorer({
   const { data: tableStats = [] } = useQuery({
     queryKey: ["tableStats", connection.id, connection.database],
     queryFn: () => listTableStats(connection),
-    enabled: !!connection.id,
+    enabled: !!connection.id && tables.length > 0 && !loadingTables,
   });
 
   const { data: totalRows = 0, isFetching: countingRows } = useQuery({
@@ -195,7 +196,9 @@ export function DatabaseExplorer({
       const msg = t("explorer.sync_success");
       setExecResult({ success: true, message: msg });
       addHistory({ action: t("explorer.sql_editor"), query: res.query, status: "success", message: msg });
+      clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
@@ -281,7 +284,9 @@ export function DatabaseExplorer({
   const createTableMutation = useMutation({
     mutationFn: (query: string) => createTable(connection, query),
     onSuccess: () => {
+      clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       setIsCreateModalOpen(false);
     },
   });
@@ -289,7 +294,9 @@ export function DatabaseExplorer({
   const createDbMutation = useMutation({
     mutationFn: (name: string) => createDatabase(connection, name),
     onSuccess: () => {
+      clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
+      queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       setIsCreateDbModalOpen(false);
     },
   });
@@ -315,7 +322,14 @@ export function DatabaseExplorer({
           </div>
           <p className="text-[13px] leading-5">{error}</p>
           <div className="mt-4 flex gap-2">
-            <Button variant="destructive" className="h-8 rounded-md text-[12px]" onClick={() => refetchTables()}>
+            <Button
+              variant="destructive"
+              className="h-8 rounded-md text-[12px]"
+              onClick={() => {
+                clearDatabaseMetadataCache(connection);
+                refetchTables();
+              }}
+            >
               {t("explorer.try_again")}
             </Button>
             <Button variant="ghost" className="h-8 rounded-md text-[12px]" onClick={onDisconnect}>

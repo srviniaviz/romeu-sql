@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import type { DbEngine } from "@/domain/connections/types";
 
 interface DatabaseItemProps {
   conn: Connection;
@@ -35,7 +36,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
     if (tables.length > 0 && !force) return;
     try {
       setLoading(true);
-      setTables(await listTables({ ...conn, database: dbName }));
+      setTables(await listTables({ ...conn, database: dbName }, { force }));
     } catch (err) {
       console.error(`Failed to fetch tables for ${dbName}:`, err);
     } finally {
@@ -136,6 +137,10 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   );
 }
 
+function uniqueDatabases(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value?.trim()))));
+}
+
 interface Props {
   conn: Connection;
   isActive: boolean;
@@ -166,25 +171,18 @@ export function SidebarConnection({
   activeTable
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [databases, setDatabases] = useState<string[]>([]);
+  const [databases, setDatabases] = useState<string[]>(() => uniqueDatabases([conn.database]));
   const [loading, setLoading] = useState(false);
+  const [hasScanned, setHasScanned] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
-  const getEngineColor = (type: string) => {
-    switch (type) {
-      case 'postgres': return 'bg-primary';
-      case 'mysql': return 'bg-primary';
-      case 'sqlite': return 'bg-primary';
-      case 'sqlserver': return 'bg-primary';
-      default: return 'bg-primary';
-    }
-  };
-
   const fetchDatabases = async (force = false) => {
-    if (databases.length > 0 && !force) return;
+    if (hasScanned && !force) return;
     try {
       setLoading(true);
-      setDatabases(await listDatabases(conn));
+      const discovered = await listDatabases(conn, { force });
+      setDatabases(uniqueDatabases([conn.database, ...discovered]));
+      setHasScanned(true);
     } catch (err) {
       console.error("Failed to fetch databases for sidebar:", err);
     } finally {
@@ -193,10 +191,9 @@ export function SidebarConnection({
   };
 
   useEffect(() => {
-    if (isActive || isExpanded) {
-      fetchDatabases();
-    }
-  }, [isActive, isExpanded]);
+    setDatabases((current) => uniqueDatabases([conn.database, ...current]));
+    setHasScanned(false);
+  }, [conn.id, conn.database]);
 
   const refreshConnection = async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -220,7 +217,7 @@ export function SidebarConnection({
           />
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative flex items-center">
-              <div className={`size-2.5 rounded-[2px] ${getEngineColor(conn.type)} transition-opacity`} />
+              <DatabaseEngineIcon engine={conn.type} active={isActive} />
               {isActive && (
                 <motion.div 
                   layoutId="active-dot" 
@@ -239,6 +236,7 @@ export function SidebarConnection({
         <div className={`flex items-center transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <div className="flex items-center rounded-md">
                 {isActive && (
+                  <>
                     <Button
                     variant="ghost"
                     size="icon"
@@ -247,41 +245,42 @@ export function SidebarConnection({
                     >
                     <LogOut size={12} />
                     </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                        onClick={refreshConnection}
+                        title="Refresh databases and tables"
+                        disabled={loading}
+                    >
+                        <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onCreateDatabase?.(conn);
+                        }}
+                        title="New Database"
+                    >
+                        <DatabaseIcon size={12} />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onManage?.(conn, e);
+                        }}
+                        title="Manager"
+                    >
+                        <Shield size={12} />
+                    </Button>
+                  </>
                 )}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    onClick={refreshConnection}
-                    title="Refresh databases and tables"
-                    disabled={loading}
-                >
-                    <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onCreateDatabase?.(conn);
-                    }}
-                    title="New Database"
-                >
-                    <DatabaseIcon size={12} />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onManage?.(conn, e);
-                    }}
-                    title="Manager"
-                >
-                    <Shield size={12} />
-                </Button>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -311,13 +310,6 @@ export function SidebarConnection({
             className="overflow-hidden"
           >
             <div className="flex flex-col gap-0.5 py-1 pl-6 pr-2">
-              {loading && databases.length === 0 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted-foreground">
-                  <RefreshCw size={10} className="animate-spin" />
-                  <span>Scanning</span>
-                </div>
-              )}
-              
               {databases.map((dbName) => (
                 <DatabaseItem 
                     key={dbName}
@@ -332,7 +324,7 @@ export function SidebarConnection({
                 />
               ))}
 
-              {!loading && databases.length === 0 && (
+              {databases.length === 0 && (
                 <div className="flex items-center justify-between px-3 py-2 group/empty">
                    <div className="flex items-center gap-2 text-muted-foreground">
                     <DatabaseIcon size={10} />
@@ -345,5 +337,73 @@ export function SidebarConnection({
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function DatabaseEngineIcon({ engine, active }: { engine: DbEngine; active: boolean }) {
+  const baseClass = active ? "text-primary" : "text-muted-foreground group-hover:text-foreground";
+
+  if (engine === "postgres") {
+    return (
+      <span
+        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        title="PostgreSQL"
+      >
+        <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
+          <path
+            d="M3.2 6.2c0-2.4 1.8-4.1 4.8-4.1s4.8 1.7 4.8 4.1c0 1.6-.6 2.8-1.7 3.5.2 1.3.3 2.3-.2 2.8-.4.4-1.1.2-2-.6-.3 1.2-1.1 2-2.1 2-.9 0-1.4-.5-1.6-1.4-.2-.7-.1-1.8.1-2.8-1.2-.7-2.1-1.8-2.1-3.5Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinejoin="round"
+          />
+          <path d="M6.1 6.4h.1M9.8 6.4h.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M7 9.3c.7.4 1.4.4 2 0" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (engine === "mysql") {
+    return (
+      <span
+        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        title="MySQL"
+      >
+        <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
+          <path
+            d="M2.1 9.7c2.7-4.4 6.7-5.8 11.8-4.2-2 2.9-4.8 4.8-8.4 5.6 1.4.3 2.9.2 4.4-.1-2.4 1.6-5.2 1.8-7.8-1.3Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinejoin="round"
+          />
+          <path d="M8.8 4.5c1.2-1 2.3-1.4 3.5-1.2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (engine === "sqlite") {
+    return (
+      <span
+        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        title="SQLite"
+      >
+        <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
+          <path d="M4 2.7h7.1l1 1v9.6H4V2.7Z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M6 5h4M6 7.4h4M6 9.8h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 text-[9px] font-semibold leading-none transition-colors ${baseClass}`}
+      title="SQL Server"
+    >
+      MS
+    </span>
   );
 }
