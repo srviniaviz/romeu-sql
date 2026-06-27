@@ -80,4 +80,30 @@ pub struct ClusterPermissionInfo {
     pub privilege: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchmarkTableResult {
+    pub table_name: String,
+    pub estimated_rows: Option<i64>,
+    pub total_bytes: Option<i64>,
+    pub index_count: i64,
+    pub count_ms: f64,
+    pub sample_ms: f64,
+    pub total_ms: f64,
+    pub score: i64,
+    pub grade: String,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchmarkAnalyzeResult {
+    pub database: String,
+    pub table_count: i64,
+    pub average_score: i64,
+    pub slowest_table: Option<String>,
+    pub total_ms: f64,
+    pub tables: Vec<BenchmarkTableResult>,
+}
+
 pub type JsonRow = BTreeMap<String, Value>;

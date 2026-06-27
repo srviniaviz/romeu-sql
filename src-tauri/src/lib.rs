@@ -28,6 +28,7 @@ pub fn run() {
             db::commands::db_list_databases,
             db::commands::db_list_tables,
             db::commands::db_list_table_stats,
+            db::commands::db_benchmark_analyze,
             db::commands::db_list_cluster_users,
             db::commands::db_list_cluster_permissions,
             db::commands::db_select_rows_page,

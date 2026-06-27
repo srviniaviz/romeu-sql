@@ -12,6 +12,7 @@ import { TableBrowser } from "./explorer/TableBrowser";
 import { DataPreview } from "./explorer/DataPreview";
 import { Connection } from "../lib/useConnections";
 import {
+  benchmarkAnalyze,
   countRows,
   createDatabase,
   createTable,
@@ -243,6 +244,12 @@ export function DatabaseExplorer({
     },
   });
 
+  const benchmarkMutation = useMutation({
+    mutationFn: () => benchmarkAnalyze(connection),
+    onMutate: () => setActiveTask("Running benchmark analyse"),
+    onSettled: () => setActiveTask(null),
+  });
+
   const updateRowMutation = useMutation({
     mutationFn: ({ original, next }: { original: Record<string, unknown>; next: Record<string, unknown> }) => {
       if (!selectedTable) throw new Error("No table selected");
@@ -407,7 +414,15 @@ export function DatabaseExplorer({
             }}
           />
         ) : (
-          <TableBrowser tables={tables} tableStats={tableStats} onSelectTable={(table) => onTableSelected?.(table)} />
+          <TableBrowser
+            tables={tables}
+            tableStats={tableStats}
+            benchmark={benchmarkMutation.data}
+            benchmarking={benchmarkMutation.isPending}
+            benchmarkError={benchmarkMutation.error instanceof Error ? benchmarkMutation.error.message : null}
+            onBenchmark={() => benchmarkMutation.mutate()}
+            onSelectTable={(table) => onTableSelected?.(table)}
+          />
         )}
       </div>
 
@@ -433,7 +448,7 @@ export function DatabaseExplorer({
           <span className="truncate">{connection.database || connection.name}</span>
           <span className="text-muted-foreground/40">•</span>
           <span>{connection.type}</span>
-          {(activeTask || executeMutation.isPending || queryMutation.isPending || insertMutation.isPending || updateRowMutation.isPending || deleteRowMutation.isPending || createTableMutation.isPending || createDbMutation.isPending || refreshingTables || fetchingRows || countingRows) ? (
+          {(activeTask || executeMutation.isPending || queryMutation.isPending || benchmarkMutation.isPending || insertMutation.isPending || updateRowMutation.isPending || deleteRowMutation.isPending || createTableMutation.isPending || createDbMutation.isPending || refreshingTables || fetchingRows || countingRows) ? (
             <>
               <span className="text-muted-foreground/40">•</span>
               <span className="inline-flex items-center gap-1 text-primary">

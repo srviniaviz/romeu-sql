@@ -1,11 +1,12 @@
 use super::dialect;
 use super::pool::DbPoolState;
 use super::types::{
-    ClusterPermissionInfo, ClusterUserInfo, ColumnInfo, ConnectionInput, IndexInfo, JsonRow,
-    RowQueryOptions, TableInfo,
+    BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
+    ColumnInfo, ConnectionInput, IndexInfo, JsonRow, RowQueryOptions, TableInfo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::time::Instant;
 use tauri::State;
 
 type DbResult<T> = Result<T, String>;
@@ -51,6 +52,113 @@ pub async fn db_list_table_stats(
 ) -> DbResult<Vec<TableInfo>> {
     let rows = state.select(&connection, &dialect::list_table_stats(&connection)).await?;
     Ok(rows.iter().map(normalize_table_stats).collect())
+}
+
+#[tauri::command]
+pub async fn db_benchmark_analyze(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+) -> DbResult<BenchmarkAnalyzeResult> {
+    let started = Instant::now();
+    let stats_rows = state.select(&connection, &dialect::list_table_stats(&connection)).await?;
+    let stats = stats_rows.iter().map(normalize_table_stats).collect::<Vec<_>>();
+    let mut tables = Vec::new();
+
+    for table in stats.iter().filter(|table| !table.table_type.contains("view")) {
+        let table_started = Instant::now();
+        let mut notes = Vec::new();
+
+        let index_started = Instant::now();
+        let index_count = match state
+            .select(&connection, &dialect::list_indexes(&connection, &table.name))
+            .await
+        {
+            Ok(rows) => rows.len() as i64,
+            Err(error) => {
+                notes.push(format!("Index scan failed: {error}"));
+                0
+            }
+        };
+        let index_ms = index_started.elapsed().as_secs_f64() * 1000.0;
+
+        let count_started = Instant::now();
+        let count_ms = match dialect::count_rows(&connection, &table.name, None) {
+            Ok(sql) => match state.select(&connection, &sql).await {
+                Ok(_) => count_started.elapsed().as_secs_f64() * 1000.0,
+                Err(error) => {
+                    notes.push(format!("Count failed: {error}"));
+                    0.0
+                }
+            },
+            Err(error) => {
+                notes.push(format!("Count SQL failed: {error}"));
+                0.0
+            }
+        };
+
+        let sample_started = Instant::now();
+        let sample_ms = match dialect::select_rows(&connection, &table.name, 25, 0, None, None) {
+            Ok(sql) => match state.select(&connection, &sql).await {
+                Ok(_) => sample_started.elapsed().as_secs_f64() * 1000.0,
+                Err(error) => {
+                    notes.push(format!("Sample failed: {error}"));
+                    0.0
+                }
+            },
+            Err(error) => {
+                notes.push(format!("Sample SQL failed: {error}"));
+                0.0
+            }
+        };
+
+        if index_count == 0 && table.estimated_rows.unwrap_or_default() > 10_000 {
+            notes.push("Large table without visible indexes".into());
+        }
+        if count_ms > 750.0 {
+            notes.push("COUNT scan is slow".into());
+        }
+        if sample_ms > 250.0 {
+            notes.push("Sample read is slow".into());
+        }
+        if index_ms > 250.0 {
+            notes.push("Index metadata scan is slow".into());
+        }
+
+        let score = table_score(table.estimated_rows, index_count, count_ms, sample_ms);
+        tables.push(BenchmarkTableResult {
+            table_name: table.name.clone(),
+            estimated_rows: table.estimated_rows,
+            total_bytes: table.total_bytes,
+            index_count,
+            count_ms,
+            sample_ms,
+            total_ms: table_started.elapsed().as_secs_f64() * 1000.0,
+            score,
+            grade: score_grade(score),
+            notes,
+        });
+    }
+
+    tables.sort_by(|left, right| left.score.cmp(&right.score).then_with(|| right.total_ms.total_cmp(&left.total_ms)));
+
+    let average_score = if tables.is_empty() {
+        0
+    } else {
+        tables.iter().map(|table| table.score).sum::<i64>() / tables.len() as i64
+    };
+    let slowest_table = tables
+        .iter()
+        .max_by(|left, right| left.total_ms.total_cmp(&right.total_ms))
+        .map(|table| table.table_name.clone());
+
+    Ok(BenchmarkAnalyzeResult {
+        database: connection.database,
+        table_count: tables.len() as i64,
+        average_score,
+        slowest_table,
+        total_ms: started.elapsed().as_secs_f64() * 1000.0,
+        tables,
+    })
 }
 
 #[tauri::command]
@@ -302,6 +410,29 @@ fn normalize_cluster_permission(row: &JsonRow) -> ClusterPermissionInfo {
         principal: get_string(row, &["principal", "grantee", "user", "User", "name"]),
         object_name: get_string(row, &["objectName", "object_name", "table_name", "database", "Db"]),
         privilege: get_string(row, &["privilege", "privilege_type", "permission_name", "Privilege", "permission"]),
+    }
+}
+
+fn table_score(estimated_rows: Option<i64>, index_count: i64, count_ms: f64, sample_ms: f64) -> i64 {
+    let mut score = 100.0;
+    score -= (count_ms / 25.0).min(35.0);
+    score -= (sample_ms / 10.0).min(30.0);
+    if estimated_rows.unwrap_or_default() > 10_000 && index_count == 0 {
+        score -= 25.0;
+    }
+    if estimated_rows.unwrap_or_default() > 100_000 && index_count < 2 {
+        score -= 10.0;
+    }
+    score.round().clamp(0.0, 100.0) as i64
+}
+
+fn score_grade(score: i64) -> String {
+    match score {
+        90..=100 => "A".into(),
+        75..=89 => "B".into(),
+        60..=74 => "C".into(),
+        40..=59 => "D".into(),
+        _ => "E".into(),
     }
 }
 

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { hydrateConnectionSecrets } from "../connections/repository";
 import { Connection } from "../connections/types";
 import type {
+  BenchmarkAnalyzeResult,
   ClusterPermissionInfo,
   ClusterUserInfo,
   ColumnInfo,
@@ -102,6 +103,10 @@ export async function listTableStats(connection: Connection, options: { force?: 
     !!options.force,
     () => dbInvoke<TableInfo[]>("db_list_table_stats", connection)
   );
+}
+
+export async function benchmarkAnalyze(connection: Connection) {
+  return dbInvoke<BenchmarkAnalyzeResult>("db_benchmark_analyze", connection);
 }
 
 export async function listClusterUsers(connection: Connection) {

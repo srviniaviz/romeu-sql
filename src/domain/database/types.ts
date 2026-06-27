@@ -24,6 +24,28 @@ export interface TableInfo {
   totalBytes: number | null;
 }
 
+export interface BenchmarkTableResult {
+  tableName: string;
+  estimatedRows: number | null;
+  totalBytes: number | null;
+  indexCount: number;
+  countMs: number;
+  sampleMs: number;
+  totalMs: number;
+  score: number;
+  grade: string;
+  notes: string[];
+}
+
+export interface BenchmarkAnalyzeResult {
+  database: string;
+  tableCount: number;
+  averageScore: number;
+  slowestTable: string | null;
+  totalMs: number;
+  tables: BenchmarkTableResult[];
+}
+
 export interface ClusterUserInfo {
   name: string;
   role: string;
