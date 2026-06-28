@@ -182,7 +182,12 @@
     "downloading": "Downloading the {{version}} installer...",
     "installer_started": "{{version}} installer started.",
     "current": "You are on the latest version: {{version}}.",
-    "error": "Could not check for updates."
+    "error": "Could not check for updates.",
+    "modal_title": "Update available",
+    "modal_description": "You are running version {{currentVersion}}. Version {{latestVersion}} is available. Do you want to download and open the installer now?",
+    "install": "Update now",
+    "installing": "Downloading...",
+    "install_error": "Could not download or open the installer. Try again."
   },
   "dashboard": {
     "title": "Dashboard",

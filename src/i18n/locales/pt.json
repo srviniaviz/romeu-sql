@@ -182,7 +182,12 @@
     "downloading": "Baixando o instalador da versão {{version}}...",
     "installer_started": "Instalador da versão {{version}} iniciado.",
     "current": "Você está na versão mais recente: {{version}}.",
-    "error": "Não foi possível verificar atualizações."
+    "error": "Não foi possível verificar atualizações.",
+    "modal_title": "Atualização disponível",
+    "modal_description": "Você está usando a versão {{currentVersion}}. A versão {{latestVersion}} está disponível. Deseja baixar e abrir o instalador agora?",
+    "install": "Atualizar agora",
+    "installing": "Baixando...",
+    "install_error": "Não foi possível baixar ou abrir o instalador. Tente novamente."
   },
   "dashboard": {
     "title": "Painel",

@@ -2,10 +2,18 @@ import { useTheme } from "../context/ThemeContext";
 import { useTranslation } from "react-i18next";
 import { DownloadCloud, Loader2, Minus, Moon, Settings, Square, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import appIcon from "@/assets/icon.png";
 import { checkForUpdates, downloadAndInstallUpdate, type UpdateCheckResult } from "@/lib/updates";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { loadSettings, updateSettings } from "@/domain/settings/repository";
 
 interface TitlebarProps {
@@ -19,13 +27,14 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
   const { i18n, t } = useTranslation();
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   const toggleLanguage = () => {
     const nextLang = i18n.language.startsWith('en') ? 'pt' : 'en';
     i18n.changeLanguage(nextLang);
   };
 
-  const checkUpdates = async () => {
+  const checkUpdates = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (updateStatus === "checking" || updateStatus === "downloading") return;
 
     setUpdateStatus("checking");
@@ -37,14 +46,41 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
         return;
       }
 
-      setUpdateStatus("downloading");
-      await downloadAndInstallUpdate();
       setUpdateStatus("available");
+      setUpdateModalOpen(true);
     } catch {
       setUpdateResult(null);
+      setUpdateStatus(silent ? "idle" : "error");
+    }
+  };
+
+  const installUpdate = async () => {
+    if (!updateResult || updateStatus === "downloading") return;
+    setUpdateStatus("downloading");
+    try {
+      await downloadAndInstallUpdate();
+      setUpdateStatus("available");
+      setUpdateModalOpen(false);
+    } catch {
       setUpdateStatus("error");
     }
   };
+
+  useEffect(() => {
+    let canceled = false;
+
+    void loadSettings()
+      .then((settings) => {
+        if (!canceled && settings.updates.autoCheck) {
+          void checkUpdates({ silent: true });
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   const toggleThemeAndSettings = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
@@ -77,6 +113,7 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
   };
 
   return (
+    <>
     <div className="titlebar select-none z-50 flex h-12 items-center justify-between border-b border-border bg-background text-foreground">
       <div 
         data-tauri-drag-region 
@@ -106,7 +143,7 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
           className="relative h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
           title={
             updateStatus === "available" && updateResult
-              ? t("updates.installer_started", { version: updateResult.latestVersion })
+              ? t("updates.available", { version: updateResult.latestVersion })
               : updateStatus === "downloading" && updateResult
                 ? t("updates.downloading", { version: updateResult.latestVersion })
               : updateStatus === "current" && updateResult
@@ -176,5 +213,51 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
         </Button>
       </div>
     </div>
+
+      <Dialog open={updateModalOpen} onOpenChange={(open) => {
+        if (updateStatus !== "downloading") setUpdateModalOpen(open);
+      }}>
+        <DialogContent showCloseButton={updateStatus !== "downloading"} className="max-w-md rounded-lg p-0">
+          <DialogHeader className="border-b border-border/50 px-5 py-4">
+            <DialogTitle>{t("updates.modal_title")}</DialogTitle>
+            <DialogDescription>
+              {updateResult
+                ? t("updates.modal_description", {
+                    currentVersion: updateResult.currentVersion,
+                    latestVersion: updateResult.latestVersion,
+                  })
+                : t("updates.available", { version: "" })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {updateStatus === "error" && (
+            <div className="mx-5 mt-4 rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {t("updates.install_error")}
+            </div>
+          )}
+
+          <DialogFooter className="border-t border-border/50 px-5 py-4">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={updateStatus === "downloading"}
+              onClick={() => setUpdateModalOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button type="button" disabled={updateStatus === "downloading"} onClick={() => void installUpdate()}>
+              {updateStatus === "downloading" ? (
+                <>
+                  <Loader2 size={14} className="mr-2 animate-spin" />
+                  {t("updates.installing")}
+                </>
+              ) : (
+                t("updates.install")
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
