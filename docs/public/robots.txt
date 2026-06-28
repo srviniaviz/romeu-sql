@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://srviniaviz.github.io/romeu-sql/sitemap.xml
