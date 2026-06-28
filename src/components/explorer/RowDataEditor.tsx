@@ -134,7 +134,7 @@ function parseField(column: ColumnInfo, raw: string, mode: EditorMode): ParsedFi
 
   if (kind === "json") {
     try {
-      return { column, kind, raw, include: true, value: JSON.parse(raw) };
+      return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value: JSON.parse(raw) } };
     } catch {
       return { column, kind, raw, include: false, error: "invalid_json" };
     }
@@ -143,7 +143,7 @@ function parseField(column: ColumnInfo, raw: string, mode: EditorMode): ParsedFi
   if (kind === "date") {
     const value = cleanStringLiteral(raw).trim();
     if (!Number.isNaN(Date.parse(value)) || /^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
-      return { column, kind, raw, include: true, value };
+      return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value } };
     }
     return { column, kind, raw, include: false, error: "date_error" };
   }
@@ -151,7 +151,7 @@ function parseField(column: ColumnInfo, raw: string, mode: EditorMode): ParsedFi
   if (kind === "binary") {
     const value = cleanStringLiteral(raw).trim();
     if (!/^\\x[0-9a-f]+$/i.test(value)) return { column, kind, raw, include: false, error: "binary_error" };
-    return { column, kind, raw, include: true, value };
+    return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value } };
   }
 
   if (kind === "enum") {

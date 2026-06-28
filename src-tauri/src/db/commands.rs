@@ -576,7 +576,7 @@ pub async fn db_update_row(
 fn bind_value(value: &Value) -> Value {
     value
         .get("value")
-        .filter(|_| value.get("__romeuSqlEnum").is_some())
+        .filter(|_| value.get("__romeuSqlEnum").is_some() || value.get("__romeuSqlType").is_some())
         .cloned()
         .unwrap_or_else(|| value.clone())
 }

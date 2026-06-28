@@ -256,11 +256,44 @@ fn build_update_postgres(
 
 fn pg_placeholder(index: usize, value: &Value) -> String {
     let placeholder = format!("${index}");
+    if let Some(enum_type) = value.get("__romeuSqlEnum").and_then(Value::as_str) {
+        return format!("{placeholder}::{}", quote_double(enum_type));
+    }
     value
-        .get("__romeuSqlEnum")
+        .get("__romeuSqlType")
         .and_then(Value::as_str)
-        .map(|enum_type| format!("{placeholder}::{}", quote_double(enum_type)))
+        .and_then(safe_pg_type)
+        .map(|data_type| format!("{placeholder}::{data_type}"))
         .unwrap_or(placeholder)
+}
+
+fn safe_pg_type(data_type: &str) -> Option<String> {
+    let normalized = data_type.to_ascii_lowercase();
+    let allowed = normalized.chars().all(|ch| {
+        ch.is_ascii_alphanumeric() || matches!(ch, '_' | ' ' | '(' | ')' | ',' | '[' | ']')
+    });
+    if !allowed {
+        return None;
+    }
+    let supported = [
+        "timestamp",
+        "timestamp without time zone",
+        "timestamp with time zone",
+        "timestamptz",
+        "date",
+        "time",
+        "time without time zone",
+        "time with time zone",
+        "json",
+        "jsonb",
+        "bytea",
+        "uuid",
+    ];
+    if supported.iter().any(|item| normalized == *item) {
+        Some(normalized)
+    } else {
+        None
+    }
 }
 
 fn build_delete(
@@ -642,6 +675,35 @@ mod tests {
         assert_eq!(
             sql,
             "UPDATE \"users\" SET \"id\" = $1, \"name\" = $2 WHERE \"deleted_at\" IS NULL AND \"id\"::text = $3"
+        );
+    }
+
+    #[test]
+    fn casts_postgres_typed_editor_values() {
+        let connection = postgres_connection();
+        let original = BTreeMap::from([("id".to_string(), Value::from(1))]);
+        let next = BTreeMap::from([
+            (
+                "created_at".to_string(),
+                serde_json::json!({
+                    "__romeuSqlType": "timestamp without time zone",
+                    "value": "2026-06-27T20:31:03.543"
+                }),
+            ),
+            (
+                "payload".to_string(),
+                serde_json::json!({
+                    "__romeuSqlType": "jsonb",
+                    "value": { "active": true }
+                }),
+            ),
+        ]);
+
+        let sql = update_row(&connection, "users", &original, &next);
+
+        assert_eq!(
+            sql,
+            "UPDATE \"users\" SET \"created_at\" = $1::timestamp without time zone, \"payload\" = $2::jsonb WHERE \"id\"::text = $3"
         );
     }
 
