@@ -47,6 +47,7 @@ function App() {
   const [managingConn, setManagingConn] = useState<Connection | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
   const [activeView, setActiveView] = useState<AppView>("workspace");
+  const [sidebarCollapseToken, setSidebarCollapseToken] = useState(0);
 
   useEffect(() => {
     if (connections.some((connection) => connection.hasSavedPassword)) {
@@ -118,6 +119,7 @@ function App() {
         }
       });
     }
+    setSidebarCollapseToken((token) => token + 1);
     selectOverview();
   };
 
@@ -196,6 +198,7 @@ function App() {
               selectedConn={selectedConn}
               selectedTable={selectedTable}
               search={search}
+              collapseToken={sidebarCollapseToken}
               onSearchChange={setSearch}
               onCreateConnection={openCreateConnection}
               onRefresh={() => refresh()}

@@ -27,9 +27,10 @@ interface DatabaseItemProps {
   onSelectTable?: (tableName: string) => void;
   activeTable?: string;
   refreshToken: number;
+  collapseToken: number;
 }
 
-function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken }: DatabaseItemProps) {
+function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken, collapseToken }: DatabaseItemProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [tables, setTables] = useState<string[]>([]);
@@ -70,6 +71,13 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
       fetchTables(true);
     }
   }, [refreshToken]);
+
+  useEffect(() => {
+    if (collapseToken > 0) {
+      setIsExpanded(false);
+      setTableSearch("");
+    }
+  }, [collapseToken]);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -188,6 +196,7 @@ interface Props {
   activeDatabase?: string;
   onSelectTable?: (tableName: string) => void;
   activeTable?: string;
+  collapseToken: number;
 }
 
 export function SidebarConnection({ 
@@ -202,7 +211,8 @@ export function SidebarConnection({
   onManage,
   activeDatabase,
   onSelectTable,
-  activeTable
+  activeTable,
+  collapseToken
 }: Props) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -235,6 +245,12 @@ export function SidebarConnection({
       setIsExpanded(true);
     }
   }, [isActive]);
+
+  useEffect(() => {
+    if (collapseToken > 0) {
+      setIsExpanded(false);
+    }
+  }, [collapseToken]);
 
   const refreshConnection = async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -362,6 +378,7 @@ export function SidebarConnection({
                     onSelectTable={onSelectTable}
                     activeTable={activeTable}
                     refreshToken={refreshToken}
+                    collapseToken={collapseToken}
                 />
               ))}
 

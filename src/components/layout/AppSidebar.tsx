@@ -19,6 +19,7 @@ interface AppSidebarProps {
   selectedConn: Connection | null;
   selectedTable: string | null;
   search: string;
+  collapseToken: number;
   onSearchChange: (value: string) => void;
   onCreateConnection: () => void;
   onRefresh: () => void;
@@ -40,6 +41,7 @@ export function AppSidebar({
   selectedConn,
   selectedTable,
   search,
+  collapseToken,
   onSearchChange,
   onCreateConnection,
   onRefresh,
@@ -122,6 +124,7 @@ export function AppSidebar({
                 isActive={selectedConn?.id === conn.id}
                 activeDatabase={selectedConn?.id === conn.id ? selectedConn.database : undefined}
                 activeTable={selectedTable || undefined}
+                collapseToken={collapseToken}
                 onSelect={onSelectConnection}
                 onSelectTable={onSelectTable}
                 onEdit={onEdit}
