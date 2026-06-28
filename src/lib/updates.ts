@@ -19,8 +19,13 @@ export interface UpdateInstallResult {
   releaseUrl: string;
 }
 
-function normalizeVersion(version: string) {
-  return version.trim().replace(/^v/i, "");
+export function normalizeVersion(version: string) {
+  const normalized = version.trim().replace(/^v/i, "");
+  const numericPrerelease = normalized.match(/^(\d+\.\d+\.\d+)-(\d+)$/);
+  if (numericPrerelease) {
+    return `${numericPrerelease[1]}-alpha.${numericPrerelease[2]}`;
+  }
+  return normalized;
 }
 
 function versionParts(version: string) {
@@ -32,7 +37,7 @@ function versionParts(version: string) {
   };
 }
 
-function compareVersions(left: string, right: string) {
+export function compareVersions(left: string, right: string) {
   const leftParts = versionParts(left);
   const rightParts = versionParts(right);
 
@@ -75,12 +80,13 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
 
   const release = (await response.json()) as GitHubRelease;
   const latestVersion = release.tag_name ? normalizeVersion(release.tag_name) : "0.0.0";
+  const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
   return {
-    currentVersion,
+    currentVersion: normalizedCurrentVersion,
     latestVersion,
     releaseUrl: release.html_url || RELEASES_URL,
-    hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+    hasUpdate: compareVersions(latestVersion, normalizedCurrentVersion) > 0,
   };
 }
 
