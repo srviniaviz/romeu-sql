@@ -1,7 +1,7 @@
 {
   "name": "romeu-sql",
   "private": true,
-  "version": "0.1.0-alpha.10",
+  "version": "0.1.0-alpha.11",
   "license": "GPL-3.0-only",
   "type": "module",
   "engines": {
