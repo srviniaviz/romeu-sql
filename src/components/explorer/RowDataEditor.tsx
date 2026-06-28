@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ColumnInfo } from "@/domain/database/types";
@@ -278,45 +278,43 @@ function EditableLiteral({
   onChange?: (name: string, value: string) => void;
   onContextMenu?: (event: React.MouseEvent, field: ParsedField) => void;
 }) {
-  const ref = useRef<HTMLSpanElement | null>(null);
-  const focusedRef = useRef(false);
   const displayValue = displayRaw(parsed.raw, parsed.kind);
+  const shouldUseTextarea = parsed.kind === "json" || displayValue.length > 72 || displayValue.includes("\n");
+  const className = cn(
+    "rounded bg-transparent px-1 py-0.5 font-mono outline-none focus:bg-primary/10 focus:ring-1 focus:ring-primary/30 disabled:cursor-default",
+    literalClass(parsed.kind, parsed.error)
+  );
 
-  useEffect(() => {
-    if (focusedRef.current) return;
-    if (ref.current && ref.current.textContent !== displayValue) {
-      ref.current.textContent = displayValue;
-    }
-  }, [displayValue]);
+  if (shouldUseTextarea) {
+    return (
+      <textarea
+        value={displayValue}
+        disabled={!onChange}
+        spellCheck={false}
+        rows={Math.max(1, Math.min(8, displayValue.split("\n").length))}
+        className={cn(
+          className,
+          "inline-block min-h-7 w-[min(100%,72rem)] max-w-full resize-y whitespace-pre-wrap align-top leading-6"
+        )}
+        onChange={(event) => onChange?.(parsed.column.name, event.target.value)}
+        onContextMenu={(event) => onContextMenu?.(event, parsed)}
+      />
+    );
+  }
 
   return (
-    <span
-      ref={ref}
-      contentEditable={!onChange ? false : true}
-      suppressContentEditableWarning
+    <input
+      value={displayValue}
+      disabled={!onChange}
       spellCheck={false}
-      className={cn(
-        "inline-block min-w-8 rounded px-1 py-0.5 outline-none focus:bg-primary/10 focus:ring-1 focus:ring-primary/30",
-        parsed.kind === "json" && "max-w-full whitespace-pre-wrap align-top",
-        literalClass(parsed.kind, parsed.error)
-      )}
-      onInput={(event) => onChange?.(parsed.column.name, event.currentTarget.textContent ?? "")}
-      onFocus={() => {
-        focusedRef.current = true;
-      }}
-      onBlur={() => {
-        focusedRef.current = false;
-        if (ref.current && ref.current.textContent !== displayValue) {
-          ref.current.textContent = displayValue;
-        }
-      }}
+      className={cn(className, "inline-block min-w-8")}
+      style={{ width: `${Math.min(Math.max(displayValue.length + 1, 4), 72)}ch` }}
+      onChange={(event) => onChange?.(parsed.column.name, event.target.value)}
       onContextMenu={(event) => onContextMenu?.(event, parsed)}
       onKeyDown={(event) => {
         if (parsed.kind !== "json" && event.key === "Enter") event.preventDefault();
       }}
-    >
-      {displayValue}
-    </span>
+    />
   );
 }
 

@@ -19,6 +19,9 @@
   },
   "toast": {
     "row_inserted": "Linha adicionada",
+    "row_updated": "Linha atualizada",
+    "insert_failed": "Falha ao adicionar",
+    "update_failed": "Falha ao atualizar",
     "row_deleted": "Linha excluída",
     "delete_failed": "Falha ao excluir",
     "export_done": "Exportação concluída",

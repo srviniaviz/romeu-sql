@@ -2,8 +2,8 @@ use super::dialect;
 use super::pool::DbPoolState;
 use super::types::{
     BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
-    ColumnInfo, ConnectionInput, DeleteCascadeImpact, ExportFormat, ExportResult, IndexInfo,
-    JsonRow, RowQueryOptions, TableInfo,
+    ColumnInfo, ConnectionInput, DbEngine, DeleteCascadeImpact, ExportFormat, ExportResult,
+    IndexInfo, JsonRow, RowQueryOptions, TableInfo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -558,7 +558,15 @@ pub async fn db_update_row(
     with_query_timeout(query_timeout_ms, async {
         let sql = dialect::update_row(&connection, &table_name, &original, &next);
         let mut values = next.values().map(bind_value).collect::<Vec<_>>();
-        values.extend(original.values().filter(|value| !value.is_null()).cloned());
+        values.extend(
+            original
+                .values()
+                .filter(|value| !value.is_null())
+                .map(|value| match connection.engine {
+                    DbEngine::Postgres => Value::String(original_value_to_text(value)),
+                    _ => value.clone(),
+                }),
+        );
         state.execute(&connection, &sql, &values).await?;
         Ok(sql)
     })
@@ -571,6 +579,16 @@ fn bind_value(value: &Value) -> Value {
         .filter(|_| value.get("__romeuSqlEnum").is_some())
         .cloned()
         .unwrap_or_else(|| value.clone())
+}
+
+fn original_value_to_text(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(value) => value.clone(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        other => other.to_string(),
+    }
 }
 
 #[tauri::command]

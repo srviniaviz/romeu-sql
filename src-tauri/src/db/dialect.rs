@@ -156,6 +156,27 @@ fn exact_where(
         .join(" AND ")
 }
 
+fn exact_where_text(
+    row: &BTreeMap<String, Value>,
+    quote: fn(&str) -> String,
+    placeholder: impl Fn(usize) -> String,
+    start_index: usize,
+) -> String {
+    let mut value_index = start_index;
+    row.iter()
+        .map(|(key, value)| {
+            if value.is_null() {
+                format!("{} IS NULL", quote(key))
+            } else {
+                let clause = format!("{}::text = {}", quote(key), placeholder(value_index));
+                value_index += 1;
+                clause
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ")
+}
+
 fn build_insert(
     table_name: &str,
     data: &BTreeMap<String, Value>,
@@ -201,6 +222,35 @@ fn build_update(
     format!(
         "UPDATE {} SET {assignments} WHERE {where_clause}",
         quote_qualified(table_name, quote)
+    )
+}
+
+fn build_update_postgres(
+    table_name: &str,
+    original: &BTreeMap<String, Value>,
+    next: &BTreeMap<String, Value>,
+) -> String {
+    let assignments = next
+        .iter()
+        .enumerate()
+        .map(|(index, (key, value))| {
+            format!(
+                "{} = {}",
+                quote_double(key),
+                pg_placeholder(index + 1, value)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let where_clause = exact_where_text(
+        original,
+        quote_double,
+        |index| format!("${index}"),
+        next.len() + 1,
+    );
+    format!(
+        "UPDATE {} SET {assignments} WHERE {where_clause}",
+        quote_qualified(table_name, quote_double)
     )
 }
 
@@ -455,9 +505,7 @@ pub fn update_row(
     next: &BTreeMap<String, Value>,
 ) -> String {
     match connection.engine {
-        DbEngine::Postgres => {
-            build_update(table_name, original, next, quote_double, pg_placeholder)
-        }
+        DbEngine::Postgres => build_update_postgres(table_name, original, next),
         DbEngine::Mysql => build_update(table_name, original, next, quote_backtick, |_, _| {
             "?".into()
         }),

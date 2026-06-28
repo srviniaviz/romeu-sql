@@ -10,6 +10,7 @@ import {
 import { Plus, AlertCircle } from "lucide-react";
 import { RowDataEditor } from "@/components/explorer/RowDataEditor";
 import type { ColumnInfo } from "@/domain/database/types";
+import { toast } from "@/components/ui/toast";
 
 interface Props {
   isOpen: boolean;
@@ -37,15 +38,25 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
       await onInsert(data);
       onClose();
     } catch (err: any) {
-      setError(err.message || t("modal_insert.failed"));
+      const message = err.message || t("modal_insert.failed");
+      setError(message);
+      toast({ title: t("toast.insert_failed"), description: message, variant: "error" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[980px] overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !loading) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={!loading}
+        className="max-w-[980px] overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl"
+      >
         <DialogHeader className="border-b border-border/50 px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-[16px] font-semibold tracking-tight">
             <Plus size={17} className="text-primary" />

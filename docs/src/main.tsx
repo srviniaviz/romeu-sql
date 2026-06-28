@@ -15,6 +15,9 @@ const copy = {
     latestLabel: "Última versão",
     latestFallback: "Última versão: alpha",
     latestLoading: "Buscando última versão",
+    pageTitle: "Romeu SQL - Cliente desktop para PostgreSQL",
+    pageDescription:
+      "Romeu SQL é um cliente desktop alpha para PostgreSQL. Gerencie conexões locais, navegue por bancos e tabelas, execute consultas SQL e exporte dados no Windows.",
     heroTitle: "Cliente desktop para PostgreSQL",
     heroText:
       "Romeu SQL é um aplicativo local para gerenciar conexões PostgreSQL, navegar por bancos e tabelas, consultar dados e executar SQL em uma interface desktop.",
@@ -42,6 +45,9 @@ const copy = {
     latestLabel: "Latest version",
     latestFallback: "Latest version: alpha",
     latestLoading: "Fetching latest version",
+    pageTitle: "Romeu SQL - Desktop client for PostgreSQL",
+    pageDescription:
+      "Romeu SQL is an alpha desktop PostgreSQL client. Manage local connections, browse databases and tables, run SQL queries, and export data on Windows.",
     heroTitle: "Desktop client for PostgreSQL",
     heroText:
       "Romeu SQL is a local application for managing PostgreSQL connections, browsing databases and tables, querying data, and running SQL in a desktop interface.",
@@ -76,7 +82,12 @@ function App() {
   React.useEffect(() => {
     localStorage.setItem("romeu-sql-language", language);
     document.documentElement.lang = language === "pt" ? "pt-BR" : "en";
-    document.title = "Romeu SQL";
+    document.title = text.pageTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", text.pageDescription);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", text.pageTitle);
+    document.querySelector('meta[property="og:description"]')?.setAttribute("content", text.pageDescription);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", text.pageTitle);
+    document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", text.pageDescription);
   }, [language]);
 
   return (

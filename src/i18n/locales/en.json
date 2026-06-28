@@ -19,6 +19,9 @@
   },
   "toast": {
     "row_inserted": "Row added",
+    "row_updated": "Row updated",
+    "insert_failed": "Insert failed",
+    "update_failed": "Update failed",
     "row_deleted": "Row deleted",
     "delete_failed": "Delete failed",
     "export_done": "Export complete",

@@ -1624,8 +1624,10 @@ export function DataPreview({
             const result = await runAction(() => onUpdateRow(where, changed));
             if (result.ok) {
               setEditingRow(null);
+              toast({ title: t("toast.row_updated"), variant: "success" });
               return;
             }
+            toast({ title: t("toast.update_failed"), description: result.error ?? t("common.error"), variant: "error" });
             throw new Error(result.error ?? t("common.error"));
           }}
         />
