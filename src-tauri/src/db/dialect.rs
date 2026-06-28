@@ -641,7 +641,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "UPDATE \"users\" SET \"id\" = $1, \"name\" = $2 WHERE \"deleted_at\" IS NULL AND \"id\" = $3"
+            "UPDATE \"users\" SET \"id\" = $1, \"name\" = $2 WHERE \"deleted_at\" IS NULL AND \"id\"::text = $3"
         );
     }
 
