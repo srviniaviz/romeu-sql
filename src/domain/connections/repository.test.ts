@@ -26,7 +26,7 @@ vi.mock("./secretsRepository", () => ({
   setConnectionPassword: mocks.setConnectionPassword,
 }));
 
-import { addConnection, updateConnection } from "./repository";
+import { addConnection, updateConnection, getConnectionString } from "./repository";
 
 const storedConnection: StoredConnection = {
   id: "existing",
@@ -73,6 +73,43 @@ describe("connections repository", () => {
     expect(mocks.registry.find((connection) => connection.id === "existing")).toMatchObject({
       name: "renamed",
       hasSavedPassword: true,
+    });
+  });
+
+  describe("getConnectionString", () => {
+    it("formats postgres connection correctly with credentials encoded", () => {
+      const conn: any = {
+        type: "postgres",
+        username: "user@example.com",
+        password: "p@ss word",
+        host: "127.0.0.1",
+        port: "5432",
+        database: "mydb",
+      };
+      const result = getConnectionString(conn);
+      expect(result).toBe("postgresql://user%40example.com:p%40ss%20word@127.0.0.1:5432/mydb");
+    });
+
+    it("formats mysql connection correctly", () => {
+      const conn: any = {
+        type: "mysql",
+        username: "root",
+        password: "password",
+        host: "localhost",
+        port: "3306",
+        database: "sys",
+      };
+      const result = getConnectionString(conn);
+      expect(result).toBe("mysql://root:password@localhost:3306/sys");
+    });
+
+    it("formats sqlite connection string using path as host", () => {
+      const conn: any = {
+        type: "sqlite",
+        host: "/users/documents/local.db",
+      };
+      const result = getConnectionString(conn);
+      expect(result).toBe("sqlite:/users/documents/local.db");
     });
   });
 });

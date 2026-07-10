@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { clearDatabaseMetadataCache, listTables } from "./service";
 import type { Connection } from "../connections/types";
+import type { TableInfo } from "./types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -36,9 +37,11 @@ const connection: Connection = {
 };
 
 describe("database service metadata cache", () => {
+  const mockTables: TableInfo[] = [{ name: "products", type: "table", estimatedRows: null, totalBytes: null }];
+
   beforeEach(() => {
     vi.mocked(invoke).mockReset();
-    vi.mocked(invoke).mockResolvedValue(["products"]);
+    vi.mocked(invoke).mockResolvedValue(mockTables);
     clearDatabaseMetadataCache();
   });
 
@@ -48,8 +51,8 @@ describe("database service metadata cache", () => {
       listTables(connection),
     ]);
 
-    expect(first).toEqual(["products"]);
-    expect(second).toEqual(["products"]);
+    expect(first).toEqual(mockTables);
+    expect(second).toEqual(mockTables);
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("db_list_tables", expect.objectContaining({
       connection: expect.objectContaining({ id: connection.id, password: "postgres" }),

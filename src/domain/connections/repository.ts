@@ -157,3 +157,20 @@ export async function removeConnection(id: string) {
   passwordCache.delete(id);
   passwordPromiseCache.delete(id);
 }
+
+export function getConnectionString(connection: Connection): string {
+  const protocol = connection.type === "postgres" ? "postgresql" : connection.type;
+  const user = connection.username ? encodeURIComponent(connection.username) : "";
+  const pass = connection.password ? encodeURIComponent(connection.password) : "";
+  const host = connection.host || "localhost";
+  const port = connection.port || "";
+  const db = connection.database || "";
+
+  if (connection.type === "sqlite") {
+    return `sqlite:${connection.host}`;
+  }
+
+  const credentials = user || pass ? `${user}:${pass}@` : "";
+  const portPart = port ? `:${port}` : "";
+  return `${protocol}://${credentials}${host}${portPart}/${db}`;
+}

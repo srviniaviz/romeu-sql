@@ -21,7 +21,7 @@ import type { DbEngine } from "@/domain/connections/types";
 import { useTranslation } from "react-i18next";
 import type { TableInfo } from "@/domain/database/types";
 import { toast } from "@/components/ui/toast";
-import { hydrateConnectionSecrets } from "@/domain/connections/repository";
+import { hydrateConnectionSecrets, getConnectionString } from "@/domain/connections/repository";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -286,14 +286,7 @@ export function SidebarConnection({
     event?.stopPropagation();
     try {
       const hydrated = await hydrateConnectionSecrets(conn);
-      const protocol = hydrated.type === "postgres" ? "postgresql" : hydrated.type;
-      const user = hydrated.username ? encodeURIComponent(hydrated.username) : "";
-      const pass = hydrated.password ? encodeURIComponent(hydrated.password) : "";
-      const host = hydrated.host || "localhost";
-      const port = hydrated.port || "5432";
-      const db = hydrated.database || "";
-
-      const connectionString = `${protocol}://${user}:${pass}@${host}:${port}/${db}`;
+      const connectionString = getConnectionString(hydrated);
 
       await navigator.clipboard.writeText(connectionString);
       toast({ title: t("toast.copy_success"), variant: "success" });
