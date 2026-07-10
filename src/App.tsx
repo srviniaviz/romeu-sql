@@ -67,9 +67,10 @@ function App() {
     return visibleConnections.filter((conn) =>
       [conn.name, conn.host, conn.database, conn.type, conn.group]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term))
+        .some((value) => String(value).toLowerCase().includes(term)) ||
+      (selectedConn?.id === conn.id)
     );
-  }, [search, visibleConnections]);
+  }, [search, visibleConnections, selectedConn]);
 
   const selectOverview = () => {
     setActiveView("workspace");

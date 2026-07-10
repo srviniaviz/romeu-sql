@@ -1,10 +1,10 @@
-import { Activity, AlertTriangle, BarChart3, Database, Loader2, Table } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Loader2, Table, Eye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { BenchmarkAnalyzeResult, TableInfo } from "@/domain/database/types";
 
 interface TableBrowserProps {
-  tables: string[];
+  tables: TableInfo[];
   tableStats?: TableInfo[];
   benchmark?: BenchmarkAnalyzeResult;
   benchmarking?: boolean;
@@ -98,16 +98,18 @@ export function TableBrowser({
           </thead>
           <tbody>
             {tables.map((table) => {
-              const stats = statsByName.get(table);
+              const stats = statsByName.get(table.name);
+              const tableType = table.type || stats?.type || "table";
+              const isView = tableType.includes("view");
               return (
-                <tr key={table} className="group cursor-pointer rounded-md hover:bg-muted/25" onClick={() => onSelectTable(table)}>
+                <tr key={table.name} className="group cursor-pointer rounded-md hover:bg-muted/25" onClick={() => onSelectTable(table.name)}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      {(stats?.type || "table").includes("view") ? <Database size={14} className="text-muted-foreground" /> : <Table size={14} className="text-muted-foreground" />}
-                      <span className="font-semibold text-foreground">{table}</span>
+                      {isView ? <Eye size={14} className="text-muted-foreground" /> : <Table size={14} className="text-muted-foreground" />}
+                      <span className="font-semibold text-foreground">{table.name}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">{stats?.type || "table"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{tableType}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatRows(stats?.estimatedRows ?? null)}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatBytes(stats?.totalBytes ?? null)}</td>
                   <td className="px-3 py-2 text-right text-primary opacity-0 transition-opacity group-hover:opacity-100">{t("table_browser.open")}</td>

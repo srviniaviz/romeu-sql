@@ -78,12 +78,35 @@ pub async fn db_list_tables(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
     query_timeout_ms: Option<u64>,
-) -> DbResult<Vec<String>> {
+) -> DbResult<Vec<TableInfo>> {
     with_query_timeout(query_timeout_ms, async {
         let rows = state
             .select(&connection, &dialect::list_tables(&connection))
             .await?;
-        Ok(names_from(&rows, &["name", "table_name", "TABLE_NAME"], ""))
+        Ok(rows.iter().map(|row| {
+            let name = row.get("name")
+                .or_else(|| row.get("TABLE_NAME"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let table_type = row.get("type")
+                .or_else(|| row.get("TABLE_TYPE"))
+                .and_then(|v| v.as_str())
+                .map(|t| {
+                    if t.eq_ignore_ascii_case("view") {
+                        "view".to_string()
+                    } else {
+                        "table".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "table".to_string());
+            TableInfo {
+                name,
+                table_type,
+                estimated_rows: None,
+                total_bytes: None,
+            }
+        }).collect())
     })
     .await
 }

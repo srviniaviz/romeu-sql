@@ -97,11 +97,11 @@ export async function listDatabases(connection: Connection, options: { force?: b
   );
 }
 
-export async function listTables(connection: Connection, options: { force?: boolean } = {}) {
+export async function listTables(connection: Connection, options: { force?: boolean } = {}): Promise<TableInfo[]> {
   return cachedMetadata(
     metadataKey(connection, "tables"),
     !!options.force,
-    () => dbInvoke<string[]>("db_list_tables", connection)
+    () => dbInvoke<TableInfo[]>("db_list_tables", connection)
   );
 }
 

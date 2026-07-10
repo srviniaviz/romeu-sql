@@ -36,7 +36,8 @@ import {
   FileCode,
   FolderOpen,
   Check,
-  AlertCircle
+  AlertCircle,
+  Copy
 } from "lucide-react";
 import { testConnection as testDatabaseConnection } from "@/domain/database/service";
 import { hydrateConnectionSecrets } from "@/domain/connections/repository";
@@ -217,6 +218,25 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
       // Not a valid URL yet, skip
     }
   }, [connectionUrl, setValue]);
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyConnectionString = () => {
+    const data = watch();
+    const protocol = data.type === "postgres" ? "postgresql" : data.type;
+    const user = data.username ? encodeURIComponent(data.username) : "";
+    const pass = data.password ? encodeURIComponent(data.password) : "";
+    const host = data.host || "localhost";
+    const port = data.port || "5432";
+    const db = data.database || "";
+
+    const connectionString = `${protocol}://${user}:${pass}@${host}:${port}/${db}`;
+
+    void navigator.clipboard.writeText(connectionString).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const [testingStatus, setTestingStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
@@ -628,6 +648,22 @@ export function CreateConnectionModal({ isOpen, onClose, connectionToEdit }: Pro
                     <AlertCircle className="mr-2 size-3" />
                   ) : null}
                   {testingStatus === 'success' ? t('common.success') : testingStatus === 'error' ? t('common.error') : t('modal.test_connection')}
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleCopyConnectionString}
+                  className={cn(
+                    "h-10 rounded-md px-4 text-[12px] font-medium transition-all",
+                    copied && "border-primary/50 text-primary bg-primary/5"
+                  )}
+                >
+                  {copied ? (
+                    <Check className="mr-2 size-3 text-green-600" />
+                  ) : (
+                    <Copy className="mr-2 size-3" />
+                  )}
+                  {t("modal.connection.copy_string")}
                 </Button>
                 {testError && (
                   <p className="text-[12px] font-medium text-destructive animate-in fade-in slide-in-from-left-2">

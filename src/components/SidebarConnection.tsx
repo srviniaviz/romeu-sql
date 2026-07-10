@@ -11,12 +11,24 @@ import {
   Plus as PlusIcon,
   Table as TableIcon,
   Shield,
-  Search
+  MoreHorizontal,
+  Copy,
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import type { DbEngine } from "@/domain/connections/types";
 import { useTranslation } from "react-i18next";
+import type { TableInfo } from "@/domain/database/types";
+import { toast } from "@/components/ui/toast";
+import { hydrateConnectionSecrets } from "@/domain/connections/repository";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface DatabaseItemProps {
   conn: Connection;
@@ -28,19 +40,34 @@ interface DatabaseItemProps {
   activeTable?: string;
   refreshToken: number;
   collapseToken: number;
+  search: string;
 }
 
-function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken, collapseToken }: DatabaseItemProps) {
+function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken, collapseToken, search = "" }: DatabaseItemProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [tables, setTables] = useState<string[]>([]);
-  const [tableSearch, setTableSearch] = useState("");
+  const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(false);
+
   const filteredTables = useMemo(() => {
-    const term = tableSearch.trim().toLowerCase();
+    const term = search.trim().toLowerCase();
     if (!term) return tables;
-    return tables.filter((table) => table.toLowerCase().includes(term));
-  }, [tableSearch, tables]);
+    return tables.filter((table) => table.name.toLowerCase().includes(term));
+  }, [search, tables]);
+
+  const isVisible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+
+    const connMatches = [conn.name, conn.host, conn.database, conn.type, conn.group]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(term));
+    
+    const dbMatches = dbName.toLowerCase().includes(term);
+    const hasMatchingTable = filteredTables.length > 0;
+
+    return connMatches || dbMatches || hasMatchingTable;
+  }, [search, dbName, filteredTables, conn]);
 
   const fetchTables = async (force = false) => {
     if (tables.length > 0 && !force) return;
@@ -75,14 +102,21 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   useEffect(() => {
     if (collapseToken > 0) {
       setIsExpanded(false);
-      setTableSearch("");
     }
   }, [collapseToken]);
+
+  useEffect(() => {
+    if (search.trim() && filteredTables.length > 0) {
+      setIsExpanded(true);
+    }
+  }, [search, filteredTables.length]);
+
+  if (!isVisible) return null;
 
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group/db-item flex items-center justify-between rounded-md px-2 py-1 cursor-pointer group/item transition-all hover:bg-background/70 ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+        className={`group/db-item flex items-center justify-between gap-2 rounded-md px-2 py-1 cursor-pointer group/item transition-all hover:bg-background/70 ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
         onClick={(e) => {
           e.stopPropagation();
           setIsExpanded((expanded) => {
@@ -92,7 +126,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
           });
         }}
       >
-        <div className="flex items-center gap-2 truncate">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="size-4 flex items-center justify-center">
             <ChevronRight 
                 size={12} 
@@ -136,39 +170,27 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
                 <RefreshCw size={10} className="animate-spin" />
                 <span>{t("shell.loading")}</span>
               </div>
-            ) : tables.length > 0 ? (
-              <>
-                <div className="relative mb-1 px-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3 -translate-y-1/2 text-muted-foreground/60" />
-                  <input
-                    value={tableSearch}
-                    onChange={(event) => setTableSearch(event.target.value)}
-                    onClick={(event) => event.stopPropagation()}
-                    placeholder={t("shell.search_tables")}
-                    className="h-7 w-full rounded-md bg-background/60 pl-7 pr-2 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/55 focus:bg-background"
-                  />
+            ) : filteredTables.length > 0 ? (
+              filteredTables.map(table => (
+                <div 
+                  key={table.name}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table.name && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isCurrentDb) onSelect({ ...conn, database: dbName });
+                    onSelectTable?.(table.name);
+                  }}
+                >
+                  {table.type === "view" ? (
+                    <Eye size={12} className={`${activeTable === table.name && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
+                  ) : (
+                    <TableIcon size={12} className={`${activeTable === table.name && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
+                  )}
+                  <span className={`truncate text-[12px] min-w-0 flex-1 ${activeTable === table.name && isCurrentDb ? 'font-medium text-primary' : 'text-muted-foreground group-hover/table:text-foreground'}`}>
+                    {table.name}
+                  </span>
                 </div>
-                {filteredTables.length > 0 ? (
-                  filteredTables.map(table => (
-                    <div 
-                      key={table}
-                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isCurrentDb) onSelect({ ...conn, database: dbName });
-                        onSelectTable?.(table);
-                      }}
-                    >
-                      <TableIcon size={12} className={`${activeTable === table && isCurrentDb ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <span className={`truncate text-[12px] ${activeTable === table && isCurrentDb ? 'font-medium text-primary' : 'text-muted-foreground group-hover/table:text-foreground'}`}>
-                        {table}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <span className="px-3 py-1 text-[11px] text-muted-foreground">{t("shell.no_tables")}</span>
-                )}
-              </>
+              ))
             ) : (
               <span className="px-3 py-1 text-[11px] text-muted-foreground">{t("shell.no_tables")}</span>
             )}
@@ -197,6 +219,7 @@ interface Props {
   onSelectTable?: (tableName: string) => void;
   activeTable?: string;
   collapseToken: number;
+  search: string;
 }
 
 export function SidebarConnection({ 
@@ -212,7 +235,8 @@ export function SidebarConnection({
   activeDatabase,
   onSelectTable,
   activeTable,
-  collapseToken
+  collapseToken,
+  search
 }: Props) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -258,6 +282,27 @@ export function SidebarConnection({
     await fetchDatabases(true);
   };
 
+  const copyConnectionString = async (event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    try {
+      const hydrated = await hydrateConnectionSecrets(conn);
+      const protocol = hydrated.type === "postgres" ? "postgresql" : hydrated.type;
+      const user = hydrated.username ? encodeURIComponent(hydrated.username) : "";
+      const pass = hydrated.password ? encodeURIComponent(hydrated.password) : "";
+      const host = hydrated.host || "localhost";
+      const port = hydrated.port || "5432";
+      const db = hydrated.database || "";
+
+      const connectionString = `${protocol}://${user}:${pass}@${host}:${port}/${db}`;
+
+      await navigator.clipboard.writeText(connectionString);
+      toast({ title: t("toast.copy_success"), variant: "success" });
+    } catch (err: any) {
+      console.error("Failed to copy connection string:", err);
+      toast({ title: t("common.error"), description: err.message, variant: "error" });
+    }
+  };
+
   return (
     <div className="flex flex-col gap-0.5">
       <div 
@@ -292,68 +337,87 @@ export function SidebarConnection({
 
         <div className={`flex items-center transition-all ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <div className="flex items-center rounded-md">
-                {isActive && (
-                  <>
-                    <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-primary hover:bg-primary/10"
-                    onClick={(e) => onDisconnect(e)}
-                    >
-                    <LogOut size={12} />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                        onClick={refreshConnection}
-                        title={t("shell.refresh_databases_tables")}
-                        disabled={loading}
-                    >
-                        <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onCreateDatabase?.(conn);
-                        }}
-                        title={t("shell.new_database")}
-                    >
-                        <DatabaseIcon size={12} />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onManage?.(conn, e);
-                        }}
-                        title={t("shell.manager")}
-                    >
-                        <Shield size={12} />
-                    </Button>
-                  </>
-                )}
+            {isActive && (
+              <>
                 <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-background hover:text-foreground"
-                    onClick={(e) => onEdit(conn, e)}
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 rounded-md text-primary hover:bg-primary/10"
+                  onClick={(e) => onDisconnect(e)}
+                  title={t("explorer.disconnect")}
                 >
-                    <Pencil size={12} />
+                  <LogOut size={12} />
                 </Button>
                 <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    onClick={(e) => onDelete(conn.id, e)}
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  onClick={refreshConnection}
+                  title={t("shell.refresh_databases_tables")}
+                  disabled={loading}
                 >
-                    <Trash2 size={12} />
+                  <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateDatabase?.(conn);
+                  }}
+                  title={t("shell.new_database")}
+                >
+                  <DatabaseIcon size={12} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onManage?.(conn, e);
+                  }}
+                  title={t("shell.manager")}
+                >
+                  <Shield size={12} />
+                </Button>
+              </>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                >
+                  <MoreHorizontal size={12} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={(e) => onEdit(conn, e)}>
+                  <Pencil className="mr-2 size-3.5" />
+                  <span>{t("modal.connection.edit_connection")}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={copyConnectionString}>
+                  <Copy className="mr-2 size-3.5" />
+                  <span>{t("modal.connection.copy_string")}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={(e) => onDelete(conn.id, e)} 
+                  variant="destructive"
+                >
+                  <Trash2 className="mr-2 size-3.5" />
+                  <span>{t("common.delete")}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -379,6 +443,7 @@ export function SidebarConnection({
                     activeTable={activeTable}
                     refreshToken={refreshToken}
                     collapseToken={collapseToken}
+                    search={search}
                 />
               ))}
 

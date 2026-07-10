@@ -133,6 +133,7 @@ export function AppSidebar({
                 onCreateAction={onCreateTable}
                 onCreateDatabase={onCreateDatabase}
                 onManage={onManageConnection}
+                search={search}
               />
             ))
           )}

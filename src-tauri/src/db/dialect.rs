@@ -346,10 +346,10 @@ pub fn list_databases(connection: &ConnectionInput) -> String {
 
 pub fn list_tables(connection: &ConnectionInput) -> String {
     match connection.engine {
-        DbEngine::Postgres => "SELECT table_name as name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name ASC".into(),
-        DbEngine::Mysql => "SHOW TABLES".into(),
-        DbEngine::Sqlite => "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name ASC".into(),
-        DbEngine::Sqlserver => "SELECT TABLE_NAME as name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME ASC".into(),
+        DbEngine::Postgres => "SELECT table_name as name, CASE WHEN table_type = 'VIEW' THEN 'view' ELSE 'table' END as type FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name ASC".into(),
+        DbEngine::Mysql => "SELECT table_name as name, CASE WHEN table_type = 'VIEW' THEN 'view' ELSE 'table' END as type FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name ASC".into(),
+        DbEngine::Sqlite => "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name ASC".into(),
+        DbEngine::Sqlserver => "SELECT TABLE_NAME as name, CASE WHEN TABLE_TYPE = 'VIEW' THEN 'view' ELSE 'table' END as type FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME ASC".into(),
     }
 }
 

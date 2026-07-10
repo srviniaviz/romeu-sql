@@ -25,7 +25,8 @@
     "row_deleted": "Linha excluída",
     "delete_failed": "Falha ao excluir",
     "export_done": "Exportação concluída",
-    "export_failed": "Falha ao exportar"
+    "export_failed": "Falha ao exportar",
+    "copy_success": "URL de conexão copiada para a área de transferência"
   },
   "shell": {
     "workspace": "Workspace",
@@ -235,6 +236,7 @@
       "save_password": "Salvar senha nas configurações",
       "ssl_mode": "Modo SSL",
       "magic_url": "Magic URL (Auto-preenchimento)",
+      "copy_string": "Copiar URL de conexão",
       "url_hint": "Colar uma URL preencherá automaticamente os campos abaixo",
       "postgres_only": "Somente PostgreSQL é suportado por enquanto. Mais engines em breve.",
       "mysql_soon": "MySQL · Em breve",

@@ -25,7 +25,8 @@
     "row_deleted": "Row deleted",
     "delete_failed": "Delete failed",
     "export_done": "Export complete",
-    "export_failed": "Export failed"
+    "export_failed": "Export failed",
+    "copy_success": "Connection string copied to clipboard"
   },
   "shell": {
     "workspace": "Workspace",
@@ -235,6 +236,7 @@
       "save_password": "Save password in settings",
       "ssl_mode": "SSL Mode",
       "magic_url": "Magic URL (Auto-fill)",
+      "copy_string": "Copy connection string",
       "url_hint": "Pasting a URL will automatically fill all fields below",
       "postgres_only": "Only PostgreSQL is supported for now. More engines are coming soon.",
       "mysql_soon": "MySQL · Coming soon",
