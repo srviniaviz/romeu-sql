@@ -22,6 +22,7 @@ import {
   executeSql,
   explainRows,
   exportQuery,
+  getDatabaseSize,
   insertRow,
   listColumns,
   listDeleteCascadeImpacts,
@@ -163,6 +164,12 @@ export function DatabaseExplorer({
     enabled: !!connection.id && tables.length > 0 && !loadingTables,
   });
 
+  const { data: databaseSizeBytes = null, isFetching: fetchingDatabaseSize } = useQuery({
+    queryKey: ["databaseSize", connection.id, connection.database],
+    queryFn: () => getDatabaseSize(connection),
+    enabled: !!connection.id,
+  });
+
   const { data: totalRows = 0, isFetching: countingRows } = useQuery({
     queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable, whereClause],
     queryFn: () => (selectedTable ? countRows(connection, selectedTable, whereClause) : 0),
@@ -241,6 +248,7 @@ export function DatabaseExplorer({
       clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
     },
@@ -262,6 +270,7 @@ export function DatabaseExplorer({
       addHistory({ action: t("explorer.add_document"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
@@ -302,6 +311,7 @@ export function DatabaseExplorer({
       addHistory({ action: t("data_preview.edit_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
@@ -321,6 +331,7 @@ export function DatabaseExplorer({
       addHistory({ action: t("data_preview.delete_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
@@ -335,6 +346,7 @@ export function DatabaseExplorer({
       clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
       setIsCreateModalOpen(false);
     },
   });
@@ -345,6 +357,7 @@ export function DatabaseExplorer({
       clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
+      queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
       setIsCreateDbModalOpen(false);
     },
   });
@@ -398,7 +411,8 @@ export function DatabaseExplorer({
         selectedTable={selectedTable}
         tableCount={tables.length}
         rowCount={totalRows}
-        refreshing={refreshingTables || fetchingRows || countingRows}
+        databaseSizeBytes={databaseSizeBytes}
+        refreshing={refreshingTables || fetchingRows || countingRows || fetchingDatabaseSize}
         onDisconnect={onDisconnect}
       />
 

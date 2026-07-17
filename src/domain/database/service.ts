@@ -113,6 +113,10 @@ export async function listTableStats(connection: Connection, options: { force?: 
   );
 }
 
+export async function getDatabaseSize(connection: Connection) {
+  return dbInvoke<number>("db_database_size", connection);
+}
+
 export async function benchmarkAnalyze(connection: Connection) {
   return dbInvoke<BenchmarkAnalyzeResult>("db_benchmark_analyze", connection);
 }

@@ -1,6 +1,8 @@
-import { Activity, AlertTriangle, BarChart3, Loader2, Table, Eye } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Activity, AlertTriangle, BarChart3, Loader2, Table, Eye, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { BenchmarkAnalyzeResult, TableInfo } from "@/domain/database/types";
 
 interface TableBrowserProps {
@@ -52,7 +54,13 @@ export function TableBrowser({
   onSelectTable,
 }: TableBrowserProps) {
   const { t } = useTranslation();
+  const [search, setSearch] = useState("");
   const statsByName = new Map(tableStats.map((item) => [item.name, item]));
+  const filteredTables = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    if (!query) return tables;
+    return tables.filter((table) => table.name.toLocaleLowerCase().includes(query));
+  }, [search, tables]);
 
   if (tables.length === 0) {
     return (
@@ -64,21 +72,33 @@ export function TableBrowser({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-start justify-between gap-3 px-5 py-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-4">
         <div>
           <h3 className="text-[14px] font-semibold text-foreground">{t("table_browser.title")}</h3>
           <p className="text-[12px] text-muted-foreground">{t("table_browser.description")}</p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 rounded-md text-[12px]"
-          onClick={onBenchmark}
-          disabled={benchmarking}
-        >
-          {benchmarking ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
-          {t("table_browser.benchmark")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative w-60 max-w-full">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t("shell.search_tables")}
+              aria-label={t("shell.search_tables")}
+              className="h-8 border-border/50 bg-background pl-8 text-[12px] shadow-none"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 rounded-md text-[12px]"
+            onClick={onBenchmark}
+            disabled={benchmarking}
+          >
+            {benchmarking ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
+            {t("table_browser.benchmark")}
+          </Button>
+        </div>
       </div>
 
       {(benchmark || benchmarking || benchmarkError) && (
@@ -97,7 +117,7 @@ export function TableBrowser({
             </tr>
           </thead>
           <tbody>
-            {tables.map((table) => {
+            {filteredTables.map((table) => {
               const stats = statsByName.get(table.name);
               const tableType = table.type || stats?.type || "table";
               const isView = tableType.includes("view");
@@ -118,6 +138,11 @@ export function TableBrowser({
             })}
           </tbody>
         </table>
+        {filteredTables.length === 0 && (
+          <div className="py-12 text-center text-[13px] text-muted-foreground">
+            {t("table_browser.no_matching_tables")}
+          </div>
+        )}
       </div>
     </section>
   );

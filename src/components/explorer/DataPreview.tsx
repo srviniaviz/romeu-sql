@@ -212,16 +212,16 @@ function sanitizeRows(rows: Record<string, unknown>[], settings: AppSettings) {
 }
 
 const valueTone = {
-  string: "text-neutral-950 dark:text-stone-200",
-  id: "font-medium text-slate-700 dark:text-neutral-400",
+  string: "text-amber-800 dark:text-amber-300",
+  id: "font-medium text-violet-800 dark:text-violet-300",
   number: "font-semibold tabular-nums text-blue-900 dark:text-sky-300",
   money: "font-semibold tabular-nums text-emerald-950 dark:text-emerald-300",
-  booleanTrue: "font-semibold text-indigo-900 dark:text-violet-300",
-  booleanFalse: "font-semibold text-neutral-800 dark:text-neutral-400",
-  date: "font-semibold text-stone-900 dark:text-cyan-300",
+  booleanTrue: "font-semibold text-emerald-800 dark:text-emerald-300",
+  booleanFalse: "font-semibold text-rose-800 dark:text-rose-300",
+  date: "font-semibold text-cyan-800 dark:text-cyan-300",
   link: "font-medium text-sky-800 dark:text-blue-300",
   json: "font-medium text-violet-950 dark:text-fuchsia-300",
-  nullish: "text-neutral-600 dark:text-neutral-500",
+  nullish: "text-slate-500 dark:text-slate-500",
 };
 
 function FieldValue({
@@ -437,12 +437,22 @@ function RowActions({
   onDelete: (row: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
+
+  async function handleCopyJson() {
+    try {
+      await copyText(JSON.stringify(sortRowObject(row), null, 2));
+      toast({ title: t("data_preview.json_copied"), variant: "success", compact: true, duration: 1800 });
+    } catch {
+      toast({ title: t("data_preview.copy_failed"), variant: "error", compact: true, duration: 2500 });
+    }
+  }
+
   return (
     <div className="flex items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100">
       <IconButton title={t("data_preview.edit_row")} disabled={busy} onClick={() => onEdit(row)}>
         <Edit3 size={12} />
       </IconButton>
-      <IconButton title={t("data_preview.copy_json")} onClick={() => void copyText(JSON.stringify(sortRowObject(row), null, 2))}>
+      <IconButton title={t("data_preview.copy_json")} onClick={() => void handleCopyJson()}>
         <Copy size={12} />
       </IconButton>
       {allowDelete && (
@@ -475,8 +485,8 @@ function DocumentRow({
   const visibleEntries = expanded ? entries : entries.slice(0, cardLimit);
 
   return (
-    <article className="group/row relative overflow-hidden rounded-md bg-muted/25 hover:bg-muted/35">
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
+    <article className="group/row relative overflow-hidden rounded-md border border-border bg-card/70 transition-colors hover:bg-muted/35">
+      <div className="absolute left-3 top-3 z-10">
         <IconButton
           title={expanded
             ? t("data_preview.collapse_row")
@@ -488,20 +498,13 @@ function DocumentRow({
         >
           <ChevronDown size={12} className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} />
         </IconButton>
+      </div>
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
         <RowActions row={row} busy={busy} allowDelete={settings.security.allowDeleteRows} onEdit={onEdit} onDelete={onDelete} />
       </div>
 
-      <div className="overflow-auto px-3 py-2 font-mono text-[12px] leading-[1.45]">
-        <div className="flex">
-          <button
-            type="button"
-            disabled={hiddenCount === 0}
-            onClick={() => setExpanded((value) => !value)}
-            className="mr-3 mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-muted/25 text-muted-foreground disabled:opacity-0"
-          >
-            <ChevronRight size={12} className={cn("transition-transform", expanded && "rotate-90")} />
-          </button>
-          <div className="min-w-0 flex-1 pr-36">
+      <div className="overflow-auto px-3 py-2 pl-10 font-mono text-[12px] leading-[1.45]">
+        <div className="min-w-0 pr-36">
             {visibleEntries.map(([key, value], index) => (
               <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", expanded && "items-start", index === 2 && "bg-muted/45")}>
                 <span className="shrink-0 font-semibold text-foreground">{key}</span>
@@ -520,7 +523,6 @@ function DocumentRow({
                 {expanded ? t("data_preview.hide_fields", { count: hiddenCount }) : t("data_preview.show_more_fields", { count: hiddenCount })}
               </button>
             )}
-          </div>
         </div>
       </div>
     </article>
@@ -1600,7 +1602,7 @@ export function DataPreview({
             ))}
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-2">
             {rows.map((row, rowIndex) => (
               <DocumentRow key={rowIndex} row={row} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} />
             ))}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent, PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Titlebar } from "./components/Titlebar";
@@ -9,6 +9,7 @@ import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDial
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { ToastViewport } from "./components/ui/toast";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
+import { StartupAnimation } from "./components/StartupAnimation";
 import { clearPasswordMemoryCache } from "./domain/connections/repository";
 import { warmStronghold } from "./domain/connections/secretsRepository";
 import { loadSettings } from "./domain/settings/repository";
@@ -41,6 +42,7 @@ function App() {
   const [connToDelete, setConnToDelete] = useState<string | null>(null);
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [openTables, setOpenTables] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
@@ -48,6 +50,9 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
   const [activeView, setActiveView] = useState<AppView>("workspace");
   const [sidebarCollapseToken, setSidebarCollapseToken] = useState(0);
+  const [showStartupAnimation, setShowStartupAnimation] = useState(true);
+
+  const finishStartupAnimation = useCallback(() => setShowStartupAnimation(false), []);
 
   useEffect(() => {
     if (connections.some((connection) => connection.hasSavedPassword)) {
@@ -76,14 +81,40 @@ function App() {
     setActiveView("workspace");
     setSelectedConn(null);
     setSelectedTable(null);
+    setOpenTables([]);
   };
 
   const selectConnection = (conn: Connection) => {
     setActiveView("workspace");
     if (conn.id !== selectedConn?.id || conn.database !== selectedConn?.database) {
       setSelectedTable(null);
+      setOpenTables([]);
     }
     setSelectedConn(conn);
+  };
+
+  const selectTable = (table: string | null) => {
+    if (!table) {
+      setSelectedTable(null);
+      return;
+    }
+    setOpenTables((tables) => tables.includes(table) ? tables : [...tables, table]);
+    setSelectedTable(table);
+  };
+
+  const closeTable = (table: string) => {
+    const closingIndex = openTables.indexOf(table);
+    const remainingTables = openTables.filter((openTable) => openTable !== table);
+    setOpenTables(remainingTables);
+
+    if (selectedTable === table) {
+      setSelectedTable(remainingTables[closingIndex] ?? remainingTables[closingIndex - 1] ?? null);
+    }
+  };
+
+  const closeAllTables = () => {
+    setOpenTables([]);
+    setSelectedTable(null);
   };
 
   const openCreateConnection = () => setIsModalOpen(true);
@@ -204,7 +235,7 @@ function App() {
               onCreateConnection={openCreateConnection}
               onRefresh={() => refresh()}
               onSelectConnection={selectConnection}
-              onSelectTable={setSelectedTable}
+              onSelectTable={selectTable}
               onEdit={editConnection}
               onDelete={requestDeleteConnection}
               onDisconnect={disconnect}
@@ -226,11 +257,14 @@ function App() {
             <WorkspacePanel
               selectedConn={selectedConn}
               selectedTable={selectedTable}
+              openTables={openTables}
               openCreateTable={shouldOpenCreateModal}
               openCreateDatabase={shouldOpenCreateDbModal}
               onCreateConnection={openCreateConnection}
               onDisconnect={() => disconnect()}
-              onTableSelected={setSelectedTable}
+              onTableSelected={selectTable}
+              onCloseTable={closeTable}
+              onCloseAllTables={closeAllTables}
               onModalOpened={clearModalOpenFlags}
             />
           </>
@@ -257,6 +291,7 @@ function App() {
         }}
       />
       <ToastViewport />
+      {showStartupAnimation && <StartupAnimation onComplete={finishStartupAnimation} />}
     </div>
   );
 }

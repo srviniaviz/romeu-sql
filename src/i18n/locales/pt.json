@@ -28,6 +28,9 @@
     "export_failed": "Falha ao exportar",
     "copy_success": "URL de conexão copiada para a área de transferência"
   },
+  "workspace_tabs": {
+    "close_all": "Fechar todas as abas"
+  },
   "shell": {
     "workspace": "Workspace",
     "workspace_desc": "Conexões e navegador de esquema",
@@ -329,6 +332,8 @@
     "document_list": "Lista de documentos",
     "edit_row": "Editar linha",
     "copy_json": "Copiar JSON",
+    "json_copied": "JSON copiado",
+    "copy_failed": "Não foi possível copiar",
     "delete_row": "Excluir linha",
     "expand_row": "Expandir linha",
     "collapse_row": "Recolher linha",
@@ -399,6 +404,7 @@
     "title": "Tabelas",
     "description": "Objetos disponíveis neste banco.",
     "no_tables": "Nenhuma tabela encontrada",
+    "no_matching_tables": "Nenhuma tabela corresponde à busca",
     "name": "Nome",
     "type": "Tipo",
     "rows": "Linhas",

@@ -4,8 +4,32 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@font-face {
+  font-family: 'Euclid Circular A';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/EuclidCircularA-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Euclid Circular A';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/EuclidCircularA-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Euclid Circular A';
+  font-style: normal;
+  font-weight: 600 700;
+  font-display: swap;
+  src: url('./assets/fonts/EuclidCircularA-Semibold.woff2') format('woff2');
+}
+
 @theme {
-  --font-sans: 'Geist Sans', system-ui, sans-serif;
+  --font-sans: 'Euclid Circular A', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 }
 
@@ -96,7 +120,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Geist Sans', sans-serif;
+  --font-sans: 'Euclid Circular A', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);

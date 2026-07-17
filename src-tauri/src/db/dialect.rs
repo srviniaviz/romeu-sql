@@ -408,6 +408,15 @@ pub fn list_table_stats(connection: &ConnectionInput) -> String {
     }
 }
 
+pub fn database_size(connection: &ConnectionInput) -> String {
+    match connection.engine {
+        DbEngine::Postgres => "SELECT pg_database_size(current_database()) AS \"totalBytes\"".into(),
+        DbEngine::Mysql => "SELECT COALESCE(SUM(data_length + index_length), 0) AS totalBytes FROM information_schema.tables WHERE table_schema = DATABASE()".into(),
+        DbEngine::Sqlite => "SELECT page_count * page_size AS totalBytes FROM pragma_page_count(), pragma_page_size()".into(),
+        DbEngine::Sqlserver => "SELECT COALESCE(SUM(size), 0) * 8192 AS totalBytes FROM sys.database_files".into(),
+    }
+}
+
 pub fn list_cluster_users(connection: &ConnectionInput) -> String {
     match connection.engine {
         DbEngine::Postgres => "SELECT rolname as name, CASE WHEN rolcanlogin THEN 'login role' ELSE 'group role' END as role, rolcanlogin as \"canLogin\", rolsuper as \"isAdmin\" FROM pg_roles ORDER BY rolname ASC".into(),

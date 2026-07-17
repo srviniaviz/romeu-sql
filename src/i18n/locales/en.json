@@ -28,6 +28,9 @@
     "export_failed": "Export failed",
     "copy_success": "Connection string copied to clipboard"
   },
+  "workspace_tabs": {
+    "close_all": "Close all tabs"
+  },
   "shell": {
     "workspace": "Workspace",
     "workspace_desc": "Connections and schema browser",
@@ -329,6 +332,8 @@
     "document_list": "Document list",
     "edit_row": "Edit row",
     "copy_json": "Copy JSON",
+    "json_copied": "JSON copied",
+    "copy_failed": "Could not copy",
     "delete_row": "Delete row",
     "expand_row": "Expand row",
     "collapse_row": "Collapse row",
@@ -399,6 +404,7 @@
     "title": "Tables",
     "description": "Objects available in this database.",
     "no_tables": "No tables found",
+    "no_matching_tables": "No tables match the search",
     "name": "Name",
     "type": "Type",
     "rows": "Rows",

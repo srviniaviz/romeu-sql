@@ -8,6 +8,8 @@ interface ToastPayload {
   title: string;
   description?: string;
   variant?: ToastVariant;
+  duration?: number;
+  compact?: boolean;
 }
 
 interface ToastItem extends ToastPayload {
@@ -34,11 +36,13 @@ export function ToastViewport() {
         title: detail.title,
         description: detail.description,
         variant: detail.variant ?? "info",
+        duration: detail.duration,
+        compact: detail.compact,
       };
       setItems((current) => [...current.slice(-3), item]);
       window.setTimeout(() => {
         setItems((current) => current.filter((toastItem) => toastItem.id !== id));
-      }, TOAST_DURATION);
+      }, item.duration ?? TOAST_DURATION);
     }
 
     window.addEventListener(TOAST_EVENT, onToast);
@@ -48,7 +52,7 @@ export function ToastViewport() {
   if (!items.length) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[90] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[90] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
       {items.map((item) => (
         <ToastCard key={item.id} item={item} onClose={() => setItems((current) => current.filter((toastItem) => toastItem.id !== item.id))} />
       ))}
@@ -60,29 +64,35 @@ function ToastCard({ item, onClose }: { item: ToastItem; onClose: () => void }) 
   const Icon = item.variant === "success" ? CheckCircle2 : item.variant === "error" ? AlertCircle : Info;
 
   return (
-    <div className="pointer-events-auto animate-in slide-in-from-bottom-2 fade-in-0 rounded-lg border border-border/70 bg-popover/95 p-3 text-popover-foreground shadow-xl backdrop-blur">
-      <div className="flex items-start gap-3">
+    <div className={cn(
+      "pointer-events-auto animate-in slide-in-from-bottom-2 fade-in-0 border border-border/70 bg-popover/95 text-popover-foreground backdrop-blur",
+      item.compact ? "w-fit max-w-full rounded-md px-2.5 py-2 shadow-md" : "w-[360px] max-w-full rounded-lg p-3 shadow-xl",
+    )}>
+      <div className={cn("flex items-start", item.compact ? "gap-2" : "gap-3")}>
         <div
           className={cn(
-            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md",
+            "mt-0.5 flex shrink-0 items-center justify-center",
+            item.compact ? "size-5 rounded" : "size-7 rounded-md",
             item.variant === "success" && "bg-primary/10 text-primary",
             item.variant === "error" && "bg-destructive/10 text-destructive",
             item.variant === "info" && "bg-muted text-muted-foreground"
           )}
         >
-          <Icon size={15} />
+          <Icon size={item.compact ? 13 : 15} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold leading-5 text-foreground">{item.title}</p>
+          <p className={cn("font-semibold text-foreground", item.compact ? "text-[12px] leading-5" : "text-[13px] leading-5")}>{item.title}</p>
           {item.description && <p className="mt-0.5 line-clamp-3 text-[12px] leading-5 text-muted-foreground">{item.description}</p>}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <X size={13} />
-        </button>
+        {!item.compact && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
     </div>
   );

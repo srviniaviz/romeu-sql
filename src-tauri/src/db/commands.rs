@@ -83,30 +83,35 @@ pub async fn db_list_tables(
         let rows = state
             .select(&connection, &dialect::list_tables(&connection))
             .await?;
-        Ok(rows.iter().map(|row| {
-            let name = row.get("name")
-                .or_else(|| row.get("TABLE_NAME"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let table_type = row.get("type")
-                .or_else(|| row.get("TABLE_TYPE"))
-                .and_then(|v| v.as_str())
-                .map(|t| {
-                    if t.eq_ignore_ascii_case("view") {
-                        "view".to_string()
-                    } else {
-                        "table".to_string()
-                    }
-                })
-                .unwrap_or_else(|| "table".to_string());
-            TableInfo {
-                name,
-                table_type,
-                estimated_rows: None,
-                total_bytes: None,
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let name = row
+                    .get("name")
+                    .or_else(|| row.get("TABLE_NAME"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let table_type = row
+                    .get("type")
+                    .or_else(|| row.get("TABLE_TYPE"))
+                    .and_then(|v| v.as_str())
+                    .map(|t| {
+                        if t.eq_ignore_ascii_case("view") {
+                            "view".to_string()
+                        } else {
+                            "table".to_string()
+                        }
+                    })
+                    .unwrap_or_else(|| "table".to_string());
+                TableInfo {
+                    name,
+                    table_type,
+                    estimated_rows: None,
+                    total_bytes: None,
+                }
+            })
+            .collect())
     })
     .await
 }
@@ -122,6 +127,21 @@ pub async fn db_list_table_stats(
             .select(&connection, &dialect::list_table_stats(&connection))
             .await?;
         Ok(rows.iter().map(normalize_table_stats).collect())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn db_database_size(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
+) -> DbResult<i64> {
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::database_size(&connection))
+            .await?;
+        Ok(rows.first().and_then(first_number).unwrap_or(0))
     })
     .await
 }

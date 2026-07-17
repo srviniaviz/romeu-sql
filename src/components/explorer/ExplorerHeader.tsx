@@ -8,8 +8,22 @@ interface ExplorerHeaderProps {
   selectedTable?: string | null;
   tableCount: number;
   rowCount: number;
+  databaseSizeBytes: number | null;
   refreshing: boolean;
   onDisconnect: () => void;
+}
+
+function formatDatabaseSize(bytes: number) {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 export function ExplorerHeader({
@@ -17,6 +31,7 @@ export function ExplorerHeader({
   selectedTable,
   tableCount,
   rowCount,
+  databaseSizeBytes,
   refreshing,
   onDisconnect,
 }: ExplorerHeaderProps) {
@@ -44,6 +59,13 @@ export function ExplorerHeader({
             <strong className="text-foreground">{selectedTable ? rowCount : tableCount}</strong>
             {refreshing && <RefreshCw size={12} className="animate-spin text-primary" />}
           </div>
+
+          {databaseSizeBytes !== null && (
+            <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-muted/40 px-3 text-[12px] text-muted-foreground">
+              <span>{t("table_browser.size")}</span>
+              <strong className="text-foreground">{formatDatabaseSize(databaseSizeBytes)}</strong>
+            </div>
+          )}
 
           <Button variant="ghost" size="icon" className="size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={onDisconnect}>
             <LogOut size={16} />
