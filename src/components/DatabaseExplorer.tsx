@@ -25,6 +25,7 @@ import {
   getDatabaseSize,
   insertRow,
   listColumns,
+  listForeignKeys,
   listDeleteCascadeImpacts,
   listIndexes,
   listTables,
@@ -34,7 +35,7 @@ import {
   updateRow,
 } from "@/domain/database/service";
 import type { DataViewMode } from "./explorer/DataPreview";
-import type { RowQueryOptions } from "@/domain/database/types";
+import type { ForeignKeyInfo, RowQueryOptions } from "@/domain/database/types";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
 
@@ -46,6 +47,16 @@ interface Props {
   onModalOpened?: () => void;
   selectedTable?: string | null;
   onTableSelected?: (tableName: string | null) => void;
+  foreignKeyNavigation?: { tableName: string; whereClause: string; token: number } | null;
+  onForeignKeyNavigate?: (tableName: string, whereClause: string) => void;
+}
+
+function foreignKeyWhereClause(column: string, value: unknown, engine: string) {
+  const quote = engine === "mysql" ? "`" : "\"";
+  const quotedColumn = column.split(".").map((part) => `${quote}${part.split(quote).join(quote + quote)}${quote}`).join(".");
+  if (typeof value === "number" && Number.isFinite(value)) return `${quotedColumn} = ${value}`;
+  if (typeof value === "boolean") return `${quotedColumn} = ${value ? "TRUE" : "FALSE"}`;
+  return `${quotedColumn} = '${String(value).replace(/'/g, "''")}'`;
 }
 
 export interface HistoryEntry {
@@ -65,6 +76,8 @@ export function DatabaseExplorer({
   onModalOpened,
   selectedTable,
   onTableSelected,
+  foreignKeyNavigation,
+  onForeignKeyNavigate,
 }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -125,6 +138,13 @@ export function DatabaseExplorer({
     setWhereClause("");
     setRowOptions({});
   }, [selectedTable, connection.id, connection.database]);
+
+  useEffect(() => {
+    if (!foreignKeyNavigation || foreignKeyNavigation.tableName !== selectedTable) return;
+    setWhereClause(foreignKeyNavigation.whereClause);
+    setRowOptions({});
+    setPage(0);
+  }, [foreignKeyNavigation, selectedTable]);
 
   useEffect(() => {
     if (settings?.dataView.defaultPageSize) {
@@ -224,6 +244,12 @@ export function DatabaseExplorer({
   const { data: columns = [] } = useQuery({
     queryKey: ["columns", connection.id, connection.database, selectedTable],
     queryFn: () => (selectedTable ? listColumns(connection, selectedTable) : []),
+    enabled: !!selectedTable,
+  });
+
+  const { data: foreignKeys = [] } = useQuery<ForeignKeyInfo[]>({
+    queryKey: ["foreignKeys", connection.id, connection.database, selectedTable],
+    queryFn: () => (selectedTable ? listForeignKeys(connection, selectedTable) : []),
     enabled: !!selectedTable,
   });
 
@@ -428,6 +454,7 @@ export function DatabaseExplorer({
             totalRows={totalRows}
             columnCount={columns.length}
             columns={columns}
+            foreignKeys={foreignKeys}
             indexes={indexes}
             deleteCascadeImpacts={deleteCascadeImpacts}
             loadingDeleteCascadeImpacts={loadingDeleteCascadeImpacts}
@@ -438,6 +465,13 @@ export function DatabaseExplorer({
             queryLoading={queryMutation.isPending}
             queryError={queryError}
             onBack={() => onTableSelected?.(null)}
+            onNavigateForeignKey={(foreignKey, value) => {
+              if (value === null || value === undefined) return;
+              onForeignKeyNavigate?.(
+                foreignKey.targetTable,
+                foreignKeyWhereClause(foreignKey.targetColumn, value, connection.type)
+              );
+            }}
             onInsert={() => setIsInsertModalOpen(true)}
             onFilterApply={(nextWhereClause) => {
               setWhereClause(nextWhereClause);

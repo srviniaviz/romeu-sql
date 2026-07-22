@@ -21,6 +21,11 @@ const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 520;
 type AppView = "workspace" | "settings";
+export interface ForeignKeyNavigation {
+  tableName: string;
+  whereClause: string;
+  token: number;
+}
 
 function clampSidebarWidth(value: number) {
   return Math.min(Math.max(value, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH);
@@ -43,6 +48,7 @@ function App() {
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [openTables, setOpenTables] = useState<string[]>([]);
+  const [foreignKeyNavigation, setForeignKeyNavigation] = useState<ForeignKeyNavigation | null>(null);
   const [search, setSearch] = useState("");
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
   const [shouldOpenCreateDbModal, setShouldOpenCreateDbModal] = useState(false);
@@ -82,6 +88,7 @@ function App() {
     setSelectedConn(null);
     setSelectedTable(null);
     setOpenTables([]);
+    setForeignKeyNavigation(null);
   };
 
   const selectConnection = (conn: Connection) => {
@@ -89,11 +96,13 @@ function App() {
     if (conn.id !== selectedConn?.id || conn.database !== selectedConn?.database) {
       setSelectedTable(null);
       setOpenTables([]);
+      setForeignKeyNavigation(null);
     }
     setSelectedConn(conn);
   };
 
   const selectTable = (table: string | null) => {
+    setForeignKeyNavigation(null);
     if (!table) {
       setSelectedTable(null);
       return;
@@ -115,6 +124,12 @@ function App() {
   const closeAllTables = () => {
     setOpenTables([]);
     setSelectedTable(null);
+  };
+
+  const openForeignKey = (tableName: string, whereClause: string) => {
+    setOpenTables((tables) => tables.includes(tableName) ? tables : [...tables, tableName]);
+    setForeignKeyNavigation({ tableName, whereClause, token: Date.now() });
+    setSelectedTable(tableName);
   };
 
   const openCreateConnection = () => setIsModalOpen(true);
@@ -263,6 +278,8 @@ function App() {
               onCreateConnection={openCreateConnection}
               onDisconnect={() => disconnect()}
               onTableSelected={selectTable}
+              foreignKeyNavigation={foreignKeyNavigation}
+              onForeignKeyNavigate={openForeignKey}
               onCloseTable={closeTable}
               onCloseAllTables={closeAllTables}
               onModalOpened={clearModalOpenFlags}

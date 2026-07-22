@@ -56,6 +56,14 @@ pub struct IndexInfo {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ForeignKeyInfo {
+    pub source_column: String,
+    pub target_table: String,
+    pub target_column: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TableInfo {
     pub name: String,
     #[serde(rename = "type")]

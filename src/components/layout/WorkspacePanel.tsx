@@ -3,6 +3,7 @@ import { DatabaseExplorer } from "@/components/DatabaseExplorer";
 import { EmptyWorkspace } from "./EmptyWorkspace";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { Connection } from "@/lib/useConnections";
+import type { ForeignKeyNavigation } from "@/App";
 
 interface WorkspacePanelProps {
   selectedConn: Connection | null;
@@ -13,6 +14,8 @@ interface WorkspacePanelProps {
   onCreateConnection: () => void;
   onDisconnect: () => void;
   onTableSelected: (tableName: string | null) => void;
+  foreignKeyNavigation: ForeignKeyNavigation | null;
+  onForeignKeyNavigate: (tableName: string, whereClause: string) => void;
   onCloseTable: (tableName: string) => void;
   onCloseAllTables: () => void;
   onModalOpened: () => void;
@@ -27,6 +30,8 @@ export function WorkspacePanel({
   onCreateConnection,
   onDisconnect,
   onTableSelected,
+  foreignKeyNavigation,
+  onForeignKeyNavigate,
   onCloseTable,
   onCloseAllTables,
   onModalOpened,
@@ -49,6 +54,8 @@ export function WorkspacePanel({
             openCreateDbOnMount={openCreateDatabase}
             selectedTable={selectedTable}
             onTableSelected={onTableSelected}
+            foreignKeyNavigation={foreignKeyNavigation}
+            onForeignKeyNavigate={onForeignKeyNavigate}
             onModalOpened={onModalOpened}
           />
         </>

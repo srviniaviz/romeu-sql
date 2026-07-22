@@ -29,7 +29,6 @@ export interface ConnectionSettings {
 }
 
 export interface SecuritySettings {
-  maskSensitiveFields: boolean;
   confirmDestructiveActions: boolean;
   allowDeleteRows: boolean;
   allowExports: boolean;
@@ -94,7 +93,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     refreshMetadataOnConnect: false,
   },
   security: {
-    maskSensitiveFields: true,
     confirmDestructiveActions: true,
     allowDeleteRows: true,
     allowExports: true,

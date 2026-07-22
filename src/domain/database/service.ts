@@ -10,6 +10,7 @@ import type {
   DeleteCascadeImpact,
   ExportFormat,
   ExportResult,
+  ForeignKeyInfo,
   IndexInfo,
   RowQueryOptions,
   TableInfo,
@@ -160,6 +161,10 @@ export async function explainRows(connection: Connection, tableName: string, whe
 
 export async function listColumns(connection: Connection, tableName: string) {
   return dbInvoke<ColumnInfo[]>("db_list_columns", connection, { tableName });
+}
+
+export async function listForeignKeys(connection: Connection, tableName: string) {
+  return dbInvoke<ForeignKeyInfo[]>("db_list_foreign_keys", connection, { tableName });
 }
 
 export async function listIndexes(connection: Connection, tableName: string) {

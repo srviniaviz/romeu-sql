@@ -18,10 +18,11 @@ import {
   Table2,
   Trash2,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import type { ColumnInfo, DeleteCascadeImpact, ExportFormat, IndexInfo, RowQueryOptions } from "@/domain/database/types";
+import type { ColumnInfo, DeleteCascadeImpact, ExportFormat, ForeignKeyInfo, IndexInfo, RowQueryOptions } from "@/domain/database/types";
 import { pickSaveFile, saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { RowDataEditor } from "@/components/explorer/RowDataEditor";
@@ -49,6 +50,7 @@ interface DataPreviewProps {
   totalRows: number;
   columnCount?: number;
   columns?: ColumnInfo[];
+  foreignKeys?: ForeignKeyInfo[];
   indexes?: IndexInfo[];
   deleteCascadeImpacts?: DeleteCascadeImpact[];
   loadingDeleteCascadeImpacts?: boolean;
@@ -74,6 +76,7 @@ interface DataPreviewProps {
   onExportStatusChange: (status: string | null) => void;
   onUpdateRow: (original: Record<string, unknown>, next: Record<string, unknown>) => Promise<unknown>;
   onDeleteRow: (row: Record<string, unknown>) => Promise<unknown>;
+  onNavigateForeignKey: (foreignKey: ForeignKeyInfo, value: unknown) => void;
 }
 
 const CARD_FIELD_LIMIT = 8;
@@ -184,31 +187,12 @@ function stringKind(value: string, fieldName?: string) {
   return "text";
 }
 
-function isSensitiveField(fieldName?: string) {
-  return Boolean(fieldName && /(password|passwd|pwd|token|secret|apikey|api_key|privatekey|private_key|credential)/i.test(fieldName));
-}
-
 function truncateText(value: string, length: number) {
   return value.length > length ? `${value.slice(0, Math.max(1, length - 3))}...` : value;
 }
 
 function compactJson(value: unknown) {
   return JSON.stringify(value);
-}
-
-function sanitizeRow(row: Record<string, unknown>, settings: AppSettings) {
-  if (!settings.security.maskSensitiveFields) return row;
-
-  return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [
-      key,
-      isSensitiveField(key) ? "********" : value,
-    ])
-  );
-}
-
-function sanitizeRows(rows: Record<string, unknown>[], settings: AppSettings) {
-  return rows.map((row) => sanitizeRow(row, settings));
 }
 
 const valueTone = {
@@ -237,9 +221,6 @@ function FieldValue({
 }) {
   const truncateLength = expanded ? 1000 : settings.dataView.truncateLength;
 
-  if (settings.security.maskSensitiveFields && isSensitiveField(fieldName)) {
-    return <span className="text-muted-foreground">"••••••••"</span>;
-  }
   if (value === null) return <span className={valueTone.nullish}>null</span>;
   if (value === undefined) return <span className={valueTone.nullish}>undefined</span>;
   if (typeof value === "boolean") {
@@ -470,12 +451,16 @@ function DocumentRow({
   settings,
   onEdit,
   onDelete,
+  foreignKeys,
+  onNavigateForeignKey,
 }: {
   row: Record<string, unknown>;
   busy: boolean;
   settings: AppSettings;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
+  foreignKeys: ForeignKeyInfo[];
+  onNavigateForeignKey: (foreignKey: ForeignKeyInfo, value: unknown) => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -505,15 +490,29 @@ function DocumentRow({
 
       <div className="overflow-auto px-3 py-2 pl-10 font-mono text-[12px] leading-[1.45]">
         <div className="min-w-0 pr-36">
-            {visibleEntries.map(([key, value], index) => (
-              <div key={key} className={cn("flex min-w-0 gap-1 rounded px-1", expanded && "items-start", index === 2 && "bg-muted/45")}>
-                <span className="shrink-0 font-semibold text-foreground">{key}</span>
-                <span className="shrink-0 text-muted-foreground">:</span>
-                <span className={cn("min-w-0", expanded ? "break-all" : "truncate")}>
-                  <FieldValue value={value} fieldName={key} settings={settings} expanded={expanded} />
-                </span>
-              </div>
-            ))}
+            {visibleEntries.map(([key, value], index) => {
+              const foreignKey = foreignKeys.find((item) => item.sourceColumn === key);
+              return (
+                <div key={key} className={cn("group/field flex min-w-0 gap-1 rounded px-1", expanded && "items-start", index === 2 && "bg-muted/45")}>
+                  <span className="shrink-0 font-semibold text-foreground">{key}</span>
+                  <span className="shrink-0 text-muted-foreground">:</span>
+                  <span className={cn("min-w-0", expanded ? "break-all" : "truncate")}>
+                    <FieldValue value={value} fieldName={key} settings={settings} expanded={expanded} />
+                  </span>
+                  {foreignKey && value != null && (
+                    <button
+                      type="button"
+                      title={t("data_preview.open_related")}
+                      aria-label={t("data_preview.open_related")}
+                      onClick={() => onNavigateForeignKey(foreignKey, value)}
+                      className="ml-1 inline-flex size-5 shrink-0 items-center justify-center rounded text-primary opacity-0 transition-colors hover:bg-primary/10 focus:opacity-100 group-hover/field:opacity-100"
+                    >
+                      <ExternalLink size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             {hiddenCount > 0 && (
               <button
                 type="button"
@@ -842,6 +841,8 @@ export function DataPreview({
   onExportStatusChange,
   onUpdateRow,
   onDeleteRow,
+  foreignKeys = [],
+  onNavigateForeignKey,
 }: DataPreviewProps) {
   const { t } = useTranslation();
   const { settings } = useSettings();
@@ -1066,14 +1067,13 @@ export function DataPreview({
         return;
       }
 
-      const safeRows = sanitizeRows(rows, appSettings);
       const saved = await saveTextFile({
         defaultPath: filename,
         contents: format === "json"
-          ? JSON.stringify(safeRows, null, 2)
+          ? JSON.stringify(rows, null, 2)
           : format === "xls"
-            ? toExcelHtml(safeRows)
-            : toCsv(safeRows),
+            ? toExcelHtml(rows)
+            : toCsv(rows),
         format,
       });
       if (saved) {
@@ -1597,14 +1597,14 @@ export function DataPreview({
           <div className="space-y-2 overflow-auto">
             {rows.map((row, rowIndex) => (
               <pre key={rowIndex} className="rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 text-foreground">
-                {JSON.stringify(sortRowObject(sanitizeRow(row, appSettings)), null, 2)}
+                {JSON.stringify(sortRowObject(row), null, 2)}
               </pre>
             ))}
           </div>
         ) : (
           <div className="space-y-2">
             {rows.map((row, rowIndex) => (
-              <DocumentRow key={rowIndex} row={row} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} />
+              <DocumentRow key={rowIndex} row={row} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} foreignKeys={foreignKeys} onNavigateForeignKey={onNavigateForeignKey} />
             ))}
           </div>
         )}

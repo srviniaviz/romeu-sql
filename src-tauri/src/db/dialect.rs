@@ -368,6 +368,30 @@ pub fn list_columns(connection: &ConnectionInput, table_name: &str) -> String {
     }
 }
 
+pub fn list_foreign_keys(connection: &ConnectionInput, table_name: &str) -> String {
+    let pure_table = table_name
+        .rsplit('.')
+        .next()
+        .unwrap_or(table_name)
+        .replace('\'', "''");
+
+    match connection.engine {
+        DbEngine::Postgres => format!(
+            "SELECT kcu.column_name as \"sourceColumn\", ccu.table_name as \"targetTable\", ccu.column_name as \"targetColumn\" FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public' AND tc.table_name = '{}' ORDER BY kcu.ordinal_position",
+            pure_table
+        ),
+        DbEngine::Mysql => format!(
+            "SELECT COLUMN_NAME as sourceColumn, REFERENCED_TABLE_NAME as targetTable, REFERENCED_COLUMN_NAME as targetColumn FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{}' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY ORDINAL_POSITION",
+            pure_table
+        ),
+        DbEngine::Sqlite => format!(
+            "PRAGMA foreign_key_list({})",
+            quote_qualified(table_name, quote_double)
+        ),
+        DbEngine::Sqlserver => "SELECT kcu.COLUMN_NAME as sourceColumn, ccu.TABLE_NAME as targetTable, ccu.COLUMN_NAME as targetColumn FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE ccu ON rc.UNIQUE_CONSTRAINT_NAME = ccu.CONSTRAINT_NAME WHERE kcu.TABLE_NAME = ''".into(),
+    }
+}
+
 pub fn list_indexes(connection: &ConnectionInput, table_name: &str) -> String {
     let pure_table = table_name
         .replace(['\'', '"', '`', '[', ']'], "")

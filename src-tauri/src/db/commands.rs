@@ -3,6 +3,7 @@ use super::pool::DbPoolState;
 use super::types::{
     BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
     ColumnInfo, ConnectionInput, DbEngine, DeleteCascadeImpact, ExportFormat, ExportResult,
+    ForeignKeyInfo,
     IndexInfo, JsonRow, RowQueryOptions, TableInfo,
 };
 use serde_json::Value;
@@ -379,6 +380,22 @@ pub async fn db_list_columns(
 }
 
 #[tauri::command]
+pub async fn db_list_foreign_keys(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
+    table_name: String,
+) -> DbResult<Vec<ForeignKeyInfo>> {
+    with_query_timeout(query_timeout_ms, async {
+        let rows = state
+            .select(&connection, &dialect::list_foreign_keys(&connection, &table_name))
+            .await?;
+        Ok(rows.iter().map(normalize_foreign_key).collect())
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn db_list_indexes(
     state: State<'_, DbPoolState>,
     connection: ConnectionInput,
@@ -722,6 +739,14 @@ fn normalize_column(row: &JsonRow) -> ColumnInfo {
         default_value: default_value.unwrap_or(Value::Null),
         is_primary_key,
         enum_values: get_string_array(row, &["enumValues"]),
+    }
+}
+
+fn normalize_foreign_key(row: &JsonRow) -> ForeignKeyInfo {
+    ForeignKeyInfo {
+        source_column: get_string(row, &["sourceColumn", "COLUMN_NAME", "from"]),
+        target_table: get_string(row, &["targetTable", "REFERENCED_TABLE_NAME", "table"]),
+        target_column: get_string(row, &["targetColumn", "REFERENCED_COLUMN_NAME", "to"]),
     }
 }
 

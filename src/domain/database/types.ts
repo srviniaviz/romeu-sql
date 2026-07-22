@@ -18,6 +18,12 @@ export interface IndexInfo {
   type: string;
 }
 
+export interface ForeignKeyInfo {
+  sourceColumn: string;
+  targetTable: string;
+  targetColumn: string;
+}
+
 export interface TableInfo {
   name: string;
   type: string;
