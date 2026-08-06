@@ -29,7 +29,8 @@
     "copy_success": "Connection string copied to clipboard"
   },
   "workspace_tabs": {
-    "close_all": "Close all tabs"
+    "close_all": "Close all tabs",
+    "open_in_new_tab": "Open in new tab"
   },
   "shell": {
     "workspace": "Workspace",

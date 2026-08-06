@@ -2,13 +2,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DatabaseExplorer } from "@/components/DatabaseExplorer";
 import { EmptyWorkspace } from "./EmptyWorkspace";
 import { WorkspaceTabs } from "./WorkspaceTabs";
+import type { WorkspaceTab } from "./WorkspaceTabs";
 import { Connection } from "@/lib/useConnections";
 import type { ForeignKeyNavigation } from "@/App";
 
 interface WorkspacePanelProps {
   selectedConn: Connection | null;
   selectedTable: string | null;
-  openTables: string[];
+  openTabs: WorkspaceTab[];
+  activeTabId: string | null;
   openCreateTable: boolean;
   openCreateDatabase: boolean;
   onCreateConnection: () => void;
@@ -16,7 +18,8 @@ interface WorkspacePanelProps {
   onTableSelected: (tableName: string | null) => void;
   foreignKeyNavigation: ForeignKeyNavigation | null;
   onForeignKeyNavigate: (tableName: string, whereClause: string) => void;
-  onCloseTable: (tableName: string) => void;
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
   onCloseAllTables: () => void;
   onModalOpened: () => void;
 }
@@ -24,7 +27,8 @@ interface WorkspacePanelProps {
 export function WorkspacePanel({
   selectedConn,
   selectedTable,
-  openTables,
+  openTabs,
+  activeTabId,
   openCreateTable,
   openCreateDatabase,
   onCreateConnection,
@@ -32,7 +36,8 @@ export function WorkspacePanel({
   onTableSelected,
   foreignKeyNavigation,
   onForeignKeyNavigate,
-  onCloseTable,
+  onSelectTab,
+  onCloseTab,
   onCloseAllTables,
   onModalOpened,
 }: WorkspacePanelProps) {
@@ -41,10 +46,10 @@ export function WorkspacePanel({
       {selectedConn ? (
         <>
           <WorkspaceTabs
-            tables={openTables}
-            activeTable={selectedTable}
-            onSelect={onTableSelected}
-            onClose={onCloseTable}
+            tabs={openTabs}
+            activeTabId={activeTabId}
+            onSelect={onSelectTab}
+            onClose={onCloseTab}
             onCloseAll={onCloseAllTables}
           />
           <DatabaseExplorer

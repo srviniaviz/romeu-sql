@@ -29,7 +29,8 @@
     "copy_success": "URL de conexão copiada para a área de transferência"
   },
   "workspace_tabs": {
-    "close_all": "Fechar todas as abas"
+    "close_all": "Fechar todas as abas",
+    "open_in_new_tab": "Abrir em nova aba"
   },
   "shell": {
     "workspace": "Workspace",

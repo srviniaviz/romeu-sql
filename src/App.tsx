@@ -9,6 +9,7 @@ import { DeleteConnectionDialog } from "./components/layout/DeleteConnectionDial
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { ToastViewport } from "./components/ui/toast";
 import { WorkspacePanel } from "./components/layout/WorkspacePanel";
+import type { WorkspaceTab } from "./components/layout/WorkspaceTabs";
 import { StartupAnimation } from "./components/StartupAnimation";
 import { clearPasswordMemoryCache } from "./domain/connections/repository";
 import { warmStronghold } from "./domain/connections/secretsRepository";
@@ -46,8 +47,8 @@ function App() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [connToDelete, setConnToDelete] = useState<string | null>(null);
   const [selectedConn, setSelectedConn] = useState<Connection | null>(null);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [openTables, setOpenTables] = useState<string[]>([]);
+  const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [foreignKeyNavigation, setForeignKeyNavigation] = useState<ForeignKeyNavigation | null>(null);
   const [search, setSearch] = useState("");
   const [shouldOpenCreateModal, setShouldOpenCreateModal] = useState(false);
@@ -57,6 +58,11 @@ function App() {
   const [activeView, setActiveView] = useState<AppView>("workspace");
   const [sidebarCollapseToken, setSidebarCollapseToken] = useState(0);
   const [showStartupAnimation, setShowStartupAnimation] = useState(true);
+
+  const selectedTable = useMemo(
+    () => openTabs.find((tab) => tab.id === activeTabId)?.tableName ?? null,
+    [activeTabId, openTabs],
+  );
 
   const finishStartupAnimation = useCallback(() => setShowStartupAnimation(false), []);
 
@@ -86,50 +92,96 @@ function App() {
   const selectOverview = () => {
     setActiveView("workspace");
     setSelectedConn(null);
-    setSelectedTable(null);
-    setOpenTables([]);
+    setActiveTabId(null);
+    setOpenTabs([]);
     setForeignKeyNavigation(null);
   };
 
   const selectConnection = (conn: Connection) => {
     setActiveView("workspace");
     if (conn.id !== selectedConn?.id || conn.database !== selectedConn?.database) {
-      setSelectedTable(null);
-      setOpenTables([]);
+      setActiveTabId(null);
+      setOpenTabs([]);
       setForeignKeyNavigation(null);
     }
     setSelectedConn(conn);
   };
 
-  const selectTable = (table: string | null) => {
-    setForeignKeyNavigation(null);
-    if (!table) {
-      setSelectedTable(null);
-      return;
+  const openTable = (tableName: string, forceNew = false) => {
+    const existingTab = forceNew
+      ? undefined
+      : openTabs.find((tab) => tab.id === activeTabId && tab.tableName === tableName) ??
+        openTabs.find((tab) => tab.tableName === tableName);
+    const nextTab = existingTab ?? { id: crypto.randomUUID(), tableName };
+
+    if (!existingTab) {
+      setOpenTabs((tabs) => [...tabs, nextTab]);
     }
-    setOpenTables((tables) => tables.includes(table) ? tables : [...tables, table]);
-    setSelectedTable(table);
+    setActiveTabId(nextTab.id);
   };
 
-  const closeTable = (table: string) => {
-    const closingIndex = openTables.indexOf(table);
-    const remainingTables = openTables.filter((openTable) => openTable !== table);
-    setOpenTables(remainingTables);
+  const selectTable = (table: string | null, connection?: Connection) => {
+    setForeignKeyNavigation(null);
+    if (!table) {
+      setActiveTabId(null);
+      return;
+    }
 
-    if (selectedTable === table) {
-      setSelectedTable(remainingTables[closingIndex] ?? remainingTables[closingIndex - 1] ?? null);
+    const connectionChanged = connection && (connection.id !== selectedConn?.id || connection.database !== selectedConn?.database);
+    if (connectionChanged) {
+      const nextTab = { id: crypto.randomUUID(), tableName: table };
+      setSelectedConn(connection);
+      setOpenTabs([nextTab]);
+      setActiveTabId(nextTab.id);
+      return;
+    }
+
+    openTable(table);
+  };
+
+  const openTableInNewTab = (conn: Connection, tableName: string) => {
+    setActiveView("workspace");
+    setForeignKeyNavigation(null);
+
+    const connectionChanged = conn.id !== selectedConn?.id || conn.database !== selectedConn?.database;
+    if (connectionChanged) {
+      const nextTab = { id: crypto.randomUUID(), tableName };
+      setSelectedConn(conn);
+      setOpenTabs([nextTab]);
+      setActiveTabId(nextTab.id);
+      return;
+    }
+
+    openTable(tableName, true);
+  };
+
+  const closeTable = (tabId: string) => {
+    const closingIndex = openTabs.findIndex((tab) => tab.id === tabId);
+    if (closingIndex < 0) return;
+
+    const remainingTabs = openTabs.filter((tab) => tab.id !== tabId);
+    setOpenTabs(remainingTabs);
+    setForeignKeyNavigation(null);
+
+    if (activeTabId === tabId) {
+      setActiveTabId(remainingTabs[closingIndex]?.id ?? remainingTabs[closingIndex - 1]?.id ?? null);
     }
   };
 
   const closeAllTables = () => {
-    setOpenTables([]);
-    setSelectedTable(null);
+    setOpenTabs([]);
+    setActiveTabId(null);
+    setForeignKeyNavigation(null);
+  };
+
+  const selectTab = (tabId: string) => {
+    setForeignKeyNavigation(null);
+    setActiveTabId(tabId);
   };
 
   const openForeignKey = (tableName: string, whereClause: string) => {
-    setOpenTables((tables) => tables.includes(tableName) ? tables : [...tables, tableName]);
+    openTable(tableName);
     setForeignKeyNavigation({ tableName, whereClause, token: Date.now() });
-    setSelectedTable(tableName);
   };
 
   const openCreateConnection = () => setIsModalOpen(true);
@@ -251,6 +303,7 @@ function App() {
               onRefresh={() => refresh()}
               onSelectConnection={selectConnection}
               onSelectTable={selectTable}
+              onOpenTableInNewTab={openTableInNewTab}
               onEdit={editConnection}
               onDelete={requestDeleteConnection}
               onDisconnect={disconnect}
@@ -272,7 +325,8 @@ function App() {
             <WorkspacePanel
               selectedConn={selectedConn}
               selectedTable={selectedTable}
-              openTables={openTables}
+              openTabs={openTabs}
+              activeTabId={activeTabId}
               openCreateTable={shouldOpenCreateModal}
               openCreateDatabase={shouldOpenCreateDbModal}
               onCreateConnection={openCreateConnection}
@@ -280,7 +334,8 @@ function App() {
               onTableSelected={selectTable}
               foreignKeyNavigation={foreignKeyNavigation}
               onForeignKeyNavigate={openForeignKey}
-              onCloseTable={closeTable}
+              onSelectTab={selectTab}
+              onCloseTab={closeTable}
               onCloseAllTables={closeAllTables}
               onModalOpened={clearModalOpenFlags}
             />

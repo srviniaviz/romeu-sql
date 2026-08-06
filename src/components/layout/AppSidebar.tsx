@@ -24,7 +24,8 @@ interface AppSidebarProps {
   onCreateConnection: () => void;
   onRefresh: () => void;
   onSelectConnection: (conn: Connection) => void;
-  onSelectTable: (tableName: string | null) => void;
+  onSelectTable: (tableName: string | null, conn?: Connection) => void;
+  onOpenTableInNewTab: (conn: Connection, tableName: string) => void;
   onEdit: (conn: Connection, event: MouseEvent) => void;
   onDelete: (id: string, event: MouseEvent) => void;
   onDisconnect: (event: MouseEvent) => void;
@@ -47,6 +48,7 @@ export function AppSidebar({
   onRefresh,
   onSelectConnection,
   onSelectTable,
+  onOpenTableInNewTab,
   onEdit,
   onDelete,
   onDisconnect,
@@ -127,6 +129,7 @@ export function AppSidebar({
                 collapseToken={collapseToken}
                 onSelect={onSelectConnection}
                 onSelectTable={onSelectTable}
+                onOpenTableInNewTab={onOpenTableInNewTab}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onDisconnect={onDisconnect}

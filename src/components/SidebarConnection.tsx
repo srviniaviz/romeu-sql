@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Connection } from "../lib/useConnections";
 import { listDatabases, listTables } from "@/domain/database/service";
 import { 
@@ -36,18 +36,39 @@ interface DatabaseItemProps {
   isCurrentDb: boolean;
   onSelect: (conn: Connection) => void;
   onCreateAction?: (conn: Connection) => void;
-  onSelectTable?: (tableName: string) => void;
+  onSelectTable?: (tableName: string, conn?: Connection) => void;
+  onOpenTableInNewTab?: (conn: Connection, tableName: string) => void;
   activeTable?: string;
   refreshToken: number;
   collapseToken: number;
   search: string;
 }
 
-function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, activeTable, refreshToken, collapseToken, search = "" }: DatabaseItemProps) {
+function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onSelectTable, onOpenTableInNewTab, activeTable, refreshToken, collapseToken, search = "" }: DatabaseItemProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tableName: string } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const closeMenu = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) setContextMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
 
   const filteredTables = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -178,7 +199,16 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isCurrentDb) onSelect({ ...conn, database: dbName });
-                    onSelectTable?.(table.name);
+                    onSelectTable?.(table.name, { ...conn, database: dbName });
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContextMenu({
+                      tableName: table.name,
+                      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 220)),
+                      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 60)),
+                    });
                   }}
                 >
                   {table.type === "view" ? (
@@ -197,6 +227,30 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
           </motion.div>
         )}
       </AnimatePresence>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          role="menu"
+          className="fixed z-[100] min-w-52 rounded-md border border-border bg-popover p-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const { tableName } = contextMenu;
+              setContextMenu(null);
+              onOpenTableInNewTab?.({ ...conn, database: dbName }, tableName);
+            }}
+            className="flex h-8 w-full items-center gap-2 rounded px-2.5 text-left text-[12px] text-foreground outline-none hover:bg-muted focus:bg-muted"
+          >
+            <TableIcon size={13} className="text-muted-foreground" />
+            {t("workspace_tabs.open_in_new_tab")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -215,8 +269,9 @@ interface Props {
   onCreateAction?: (conn: Connection) => void;
   onCreateDatabase?: (conn: Connection) => void;
   onManage?: (conn: Connection, e: React.MouseEvent) => void;
+  onOpenTableInNewTab?: (conn: Connection, tableName: string) => void;
   activeDatabase?: string;
-  onSelectTable?: (tableName: string) => void;
+  onSelectTable?: (tableName: string, conn?: Connection) => void;
   activeTable?: string;
   collapseToken: number;
   search: string;
@@ -232,6 +287,7 @@ export function SidebarConnection({
   onCreateAction,
   onCreateDatabase,
   onManage,
+  onOpenTableInNewTab,
   activeDatabase,
   onSelectTable,
   activeTable,
@@ -433,6 +489,7 @@ export function SidebarConnection({
                     onSelect={onSelect}
                     onCreateAction={onCreateAction}
                     onSelectTable={onSelectTable}
+                    onOpenTableInNewTab={onOpenTableInNewTab}
                     activeTable={activeTable}
                     refreshToken={refreshToken}
                     collapseToken={collapseToken}
