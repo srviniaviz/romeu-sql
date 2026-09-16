@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addConnection, listConnections, removeConnection, updateConnection } from "./repository";
-import { Connection, NewConnection } from "./types";
+import type { Connection, NewConnection } from "./types";
 
 export const connectionsQueryKey = ["connections"];
 

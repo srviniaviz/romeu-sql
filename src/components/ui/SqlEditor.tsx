@@ -1,5 +1,5 @@
 import CodeMirror from "@uiw/react-codemirror";
-import { autocompletion, CompletionContext } from "@codemirror/autocomplete";
+import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { sql } from "@codemirror/lang-sql";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView } from "@codemirror/view";

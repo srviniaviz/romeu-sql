@@ -2,7 +2,7 @@ import { AlertCircle, CheckCircle2, Clock, Code, History, Loader2, Play, Trash2 
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { SqlEditor } from "@/components/ui/SqlEditor";
-import { HistoryEntry } from "@/components/DatabaseExplorer";
+import type { HistoryEntry, ConsoleTab, ExecResult } from "@/domain/workspace/types";
 import type { AppSettings } from "@/domain/settings/types";
 
 interface SqlConsoleProps {
@@ -10,11 +10,11 @@ interface SqlConsoleProps {
   onSqlQueryChange: (value: string) => void;
   executing: boolean;
   onExecute: () => void;
-  execResult: { success: boolean; message: string } | null;
+  execResult: ExecResult | null;
   history: HistoryEntry[];
-  activeTab: "editor" | "history";
+  activeTab: ConsoleTab;
   editorSettings: AppSettings["editor"];
-  onActiveTabChange: (tab: "editor" | "history") => void;
+  onActiveTabChange: (tab: ConsoleTab) => void;
   onClearHistory: () => void;
   onClearEditor: () => void;
 }

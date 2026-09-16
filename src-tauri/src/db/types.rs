@@ -64,6 +64,29 @@ pub struct ForeignKeyInfo {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SchemaDiagramColumn {
+    pub table_name: String,
+    #[serde(flatten)]
+    pub column: ColumnInfo,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchemaDiagramForeignKey {
+    pub source_table: String,
+    #[serde(flatten)]
+    pub foreign_key: ForeignKeyInfo,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchemaDiagramMetadata {
+    pub columns: Vec<SchemaDiagramColumn>,
+    pub foreign_keys: Vec<SchemaDiagramForeignKey>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TableInfo {
     pub name: String,
     #[serde(rename = "type")]

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarConnection } from "@/components/SidebarConnection";
-import { Connection } from "@/lib/useConnections";
+import type { Connection } from "@/lib/useConnections";
 
 interface AppSidebarProps {
   width: number;
@@ -112,6 +112,7 @@ export function AppSidebar({
             </div>
           ) : connections.length === 0 ? (
             <button
+              type="button"
               className="mx-2 flex w-[calc(100%-1rem)] flex-col items-start rounded-md bg-background/60 px-3 py-4 text-left text-muted-foreground hover:text-foreground"
               onClick={onCreateConnection}
             >

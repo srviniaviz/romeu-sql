@@ -29,6 +29,7 @@ import { RowDataEditor } from "@/components/explorer/RowDataEditor";
 import { toast } from "@/components/ui/toast";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
+import type { DataTab, DataViewMode, RowQueryDraft } from "@/domain/workspace/types";
 import type { AppSettings } from "@/domain/settings/types";
 import {
   DropdownMenu,
@@ -37,8 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export type DataViewMode = "list" | "json" | "table";
-type DataTab = "rows" | "query" | "schema" | "indexes";
+export type { DataTab, DataViewMode } from "@/domain/workspace/types";
 
 interface DataPreviewProps {
   selectedTable: string;
@@ -56,14 +56,22 @@ interface DataPreviewProps {
   loadingDeleteCascadeImpacts?: boolean;
   refreshing: boolean;
   whereClause: string;
-  rowOptions: RowQueryOptions;
   queryRows: Record<string, unknown>[];
   queryLoading: boolean;
   queryError: string | null;
+  activeTab: DataTab;
+  sql: string;
+  lastQuerySql: string;
+  whereDraft: string;
+  rowOptionsDraft: RowQueryDraft;
   onBack: () => void;
   onInsert: () => void;
   onRefresh: () => void;
   onViewModeChange: (mode: DataViewMode) => void;
+  onActiveTabChange: (tab: DataTab) => void;
+  onSqlChange: (value: string) => void;
+  onWhereDraftChange: (value: string) => void;
+  onRowOptionsDraftChange: (value: RowQueryDraft) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onFilterApply: (whereClause: string) => void;
@@ -140,12 +148,16 @@ function changedRowValues(original: Record<string, unknown>, next: Record<string
 }
 
 function rowIdentityWhere(row: Record<string, unknown>, columns: ColumnInfo[]) {
-  const primaryKeys = columns.filter((column) => column.isPrimaryKey && Object.prototype.hasOwnProperty.call(row, column.name));
+  const primaryKeys = columns.filter(
+    (column) => column.isPrimaryKey && Object.prototype.hasOwnProperty.call(row, column.name),
+  );
   if (primaryKeys.length > 0) {
     return Object.fromEntries(primaryKeys.map((column) => [column.name, row[column.name]]));
   }
 
-  const fallbackKey = ["id", "_id", "uuid"].find((key) => Object.prototype.hasOwnProperty.call(row, key));
+  const fallbackKey = ["id", "_id", "uuid"].find((key) =>
+    Object.prototype.hasOwnProperty.call(row, key),
+  );
   if (fallbackKey) return { [fallbackKey]: row[fallbackKey] };
 
   return row;
@@ -290,10 +302,10 @@ function serializeValue(value: unknown) {
 function toCsv(rows: Record<string, unknown>[]) {
   if (!rows.length) return "";
   const columns = Object.keys(rows[0]);
-  const escape = (value: unknown) => `"${serializeValue(value).replace(/"/g, '""')}"`;
+  const escapeCsvValue = (value: unknown) => `"${serializeValue(value).replace(/"/g, '""')}"`;
   return [
-    columns.map(escape).join(","),
-    ...rows.map((row) => columns.map((column) => escape(row[column])).join(",")),
+    columns.map(escapeCsvValue).join(","),
+    ...rows.map((row) => columns.map((column) => escapeCsvValue(row[column])).join(",")),
   ].join("\n");
 }
 
@@ -664,7 +676,9 @@ function DeleteRowDialog({
   onConfirm: () => void;
 }) {
   const { t } = useTranslation();
-  const identity = ["id", "_id", "uuid", "name", "email"].find((key) => Object.prototype.hasOwnProperty.call(row, key));
+  const identity = ["id", "_id", "uuid", "name", "email"].find((key) =>
+    Object.prototype.hasOwnProperty.call(row, key),
+  );
   const identityValue = identity ? `${identity}: ${serializeValue(row[identity])}` : serializeValue(Object.values(row)[0]);
 
   return (
@@ -821,14 +835,22 @@ export function DataPreview({
   loadingDeleteCascadeImpacts = false,
   refreshing,
   whereClause,
-  rowOptions,
   queryRows,
   queryLoading,
   queryError,
+  activeTab,
+  sql,
+  lastQuerySql,
+  whereDraft,
+  rowOptionsDraft,
   onBack,
   onInsert,
   onRefresh,
   onViewModeChange,
+  onActiveTabChange,
+  onSqlChange,
+  onWhereDraftChange,
+  onRowOptionsDraftChange,
   onPageChange,
   onPageSizeChange,
   onFilterApply,
@@ -847,12 +869,7 @@ export function DataPreview({
   const { t } = useTranslation();
   const { settings } = useSettings();
   const appSettings = settings ?? DEFAULT_APP_SETTINGS;
-  const [query, setQuery] = useState(whereClause);
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [project, setProject] = useState(rowOptions.project || "");
-  const [sort, setSort] = useState(rowOptions.sort || "");
-  const [skip, setSkip] = useState(String(rowOptions.skip || ""));
-  const [limit, setLimit] = useState(String(rowOptions.limit || ""));
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -870,9 +887,6 @@ export function DataPreview({
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [deleteRow, setDeleteRow] = useState<Record<string, unknown> | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DataTab>("rows");
-  const [sql, setSql] = useState(() => `SELECT * FROM ${selectedTable} LIMIT 100`);
-  const [lastQuerySql, setLastQuerySql] = useState("");
   const [busy, setBusy] = useState(false);
   const querySplitRef = useRef<HTMLDivElement | null>(null);
   const [querySplit, setQuerySplit] = useState(52);
@@ -883,14 +897,14 @@ export function DataPreview({
   const whereInputRef = useRef<HTMLInputElement | null>(null);
   const sortInputRef = useRef<HTMLInputElement | null>(null);
   const whereToken = useMemo(() => {
-    const left = query.slice(0, whereCursor);
+    const left = whereDraft.slice(0, whereCursor);
     return left.match(/[a-zA-Z_][\w.]*$/)?.[0] ?? "";
-  }, [query, whereCursor]);
+  }, [whereDraft, whereCursor]);
   const sortToken = useMemo(() => {
-    const left = sort.slice(0, sortCursor);
+    const left = rowOptionsDraft.sort.slice(0, sortCursor);
     const currentTerm = left.split(",").pop() ?? "";
     return currentTerm.match(/[a-zA-Z_][\w.]*$/)?.[0] ?? "";
-  }, [sort, sortCursor]);
+  }, [rowOptionsDraft.sort, sortCursor]);
   const whereSuggestions = useMemo(() => {
     if (!whereToken) return [];
     const needle = whereToken.toLowerCase();
@@ -912,7 +926,6 @@ export function DataPreview({
     setSortSuggestIndex(0);
   }, [sortToken]);
 
-  useEffect(() => setQuery(whereClause), [whereClause]);
   useEffect(() => {
     if (!queryResizing) return;
 
@@ -936,28 +949,17 @@ export function DataPreview({
       window.removeEventListener("pointerup", stopResize);
     };
   }, [queryResizing]);
-  useEffect(() => {
-    setProject(rowOptions.project || "");
-    setSort(rowOptions.sort || "");
-    setSkip(String(rowOptions.skip || ""));
-    setLimit(String(rowOptions.limit || ""));
-  }, [rowOptions]);
-  useEffect(() => {
-    setSql(`SELECT * FROM ${selectedTable} LIMIT 100`);
-    setLastQuerySql("");
-  }, [selectedTable]);
-
   async function applyRows() {
-    const nextWhere = query.trim();
+    const nextWhere = whereDraft.trim();
     setValidatingFilter(true);
     setFilterError(null);
     try {
       await onValidateWhere(nextWhere);
       onOptionsApply({
-        project: project.trim() || undefined,
-        sort: sort.trim() || undefined,
-        skip: Number(skip) > 0 ? Number(skip) : undefined,
-        limit: Number(limit) > 0 ? Number(limit) : undefined,
+        project: rowOptionsDraft.project.trim() || undefined,
+        sort: rowOptionsDraft.sort.trim() || undefined,
+        skip: Number(rowOptionsDraft.skip) > 0 ? Number(rowOptionsDraft.skip) : undefined,
+        limit: Number(rowOptionsDraft.limit) > 0 ? Number(rowOptionsDraft.limit) : undefined,
       });
       onFilterApply(nextWhere);
       onFind();
@@ -970,11 +972,8 @@ export function DataPreview({
   }
 
   function resetRows() {
-    setQuery("");
-    setProject("");
-    setSort("");
-    setSkip("");
-    setLimit("");
+    onWhereDraftChange("");
+    onRowOptionsDraftChange({ project: "", sort: "", skip: "", limit: "" });
     setMessage(null);
     setFilterError(null);
     onFilterReset();
@@ -1007,13 +1006,13 @@ export function DataPreview({
   function insertWhereSuggestion(columnName: string) {
     const input = whereInputRef.current;
     const cursor = input?.selectionStart ?? whereCursor;
-    const before = query.slice(0, cursor);
-    const after = query.slice(cursor);
+    const before = whereDraft.slice(0, cursor);
+    const after = whereDraft.slice(cursor);
     const match = before.match(/[a-zA-Z_][\w.]*$/);
     const start = match ? cursor - match[0].length : cursor;
-    const next = `${query.slice(0, start)}${columnName}${after}`;
+    const next = `${whereDraft.slice(0, start)}${columnName}${after}`;
     const nextCursor = start + columnName.length;
-    setQuery(next);
+    onWhereDraftChange(next);
     setWhereCursor(nextCursor);
     setWhereSuggestOpen(false);
     requestAnimationFrame(() => {
@@ -1025,15 +1024,15 @@ export function DataPreview({
   function insertSortSuggestion(columnName: string) {
     const input = sortInputRef.current;
     const cursor = input?.selectionStart ?? sortCursor;
-    const before = sort.slice(0, cursor);
-    const after = sort.slice(cursor);
+    const before = rowOptionsDraft.sort.slice(0, cursor);
+    const after = rowOptionsDraft.sort.slice(cursor);
     const currentTerm = before.split(",").pop() ?? "";
     const termStart = cursor - currentTerm.length;
     const match = currentTerm.match(/[a-zA-Z_][\w.]*$/);
     const start = match ? cursor - match[0].length : termStart + currentTerm.length;
-    const next = `${sort.slice(0, start)}${columnName}${after}`;
+    const next = `${rowOptionsDraft.sort.slice(0, start)}${columnName}${after}`;
     const nextCursor = start + columnName.length;
-    setSort(next);
+    onRowOptionsDraftChange({ ...rowOptionsDraft, sort: next });
     setSortCursor(nextCursor);
     setSortSuggestOpen(false);
     requestAnimationFrame(() => {
@@ -1128,7 +1127,6 @@ export function DataPreview({
 
   async function handleRunQuery() {
     const nextQuery = appSettings.editor.formatOnRun ? sql.trim() : sql;
-    setLastQuerySql(nextQuery);
     await onRunQuery(nextQuery);
   }
 
@@ -1191,7 +1189,7 @@ export function DataPreview({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => onActiveTabChange(tab.id)}
               className={cn(
                 "h-11 border-b-2 px-0 text-[13px] font-semibold",
                 activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"
@@ -1214,9 +1212,9 @@ export function DataPreview({
                   <span className="mr-2 font-semibold text-foreground">WHERE</span>
                   <input
                     ref={whereInputRef}
-                    value={query}
+                    value={whereDraft}
                     onChange={(event) => {
-                      setQuery(event.target.value);
+                      onWhereDraftChange(event.target.value);
                       setWhereCursor(event.target.selectionStart ?? event.target.value.length);
                       setWhereSuggestOpen(true);
                       setFilterError(null);
@@ -1254,7 +1252,7 @@ export function DataPreview({
                     placeholder={t("data_preview.where_placeholder")}
                     className="min-w-0 flex-1 bg-transparent font-mono outline-none placeholder:text-muted-foreground/70"
                   />
-                  {query || whereClause || project || sort || skip || limit ? (
+                  {whereDraft || whereClause || rowOptionsDraft.project || rowOptionsDraft.sort || rowOptionsDraft.skip || rowOptionsDraft.limit ? (
                     <button type="button" title={t("data_preview.reset")} onClick={resetRows} className="ml-2 text-muted-foreground/70 hover:text-foreground">
                       <X size={13} />
                     </button>
@@ -1306,9 +1304,9 @@ export function DataPreview({
                 <span className="mr-2 font-semibold text-foreground">ORDER BY</span>
                 <input
                   ref={sortInputRef}
-                  value={sort}
+                  value={rowOptionsDraft.sort}
                   onChange={(event) => {
-                    setSort(event.target.value);
+                    onRowOptionsDraftChange({ ...rowOptionsDraft, sort: event.target.value });
                     setSortCursor(event.target.selectionStart ?? event.target.value.length);
                     setSortSuggestOpen(true);
                   }}
@@ -1374,8 +1372,8 @@ export function DataPreview({
                   <label className="space-y-1">
                     <span className="font-medium text-foreground">{t("data_preview.project")}</span>
                     <input
-                      value={project}
-                      onChange={(event) => setProject(event.target.value)}
+                      value={rowOptionsDraft.project}
+                      onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, project: event.target.value })}
                       placeholder={t("data_preview.project_placeholder")}
                       className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
                     />
@@ -1383,8 +1381,8 @@ export function DataPreview({
                   <label className="space-y-1">
                     <span className="font-medium text-foreground">{t("data_preview.skip")}</span>
                     <input
-                      value={skip}
-                      onChange={(event) => setSkip(event.target.value.replace(/\D/g, ""))}
+                      value={rowOptionsDraft.skip}
+                      onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, skip: event.target.value.replace(/\D/g, "") })}
                       placeholder="0"
                       className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
                     />
@@ -1392,8 +1390,8 @@ export function DataPreview({
                   <label className="space-y-1">
                     <span className="font-medium text-foreground">{t("data_preview.limit")}</span>
                     <input
-                      value={limit}
-                      onChange={(event) => setLimit(event.target.value.replace(/\D/g, ""))}
+                      value={rowOptionsDraft.limit}
+                      onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, limit: event.target.value.replace(/\D/g, "") })}
                       placeholder="0"
                       className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
                     />
@@ -1448,7 +1446,7 @@ export function DataPreview({
             <div className="flex min-h-0 min-w-0 flex-col rounded-md bg-muted/25 p-3">
               <SqlEditor
                 value={sql}
-                onChange={setSql}
+                onChange={onSqlChange}
                 minHeight="100%"
                 className="min-h-0 flex-1"
                 completions={[selectedTable, ...schemaColumns.map((column) => column.name)]}

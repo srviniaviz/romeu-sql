@@ -1,8 +1,8 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import {
-  AppSettings,
+  type AppSettings,
   DEFAULT_APP_SETTINGS,
-  QuerySettings,
+  type QuerySettings,
   clampNumber,
   clampQueryTimeout,
 } from "./types";

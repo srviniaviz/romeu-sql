@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Connection } from "@/lib/useConnections";
+import type { Connection } from "@/lib/useConnections";
 import type { ClusterUserInfo } from "@/domain/database/types";
 import {
   executeSql,

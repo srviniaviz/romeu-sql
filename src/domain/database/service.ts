@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { hydrateConnectionSecrets } from "../connections/repository";
-import { Connection } from "../connections/types";
+import type { Connection } from "../connections/types";
 import { loadSettings } from "../settings/repository";
 import type {
   BenchmarkAnalyzeResult,
@@ -13,6 +13,8 @@ import type {
   ForeignKeyInfo,
   IndexInfo,
   RowQueryOptions,
+  SchemaDiagramMetadata,
+  SchemaDiagramData,
   TableInfo,
 } from "./types";
 
@@ -165,6 +167,46 @@ export async function listColumns(connection: Connection, tableName: string) {
 
 export async function listForeignKeys(connection: Connection, tableName: string) {
   return dbInvoke<ForeignKeyInfo[]>("db_list_foreign_keys", connection, { tableName });
+}
+
+export async function loadSchemaDiagram(connection: Connection, tables: TableInfo[]): Promise<SchemaDiagramData> {
+  const metadata = await dbInvoke<SchemaDiagramMetadata>("db_load_schema_diagram", connection);
+  const columnsByTable = new Map<string, ColumnInfo[]>();
+
+  for (const column of metadata.columns) {
+    const tableColumns = columnsByTable.get(column.tableName) ?? [];
+    tableColumns.push({
+      name: column.name,
+      type: column.type,
+      nullable: column.nullable,
+      defaultValue: column.defaultValue,
+      isPrimaryKey: column.isPrimaryKey,
+      enumValues: column.enumValues,
+    });
+    columnsByTable.set(column.tableName, tableColumns);
+  }
+
+  const tableNames = new Set(tables.map((table) => table.name));
+  const relations = metadata.foreignKeys
+    .filter(
+      (foreignKey) =>
+        tableNames.has(foreignKey.sourceTable) && tableNames.has(foreignKey.targetTable),
+    )
+    .map((foreignKey, index) => ({
+      sourceColumn: foreignKey.sourceColumn,
+      targetTable: foreignKey.targetTable,
+      targetColumn: foreignKey.targetColumn,
+      id: `${foreignKey.sourceTable}:${foreignKey.sourceColumn}:${foreignKey.targetTable}:${foreignKey.targetColumn}:${index}`,
+      sourceTable: foreignKey.sourceTable,
+    }));
+
+  return {
+    tables: tables.map((table) => ({
+      ...table,
+      columns: columnsByTable.get(table.name) ?? [],
+    })),
+    relations,
+  };
 }
 
 export async function listIndexes(connection: Connection, tableName: string) {

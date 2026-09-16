@@ -1,7 +1,7 @@
-import { Database, LogOut, RefreshCw } from "lucide-react";
+import { Database, LogOut, Network, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Connection } from "@/lib/useConnections";
+import type { Connection } from "@/lib/useConnections";
 
 interface ExplorerHeaderProps {
   connection: Connection;
@@ -10,6 +10,8 @@ interface ExplorerHeaderProps {
   rowCount: number;
   databaseSizeBytes: number | null;
   refreshing: boolean;
+  diagramOpen: boolean;
+  onToggleDiagram: () => void;
   onDisconnect: () => void;
 }
 
@@ -33,6 +35,8 @@ export function ExplorerHeader({
   rowCount,
   databaseSizeBytes,
   refreshing,
+  diagramOpen,
+  onToggleDiagram,
   onDisconnect,
 }: ExplorerHeaderProps) {
   const { t } = useTranslation();
@@ -66,6 +70,17 @@ export function ExplorerHeader({
               <strong className="text-foreground">{formatDatabaseSize(databaseSizeBytes)}</strong>
             </div>
           )}
+
+          <Button
+            variant={diagramOpen ? "secondary" : "outline"}
+            size="sm"
+            className="h-8"
+            onClick={onToggleDiagram}
+            aria-pressed={diagramOpen}
+          >
+            <Network size={14} />
+            {t("explorer.diagram")}
+          </Button>
 
           <Button variant="ghost" size="icon" className="size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={onDisconnect}>
             <LogOut size={16} />

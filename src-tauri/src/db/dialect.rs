@@ -392,6 +392,24 @@ pub fn list_foreign_keys(connection: &ConnectionInput, table_name: &str) -> Stri
     }
 }
 
+pub fn list_schema_diagram_columns(connection: &ConnectionInput) -> String {
+    match connection.engine {
+        DbEngine::Postgres => r#"SELECT c.table_name as "tableName", c.column_name as name, COALESCE(NULLIF(c.udt_name, ''), c.data_type) as type, c.is_nullable as nullable, c.column_default as "defaultValue", EXISTS (SELECT 1 FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_schema = kcu.constraint_schema AND tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema AND tc.table_name = kcu.table_name WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = c.table_schema AND tc.table_name = c.table_name AND kcu.column_name = c.column_name) as "isPrimaryKey", COALESCE((SELECT jsonb_agg(e.enumlabel ORDER BY e.enumsortorder) FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = c.udt_name AND n.nspname = c.udt_schema), '[]'::jsonb) as "enumValues" FROM information_schema.columns c WHERE c.table_schema = 'public' ORDER BY c.table_name, c.ordinal_position"#.into(),
+        DbEngine::Mysql => "SELECT TABLE_NAME as tableName, COLUMN_NAME as name, COLUMN_TYPE as type, IS_NULLABLE as nullable, COLUMN_DEFAULT as defaultValue, (COLUMN_KEY = 'PRI') as isPrimaryKey FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION".into(),
+        DbEngine::Sqlite => "SELECT m.name as tableName, p.name, p.type, p.\"notnull\" as notnull, p.dflt_value as defaultValue, p.pk FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type IN ('table', 'view') ORDER BY m.name, p.cid".into(),
+        DbEngine::Sqlserver => "SELECT NULL WHERE 1 = 0".into(),
+    }
+}
+
+pub fn list_schema_diagram_foreign_keys(connection: &ConnectionInput) -> String {
+    match connection.engine {
+        DbEngine::Postgres => r#"SELECT src.relname as "sourceTable", src_att.attname as "sourceColumn", tgt.relname as "targetTable", tgt_att.attname as "targetColumn" FROM pg_constraint c JOIN pg_class src ON src.oid = c.conrelid JOIN pg_namespace src_ns ON src_ns.oid = src.relnamespace JOIN pg_class tgt ON tgt.oid = c.confrelid JOIN pg_namespace tgt_ns ON tgt_ns.oid = tgt.relnamespace JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS src_key(attnum, ord) ON TRUE JOIN LATERAL unnest(c.confkey) WITH ORDINALITY AS tgt_key(attnum, ord) ON tgt_key.ord = src_key.ord JOIN pg_attribute src_att ON src_att.attrelid = src.oid AND src_att.attnum = src_key.attnum JOIN pg_attribute tgt_att ON tgt_att.attrelid = tgt.oid AND tgt_att.attnum = tgt_key.attnum WHERE c.contype = 'f' AND src_ns.nspname = 'public' AND tgt_ns.nspname = 'public' ORDER BY src.relname, c.oid, src_key.ord"#.into(),
+        DbEngine::Mysql => "SELECT TABLE_NAME as sourceTable, COLUMN_NAME as sourceColumn, REFERENCED_TABLE_NAME as targetTable, REFERENCED_COLUMN_NAME as targetColumn FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, ORDINAL_POSITION".into(),
+        DbEngine::Sqlite => "SELECT m.name as sourceTable, fk.\"from\" as sourceColumn, fk.\"table\" as targetTable, fk.\"to\" as targetColumn FROM sqlite_master m, pragma_foreign_key_list(m.name) fk WHERE m.type = 'table' ORDER BY m.name, fk.id, fk.seq".into(),
+        DbEngine::Sqlserver => "SELECT NULL WHERE 1 = 0".into(),
+    }
+}
+
 pub fn list_indexes(connection: &ConnectionInput, table_name: &str) -> String {
     let pure_table = table_name
         .replace(['\'', '"', '`', '[', ']'], "")

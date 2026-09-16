@@ -352,8 +352,8 @@ function ProductPreview() {
 
               <div className="my-4 flex items-center justify-between">
                 <div className="flex gap-2">
-                  <button className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white">+ Add row</button>
-                  <button className="rounded-md bg-white/[0.04] px-3 py-2 text-xs font-semibold text-stone-100">Export</button>
+                  <button type="button" className="rounded-md bg-blue-500 px-3 py-2 text-xs font-semibold text-white">+ Add row</button>
+                  <button type="button" className="rounded-md bg-white/[0.04] px-3 py-2 text-xs font-semibold text-stone-100">Export</button>
                 </div>
                 <div className="text-xs text-stone-400">1 - 10 of 1000000</div>
               </div>
@@ -370,7 +370,7 @@ function ProductPreview() {
                         </span>
                       </div>
                     ))}
-                    <button className="mt-2 text-blue-400">Hide 18 fields</button>
+                    <button type="button" className="mt-2 text-blue-400">Hide 18 fields</button>
                   </div>
                 ))}
               </div>

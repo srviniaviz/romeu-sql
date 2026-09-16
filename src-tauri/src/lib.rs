@@ -47,6 +47,7 @@ pub fn run() {
             db::commands::db_explain_rows,
             db::commands::db_list_columns,
             db::commands::db_list_foreign_keys,
+            db::commands::db_load_schema_diagram,
             db::commands::db_list_indexes,
             db::commands::db_list_delete_cascade_impacts,
             db::commands::db_execute_sql,

@@ -1,5 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { Connection, NewConnection, StoredConnection } from "./types";
+import type { Connection, NewConnection, StoredConnection } from "./types";
 import {
   getConnectionPassword,
   removeConnectionPassword,

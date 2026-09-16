@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Table2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import type { WorkspaceTab } from "@/domain/workspace/types";
 
-export interface WorkspaceTab {
-  id: string;
-  tableName: string;
-}
+export type { WorkspaceTab } from "@/domain/workspace/types";
 
 interface WorkspaceTabsProps {
   tabs: WorkspaceTab[];
@@ -14,11 +12,21 @@ interface WorkspaceTabsProps {
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onCloseAll: () => void;
+  onCloseOthers: (tabId: string) => void;
+  onCloseToRight: (tabId: string) => void;
 }
 
-export function WorkspaceTabs({ tabs, activeTabId, onSelect, onClose, onCloseAll }: WorkspaceTabsProps) {
+export function WorkspaceTabs({
+  tabs,
+  activeTabId,
+  onSelect,
+  onClose,
+  onCloseAll,
+  onCloseOthers,
+  onCloseToRight,
+}: WorkspaceTabsProps) {
   const { t } = useTranslation();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,24 +47,31 @@ export function WorkspaceTabs({ tabs, activeTabId, onSelect, onClose, onCloseAll
     };
   }, [contextMenu]);
 
-  const openContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+  useEffect(() => {
+    if (!contextMenu) return;
+    contextMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+  }, [contextMenu]);
+
+  const openContextMenu = (event: React.MouseEvent<HTMLElement>, tabId: string) => {
     event.preventDefault();
     setContextMenu({
-      x: Math.min(event.clientX, window.innerWidth - 200),
-      y: Math.min(event.clientY, window.innerHeight - 52),
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 200)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 124)),
+      tabId,
     });
   };
 
   if (tabs.length === 0) return null;
 
   return (
-    <nav aria-label="Open tables" onContextMenu={openContextMenu} className="flex h-11 shrink-0 items-end overflow-visible border-b border-border/50 bg-muted/20 px-2">
+    <div aria-label={t("workspace_tabs.open_tables")} role="tablist" className="flex h-11 shrink-0 items-end overflow-visible border-b border-border/50 bg-muted/20 px-2">
       <div className="flex h-full min-w-0 flex-1 items-end">
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;
           return (
             <div
               key={tab.id}
+              onContextMenu={(event) => openContextMenu(event, tab.id)}
               className={cn(
                 "group/tab flex h-9 w-64 min-w-0 shrink items-center gap-2 overflow-hidden border-x border-t border-transparent px-3 text-[12px] text-muted-foreground transition-colors",
                 active
@@ -68,6 +83,8 @@ export function WorkspaceTabs({ tabs, activeTabId, onSelect, onClose, onCloseAll
                 type="button"
                 onClick={() => onSelect(tab.id)}
                 className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden outline-none"
+                role="tab"
+                aria-selected={active}
                 aria-current={active ? "page" : undefined}
               >
                 <Table2 size={14} className={cn("shrink-0", active && "text-primary")} />
@@ -89,6 +106,7 @@ export function WorkspaceTabs({ tabs, activeTabId, onSelect, onClose, onCloseAll
         <div
           ref={contextMenuRef}
           role="menu"
+          aria-label={t("workspace_tabs.context_menu")}
           className="fixed z-[100] min-w-48 rounded-md border border-border bg-popover p-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
@@ -103,8 +121,32 @@ export function WorkspaceTabs({ tabs, activeTabId, onSelect, onClose, onCloseAll
           >
             {t("workspace_tabs.close_all")}
           </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={tabs.length < 2}
+            onClick={() => {
+              onCloseOthers(contextMenu.tabId);
+              setContextMenu(null);
+            }}
+            className="flex h-8 w-full items-center rounded px-2.5 text-left text-[12px] text-foreground outline-none hover:bg-muted focus:bg-muted disabled:pointer-events-none disabled:opacity-40"
+          >
+            {t("workspace_tabs.close_others")}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={tabs.findIndex((tab) => tab.id === contextMenu.tabId) >= tabs.length - 1}
+            onClick={() => {
+              onCloseToRight(contextMenu.tabId);
+              setContextMenu(null);
+            }}
+            className="flex h-8 w-full items-center rounded px-2.5 text-left text-[12px] text-foreground outline-none hover:bg-muted focus:bg-muted disabled:pointer-events-none disabled:opacity-40"
+          >
+            {t("workspace_tabs.close_right")}
+          </button>
         </div>
       )}
-    </nav>
+    </div>
   );
 }

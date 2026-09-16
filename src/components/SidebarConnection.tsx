@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Connection } from "../lib/useConnections";
+import type { Connection } from "../lib/useConnections";
 import { listDatabases, listTables } from "@/domain/database/service";
 import { 
   ChevronRight, 

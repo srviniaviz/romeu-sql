@@ -29,7 +29,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { useSchemaDesigner, DbEngine } from "../lib/useSchemaDesigner";
+import { useSchemaDesigner, type DbEngine } from "../lib/useSchemaDesigner";
 
 interface Props {
   isOpen: boolean;

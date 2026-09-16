@@ -30,7 +30,11 @@
   },
   "workspace_tabs": {
     "close_all": "Fechar todas as abas",
-    "open_in_new_tab": "Abrir em nova aba"
+    "close_others": "Fechar outras",
+    "close_right": "Fechar à direita",
+    "open_in_new_tab": "Abrir em nova aba",
+    "open_tables": "Abas abertas",
+    "context_menu": "Ações da aba"
   },
   "shell": {
     "workspace": "Workspace",
@@ -325,7 +329,31 @@
     "no_collections": "Nenhuma coleção encontrada neste banco de dados.",
     "explore": "Explorar",
     "placeholder_sql": "-- Escreva seu script SQL aqui...\\nCREATE TABLE demo (id INT, nome TEXT);",
-    "record_label": "Registro"
+    "record_label": "Registro",
+    "diagram": "Diagrama",
+    "diagram_desc": "Mapa automático das relações deste schema.",
+    "diagram_tables": "{{count}} tabelas",
+    "diagram_relations": "{{count}} relações",
+    "diagram_fit": "Ajustar",
+    "diagram_zoom_in": "Aumentar zoom",
+    "diagram_zoom_out": "Diminuir zoom",
+    "diagram_refresh": "Atualizar diagrama",
+    "diagram_search": "Buscar tabelas",
+    "diagram_tables_label": "Tabelas no diagrama",
+    "diagram_show_all": "Mostrar todas",
+    "diagram_show_table": "Mostrar tabela",
+    "diagram_hide_table": "Ocultar tabela",
+    "diagram_visible_summary": "{{visible}} de {{total}} visíveis",
+    "diagram_loading": "Lendo o schema e as relações...",
+    "diagram_error": "Não foi possível montar o diagrama",
+    "diagram_retry": "Tentar novamente",
+    "diagram_empty": "Nenhuma tabela encontrada para diagramar.",
+    "diagram_all_hidden": "Todas as tabelas estão ocultas.",
+    "diagram_no_matches": "Nenhuma tabela encontrada",
+    "diagram_no_columns": "Nenhuma coluna encontrada",
+    "diagram_more_columns": "+{{count}} colunas",
+    "diagram_open_table": "Abrir tabela",
+    "diagram_pan_hint": "Arraste para mover · use a roda para zoom"
   },
   "data_preview": {
     "document_list": "Lista de documentos",

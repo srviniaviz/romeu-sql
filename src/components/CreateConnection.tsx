@@ -94,7 +94,7 @@ const connectionSchema = z.object({
 type ConnectionFormInput = z.input<typeof connectionSchema>;
 type ConnectionFormValues = z.output<typeof connectionSchema>;
 
-import { useConnections, Connection } from "../lib/useConnections";
+import { useConnections, type Connection } from "../lib/useConnections";
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;

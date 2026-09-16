@@ -30,7 +30,11 @@
   },
   "workspace_tabs": {
     "close_all": "Close all tabs",
-    "open_in_new_tab": "Open in new tab"
+    "close_others": "Close others",
+    "close_right": "Close tabs to the right",
+    "open_in_new_tab": "Open in new tab",
+    "open_tables": "Open tables",
+    "context_menu": "Tab actions"
   },
   "shell": {
     "workspace": "Workspace",
@@ -325,7 +329,31 @@
     "no_collections": "No collections found in this database.",
     "explore": "Explore",
     "placeholder_sql": "-- Write your SQL script here...\\nCREATE TABLE demo (id INT, name TEXT);",
-    "record_label": "Record"
+    "record_label": "Record",
+    "diagram": "Diagram",
+    "diagram_desc": "Automatic map of this schema's relationships.",
+    "diagram_tables": "{{count}} tables",
+    "diagram_relations": "{{count}} relationships",
+    "diagram_fit": "Fit",
+    "diagram_zoom_in": "Zoom in",
+    "diagram_zoom_out": "Zoom out",
+    "diagram_refresh": "Refresh diagram",
+    "diagram_search": "Search tables",
+    "diagram_tables_label": "Tables in diagram",
+    "diagram_show_all": "Show all",
+    "diagram_show_table": "Show table",
+    "diagram_hide_table": "Hide table",
+    "diagram_visible_summary": "{{visible}} of {{total}} visible",
+    "diagram_loading": "Reading schema and relationships...",
+    "diagram_error": "Could not build the diagram",
+    "diagram_retry": "Retry",
+    "diagram_empty": "No tables found to diagram.",
+    "diagram_all_hidden": "All tables are hidden.",
+    "diagram_no_matches": "No tables found",
+    "diagram_no_columns": "No columns found",
+    "diagram_more_columns": "+{{count}} columns",
+    "diagram_open_table": "Open table",
+    "diagram_pan_hint": "Drag to pan · use the wheel to zoom"
   },
   "data_preview": {
     "document_list": "Document list",

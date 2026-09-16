@@ -10,8 +10,9 @@ import { ExplorerHeader } from "./explorer/ExplorerHeader";
 import { SqlConsole } from "./explorer/SqlConsole";
 import { TableBrowser } from "./explorer/TableBrowser";
 import { DataPreview } from "./explorer/DataPreview";
+import { SchemaDiagram } from "./explorer/SchemaDiagram";
 import { toast } from "@/components/ui/toast";
-import { Connection } from "../lib/useConnections";
+import type { Connection } from "../lib/useConnections";
 import {
   benchmarkAnalyze,
   countRows,
@@ -24,6 +25,7 @@ import {
   exportQuery,
   getDatabaseSize,
   insertRow,
+  loadSchemaDiagram,
   listColumns,
   listForeignKeys,
   listDeleteCascadeImpacts,
@@ -34,8 +36,18 @@ import {
   selectRowsPage,
   updateRow,
 } from "@/domain/database/service";
-import type { DataViewMode } from "./explorer/DataPreview";
-import type { ForeignKeyInfo, RowQueryOptions } from "@/domain/database/types";
+import type { ForeignKeyInfo } from "@/domain/database/types";
+import type {
+  ConsoleTab,
+  DataTab,
+  HistoryEntry,
+  RowQueryDraft,
+  WorkspaceOperation,
+  WorkspaceTab,
+  WorkspaceTabState,
+  WorkspaceTabStatePatch,
+} from "@/domain/workspace/types";
+import { createWorkspaceTab } from "@/domain/workspace/types";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
 
@@ -45,8 +57,9 @@ interface Props {
   openCreateOnMount?: boolean;
   openCreateDbOnMount?: boolean;
   onModalOpened?: () => void;
-  selectedTable?: string | null;
+  workspaceTab: WorkspaceTab | null;
   onTableSelected?: (tableName: string | null) => void;
+  onWorkspaceTabChange: (tabId: string, patch: WorkspaceTabStatePatch) => void;
   foreignKeyNavigation?: { tableName: string; whereClause: string; token: number } | null;
   onForeignKeyNavigate?: (tableName: string, whereClause: string) => void;
 }
@@ -59,23 +72,15 @@ function foreignKeyWhereClause(column: string, value: unknown, engine: string) {
   return `${quotedColumn} = '${String(value).replace(/'/g, "''")}'`;
 }
 
-export interface HistoryEntry {
-  id: string;
-  action: string;
-  query?: string;
-  status: "success" | "error";
-  message: string;
-  timestamp: Date;
-}
-
 export function DatabaseExplorer({
   connection,
   onDisconnect,
   openCreateOnMount,
   openCreateDbOnMount,
   onModalOpened,
-  selectedTable,
+  workspaceTab,
   onTableSelected,
+  onWorkspaceTabChange,
   foreignKeyNavigation,
   onForeignKeyNavigate,
 }: Props) {
@@ -83,24 +88,58 @@ export function DatabaseExplorer({
   const queryClient = useQueryClient();
   const { settings } = useSettings();
   const appSettings = settings ?? DEFAULT_APP_SETTINGS;
-  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+  const selectedTable = workspaceTab?.tableName ?? null;
+  const [isDiagramOpen, setIsDiagramOpen] = useState(false);
+  const [browserState, setBrowserState] = useState<WorkspaceTabState>(() => createWorkspaceTab("", {
+    pageSize: appSettings.dataView.defaultPageSize,
+    viewMode: appSettings.dataView.defaultViewMode,
+    queryLimit: appSettings.query.defaultLimit,
+  }).state);
+  const session = workspaceTab?.state ?? browserState;
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
   const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
-  const [sqlQuery, setSqlQuery] = useState("");
-  const [execResult, setExecResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<"editor" | "history">("editor");
-  const [viewMode, setViewMode] = useState<DataViewMode>("list");
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-  const [whereClause, setWhereClause] = useState("");
-  const [rowOptions, setRowOptions] = useState<RowQueryOptions>({});
-  const [queryRows, setQueryRows] = useState<Record<string, unknown>[]>([]);
-  const [queryError, setQueryError] = useState<string | null>(null);
-  const [activeTask, setActiveTask] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const emptyRowsRecoveryKey = useRef<string | null>(null);
+  const page = session.page;
+  const pageSize = session.pageSize;
+  const whereClause = session.whereClause;
+  const whereDraft = session.whereDraft;
+  const rowOptions = session.rowOptions;
+  const rowOptionsDraft: RowQueryDraft = session.rowOptionsDraft ?? {
+    project: rowOptions.project ?? "",
+    sort: rowOptions.sort ?? "",
+    skip: rowOptions.skip ? String(rowOptions.skip) : "",
+    limit: rowOptions.limit ? String(rowOptions.limit) : "",
+  };
+  const viewMode = session.viewMode;
+  const activeDataTab: DataTab = session.activeDataTab;
+  const querySql = session.querySql;
+  const lastQuerySql = session.lastQuerySql;
+  const queryRows = session.queryRows;
+  const queryError = session.queryError;
+  const consoleOpen = session.consoleOpen;
+  const consoleTab: ConsoleTab = session.consoleTab;
+  const sqlQuery = session.sqlQuery;
+  const execResult = session.execResult;
+  const history = session.history;
+  const activeTask = session.activeTask;
+  const pendingOperation: WorkspaceOperation = session.pendingOperation;
+
+  const updateWorkspaceState = (tabId: string | null, patch: WorkspaceTabStatePatch) => {
+    if (tabId) {
+      onWorkspaceTabChange(tabId, patch);
+      return;
+    }
+    setBrowserState((state) => ({
+      ...state,
+      ...(typeof patch === "function" ? patch(state) : patch),
+    }));
+  };
+
+  const updateCurrentTab = (patch: WorkspaceTabStatePatch) => {
+    updateWorkspaceState(workspaceTab?.id ?? null, patch);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -134,36 +173,35 @@ export function DatabaseExplorer({
   }, [isCreateModalOpen, isCreateDbModalOpen, isInsertModalOpen, onModalOpened]);
 
   useEffect(() => {
-    setPage(0);
-    setWhereClause("");
-    setRowOptions({});
-  }, [selectedTable, connection.id, connection.database]);
+    setIsDiagramOpen(false);
+  }, [connection.id, connection.database]);
 
   useEffect(() => {
-    if (!foreignKeyNavigation || foreignKeyNavigation.tableName !== selectedTable) return;
-    setWhereClause(foreignKeyNavigation.whereClause);
-    setRowOptions({});
-    setPage(0);
-  }, [foreignKeyNavigation, selectedTable]);
+    setIsDiagramOpen(false);
+  }, [selectedTable]);
 
   useEffect(() => {
-    if (settings?.dataView.defaultPageSize) {
-      setPageSize(settings.dataView.defaultPageSize);
-    }
-    if (settings?.dataView.defaultViewMode) {
-      setViewMode(settings.dataView.defaultViewMode);
-    }
-  }, [settings?.dataView.defaultPageSize, settings?.dataView.defaultViewMode]);
+    if (!foreignKeyNavigation || foreignKeyNavigation.tableName !== selectedTable || !workspaceTab) return;
+    updateWorkspaceState(workspaceTab.id, {
+      whereClause: foreignKeyNavigation.whereClause,
+      whereDraft: foreignKeyNavigation.whereClause,
+      rowOptions: {},
+      rowOptionsDraft: { project: "", sort: "", skip: "", limit: "" },
+      page: 0,
+    });
+  }, [foreignKeyNavigation, selectedTable, workspaceTab?.id]);
 
-  const addHistory = (entry: Omit<HistoryEntry, "id" | "timestamp">) => {
-    setHistory((prev) => [
-      {
-        ...entry,
-        id: crypto.randomUUID(),
-        timestamp: new Date(),
-      },
-      ...prev,
-    ].slice(0, appSettings.editor.historyLimit));
+  const addHistory = (tabId: string | null, entry: Omit<HistoryEntry, "id" | "timestamp">) => {
+    updateWorkspaceState(tabId, (state) => ({
+      history: [
+        {
+          ...entry,
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+        },
+        ...state.history,
+      ].slice(0, appSettings.editor.historyLimit),
+    }));
   };
 
   const {
@@ -182,6 +220,12 @@ export function DatabaseExplorer({
     queryKey: ["tableStats", connection.id, connection.database],
     queryFn: () => listTableStats(connection),
     enabled: !!connection.id && tables.length > 0 && !loadingTables,
+  });
+
+  const schemaDiagramQuery = useQuery({
+    queryKey: ["schemaDiagram", connection.id, connection.database, tables.map((table) => table.name)],
+    queryFn: () => loadSchemaDiagram(connection, tables),
+    enabled: isDiagramOpen && !!connection.id && tables.length > 0 && !loadingTables,
   });
 
   const { data: databaseSizeBytes = null, isFetching: fetchingDatabaseSize } = useQuery({
@@ -266,103 +310,177 @@ export function DatabaseExplorer({
   });
 
   const executeMutation = useMutation({
-    mutationFn: (query: string) => executeSql(connection, query),
-    onSuccess: (res) => {
+    mutationFn: ({ query }: { tabId: string | null; query: string }) => executeSql(connection, query),
+    onMutate: ({ tabId }) => {
+      updateWorkspaceState(tabId, { pendingOperation: "execute" });
+    },
+    onSuccess: (res, { tabId }) => {
       const msg = t("explorer.sync_success");
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: t("explorer.sql_editor"), query: res.query, status: "success", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: true, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("explorer.sql_editor"), query: res.query, status: "success", message: msg });
       clearDatabaseMetadataCache(connection);
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
     },
-    onError: (err: unknown, query) => {
+    onError: (err: unknown, { tabId, query }) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: t("explorer.sql_editor"), query, status: "error", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: false, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("explorer.sql_editor"), query, status: "error", message: msg });
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) updateWorkspaceState(variables.tabId, { pendingOperation: null });
     },
   });
 
   const insertMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => {
-      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
-      return insertRow(connection, selectedTable, data);
+    mutationFn: ({ tableName, data }: { tabId: string; tableName: string; data: Record<string, unknown> }) => {
+      return insertRow(connection, tableName, data);
     },
-    onSuccess: (res) => {
+    onMutate: ({ tabId }) => {
+      updateWorkspaceState(tabId, { pendingOperation: "insert" });
+    },
+    onSuccess: (res, { tabId }) => {
       const msg = t("explorer.sync_success");
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: t("explorer.add_document"), query: res.query, status: "success", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: true, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("explorer.add_document"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, { tabId }) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: t("explorer.add_document"), status: "error", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: false, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("explorer.add_document"), status: "error", message: msg });
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) updateWorkspaceState(variables.tabId, { pendingOperation: null });
     },
   });
 
   const queryMutation = useMutation({
-    mutationFn: (query: string) => selectQuery(connection, query),
-    onSuccess: (rows, query) => {
-      setQueryRows(rows);
-      setQueryError(null);
-      addHistory({ action: t("data_preview.query"), query, status: "success", message: `${rows.length} rows returned` });
+    mutationFn: ({ query }: { tabId: string; query: string }) => selectQuery(connection, query),
+    onMutate: ({ tabId, query }) => {
+      updateWorkspaceState(tabId, {
+        lastQuerySql: query,
+        pendingOperation: "query",
+      });
     },
-    onError: (err: unknown, query) => {
+    onSuccess: (rows, { tabId, query }) => {
+      updateWorkspaceState(tabId, {
+        queryRows: rows,
+        queryError: null,
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.query"), query, status: "success", message: `${rows.length} rows returned` });
+    },
+    onError: (err: unknown, { tabId, query }) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-      setQueryRows([]);
-      setQueryError(msg);
-      addHistory({ action: t("data_preview.query"), query, status: "error", message: msg });
+      updateWorkspaceState(tabId, {
+        queryRows: [],
+        queryError: msg,
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.query"), query, status: "error", message: msg });
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) updateWorkspaceState(variables.tabId, { pendingOperation: null });
     },
   });
 
   const benchmarkMutation = useMutation({
     mutationFn: () => benchmarkAnalyze(connection),
-    onMutate: () => setActiveTask(t("table_browser.benchmark")),
-    onSettled: () => setActiveTask(null),
+    onMutate: () => {
+      if (workspaceTab) updateWorkspaceState(workspaceTab.id, {
+        activeTask: t("table_browser.benchmark"),
+        pendingOperation: "benchmark",
+      });
+    },
+    onSettled: () => {
+      if (workspaceTab) updateWorkspaceState(workspaceTab.id, {
+        activeTask: null,
+        pendingOperation: null,
+      });
+    },
   });
 
   const updateRowMutation = useMutation({
-    mutationFn: ({ original, next }: { original: Record<string, unknown>; next: Record<string, unknown> }) => {
-      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
-      return updateRow(connection, selectedTable, original, next);
+    mutationFn: ({ tableName, original, next }: { tabId: string; tableName: string; original: Record<string, unknown>; next: Record<string, unknown> }) => {
+      return updateRow(connection, tableName, original, next);
     },
-    onSuccess: (res) => {
+    onMutate: ({ tabId }) => {
+      updateWorkspaceState(tabId, { pendingOperation: "update" });
+    },
+    onSuccess: (res, { tabId }) => {
       const msg = t("explorer.sync_success");
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: t("data_preview.edit_row"), query: res.query, status: "success", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: true, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.edit_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, { tabId }) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: t("data_preview.edit_row"), status: "error", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: false, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.edit_row"), status: "error", message: msg });
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) updateWorkspaceState(variables.tabId, { pendingOperation: null });
     },
   });
 
   const deleteRowMutation = useMutation({
-    mutationFn: (row: Record<string, unknown>) => {
-      if (!selectedTable) throw new Error(t("data_preview.no_rows"));
-      return deleteRow(connection, selectedTable, row);
+    mutationFn: ({ tableName, row }: { tabId: string; tableName: string; row: Record<string, unknown> }) => {
+      return deleteRow(connection, tableName, row);
     },
-    onSuccess: (res) => {
+    onMutate: ({ tabId }) => {
+      updateWorkspaceState(tabId, { pendingOperation: "delete" });
+    },
+    onSuccess: (res, { tabId }) => {
       const msg = t("explorer.sync_success");
-      setExecResult({ success: true, message: msg });
-      addHistory({ action: t("data_preview.delete_row"), query: res.query, status: "success", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: true, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.delete_row"), query: res.query, status: "success", message: msg });
       queryClient.invalidateQueries({ queryKey: ["tableData"] });
       queryClient.invalidateQueries({ queryKey: ["tableRowsCount"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, { tabId }) => {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
-      setExecResult({ success: false, message: msg });
-      addHistory({ action: t("data_preview.delete_row"), status: "error", message: msg });
+      updateWorkspaceState(tabId, {
+        execResult: { success: false, message: msg },
+        pendingOperation: null,
+      });
+      addHistory(tabId, { action: t("data_preview.delete_row"), status: "error", message: msg });
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) updateWorkspaceState(variables.tabId, { pendingOperation: null });
     },
   });
 
@@ -373,6 +491,7 @@ export function DatabaseExplorer({
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
       setIsCreateModalOpen(false);
     },
   });
@@ -384,11 +503,23 @@ export function DatabaseExplorer({
       queryClient.invalidateQueries({ queryKey: ["tables"] });
       queryClient.invalidateQueries({ queryKey: ["tableStats"] });
       queryClient.invalidateQueries({ queryKey: ["databaseSize"] });
+      queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
       setIsCreateDbModalOpen(false);
     },
   });
 
   const error = fetchError instanceof Error ? fetchError.message : fetchError ? String(fetchError) : null;
+  const schemaDiagramError = schemaDiagramQuery.error instanceof Error
+    ? schemaDiagramQuery.error.message
+    : schemaDiagramQuery.error
+      ? String(schemaDiagramQuery.error)
+      : null;
+
+  const refreshSchemaDiagram = async () => {
+    clearDatabaseMetadataCache(connection);
+    await refetchTables();
+    await queryClient.invalidateQueries({ queryKey: ["schemaDiagram"] });
+  };
 
   if (loadingTables) {
     return (
@@ -434,17 +565,32 @@ export function DatabaseExplorer({
     <div className="flex min-h-0 flex-1 flex-col bg-background">
       <ExplorerHeader
         connection={connection}
-        selectedTable={selectedTable}
+        selectedTable={isDiagramOpen ? null : selectedTable}
         tableCount={tables.length}
         rowCount={totalRows}
         databaseSizeBytes={databaseSizeBytes}
-        refreshing={refreshingTables || fetchingRows || countingRows || fetchingDatabaseSize}
+        refreshing={refreshingTables || fetchingRows || countingRows || fetchingDatabaseSize || (isDiagramOpen && schemaDiagramQuery.isFetching)}
+        diagramOpen={isDiagramOpen}
+        onToggleDiagram={() => setIsDiagramOpen((open) => !open)}
         onDisconnect={onDisconnect}
       />
 
-      <div className={selectedTable ? "min-h-0 flex-1 overflow-hidden p-5" : "min-h-0 flex-1 space-y-4 overflow-auto p-5"}>
-        {selectedTable ? (
+      <div className={isDiagramOpen ? "min-h-0 flex-1 overflow-hidden" : selectedTable ? "min-h-0 flex-1 overflow-hidden p-5" : "min-h-0 flex-1 space-y-4 overflow-auto p-5"}>
+        {isDiagramOpen ? (
+          <SchemaDiagram
+            data={schemaDiagramQuery.data}
+            loading={schemaDiagramQuery.isLoading}
+            fetching={schemaDiagramQuery.isFetching}
+            error={schemaDiagramError}
+            onRefresh={() => { void refreshSchemaDiagram(); }}
+            onOpenTable={(tableName) => {
+              setIsDiagramOpen(false);
+              onTableSelected?.(tableName);
+            }}
+          />
+        ) : selectedTable ? (
           <DataPreview
+            key={workspaceTab?.id}
             selectedTable={selectedTable}
             rows={tableData}
             loading={loadingRows}
@@ -460,10 +606,14 @@ export function DatabaseExplorer({
             loadingDeleteCascadeImpacts={loadingDeleteCascadeImpacts}
             refreshing={fetchingRows || countingRows}
             whereClause={whereClause}
-            rowOptions={rowOptions}
             queryRows={queryRows}
-            queryLoading={queryMutation.isPending}
+            queryLoading={queryMutation.isPending && pendingOperation === "query"}
             queryError={queryError}
+            activeTab={activeDataTab}
+            sql={querySql}
+            lastQuerySql={lastQuerySql}
+            whereDraft={whereDraft}
+            rowOptionsDraft={rowOptionsDraft}
             onBack={() => onTableSelected?.(null)}
             onNavigateForeignKey={(foreignKey, value) => {
               if (value === null || value === undefined) return;
@@ -473,38 +623,64 @@ export function DatabaseExplorer({
               );
             }}
             onInsert={() => setIsInsertModalOpen(true)}
+            onActiveTabChange={(nextTab) => updateCurrentTab({ activeDataTab: nextTab })}
+            onSqlChange={(nextSql) => updateCurrentTab({ querySql: nextSql })}
+            onWhereDraftChange={(nextWhereDraft) => updateCurrentTab({ whereDraft: nextWhereDraft })}
+            onRowOptionsDraftChange={(nextDraft) => updateCurrentTab({ rowOptionsDraft: nextDraft })}
             onFilterApply={(nextWhereClause) => {
-              setWhereClause(nextWhereClause);
-              setPage(0);
+              updateCurrentTab({
+                whereClause: nextWhereClause,
+                whereDraft: nextWhereClause,
+                page: 0,
+              });
             }}
             onFilterReset={() => {
-              setWhereClause("");
-              setRowOptions({});
-              setPage(0);
+              updateCurrentTab({
+                whereClause: "",
+                whereDraft: "",
+                rowOptions: {},
+                rowOptionsDraft: { project: "", sort: "", skip: "", limit: "" },
+                page: 0,
+              });
             }}
             onOptionsApply={(options) => {
-              setRowOptions(options);
-              setPage(0);
+              updateCurrentTab({ rowOptions: options, page: 0 });
             }}
             onFind={() => {
               queryClient.invalidateQueries({ queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable] });
               queryClient.invalidateQueries({ queryKey: ["tableData", connection.id, connection.database, selectedTable] });
             }}
             onValidateWhere={(nextWhereClause) => explainRows(connection, selectedTable, nextWhereClause)}
-            onRunQuery={(query) => queryMutation.mutateAsync(query)}
+            onRunQuery={(query) => {
+              if (!workspaceTab) return Promise.resolve([]);
+              return queryMutation.mutateAsync({ tabId: workspaceTab.id, query });
+            }}
             onExportQuery={(query, path, format) => exportQuery(connection, query, path, format)}
-            onExportStatusChange={setActiveTask}
-            onUpdateRow={(original, next) => updateRowMutation.mutateAsync({ original, next })}
-            onDeleteRow={(row) => deleteRowMutation.mutateAsync(row)}
+            onExportStatusChange={(status) => updateCurrentTab({
+              activeTask: status,
+              pendingOperation: status ? "export" : null,
+            })}
+            onUpdateRow={(original, next) => {
+              if (!workspaceTab || !selectedTable) return Promise.reject(new Error(t("data_preview.no_rows")));
+              return updateRowMutation.mutateAsync({
+                tabId: workspaceTab.id,
+                tableName: selectedTable,
+                original,
+                next,
+              });
+            }}
+            onDeleteRow={(row) => {
+              if (!workspaceTab || !selectedTable) return Promise.reject(new Error(t("data_preview.no_rows")));
+              return deleteRowMutation.mutateAsync({ tabId: workspaceTab.id, tableName: selectedTable, row });
+            }}
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["tableRowsCount", connection.id, connection.database, selectedTable] });
               refetchRows();
             }}
-            onViewModeChange={setViewMode}
-            onPageChange={setPage}
+            onViewModeChange={(nextViewMode) => updateCurrentTab({ viewMode: nextViewMode })}
+            onPageChange={(nextPage) => updateCurrentTab({ page: nextPage })}
             onPageSizeChange={(nextPageSize) => {
-              setPageSize(nextPageSize);
-              setPage(0);
+              updateCurrentTab({ pageSize: nextPageSize, page: 0 });
             }}
           />
         ) : (
@@ -520,20 +696,26 @@ export function DatabaseExplorer({
         )}
       </div>
 
-      {isConsoleOpen && (
+      {consoleOpen && (
         <div className="shrink-0">
           <SqlConsole
+            key={workspaceTab?.id ?? "browser-console"}
             sqlQuery={sqlQuery}
-            onSqlQueryChange={setSqlQuery}
-            executing={executeMutation.isPending}
-            onExecute={() => executeMutation.mutate(appSettings.editor.formatOnRun ? sqlQuery.trim() : sqlQuery)}
+            onSqlQueryChange={(nextSql) => updateCurrentTab({ sqlQuery: nextSql })}
+            executing={executeMutation.isPending && pendingOperation === "execute"}
+            onExecute={() => {
+              executeMutation.mutate({
+                tabId: workspaceTab?.id ?? null,
+                query: appSettings.editor.formatOnRun ? sqlQuery.trim() : sqlQuery,
+              });
+            }}
             execResult={execResult}
             history={history}
-            activeTab={activeTab}
+            activeTab={consoleTab}
             editorSettings={appSettings.editor}
-            onActiveTabChange={setActiveTab}
-            onClearHistory={() => setHistory([])}
-            onClearEditor={() => setSqlQuery("")}
+            onActiveTabChange={(nextTab) => updateCurrentTab({ consoleTab: nextTab })}
+            onClearHistory={() => updateCurrentTab({ history: [] })}
+            onClearEditor={() => updateCurrentTab({ sqlQuery: "" })}
           />
         </div>
       )}
@@ -543,17 +725,17 @@ export function DatabaseExplorer({
           <span className="truncate">{connection.database || connection.name}</span>
           <span className="text-muted-foreground/40">•</span>
           <span>{connection.type}</span>
-          {(activeTask || executeMutation.isPending || queryMutation.isPending || benchmarkMutation.isPending || insertMutation.isPending || updateRowMutation.isPending || deleteRowMutation.isPending || createTableMutation.isPending || createDbMutation.isPending || refreshingTables || fetchingRows || countingRows) ? (
+          {(activeTask || pendingOperation || benchmarkMutation.isPending || createTableMutation.isPending || createDbMutation.isPending || refreshingTables || fetchingRows || countingRows) ? (
             <>
               <span className="text-muted-foreground/40">•</span>
               <span className="inline-flex items-center gap-1 text-primary">
                 <Loader2 size={10} className="animate-spin" />
                 {activeTask ||
-                  (executeMutation.isPending && t("explorer.run_script")) ||
-                  (queryMutation.isPending && t("data_preview.running")) ||
-                  (insertMutation.isPending && t("data_preview.saving")) ||
-                  (updateRowMutation.isPending && t("data_preview.saving")) ||
-                  (deleteRowMutation.isPending && t("data_preview.delete_row")) ||
+                   (pendingOperation === "execute" && t("explorer.run_script")) ||
+                   (pendingOperation === "query" && t("data_preview.running")) ||
+                   (pendingOperation === "insert" && t("data_preview.saving")) ||
+                   (pendingOperation === "update" && t("data_preview.saving")) ||
+                   (pendingOperation === "delete" && t("data_preview.delete_row")) ||
                   (createTableMutation.isPending && t("modal_create_table.submit")) ||
                   (createDbMutation.isPending && t("modal_create_db.submit")) ||
                   t("data_preview.syncing_rows")}
@@ -576,10 +758,10 @@ export function DatabaseExplorer({
           )}
           <button
             type="button"
-            onClick={() => setIsConsoleOpen((open) => !open)}
+            onClick={() => updateCurrentTab({ consoleOpen: !consoleOpen })}
             className="inline-flex h-5 items-center gap-1.5 rounded px-2 font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            {isConsoleOpen ? <X size={13} /> : <Terminal size={13} />}
+            {consoleOpen ? <X size={13} /> : <Terminal size={13} />}
             Console
             {history.length > 0 && <span className="rounded bg-muted px-1 text-[10px]">{history.length}</span>}
           </button>
@@ -605,7 +787,8 @@ export function DatabaseExplorer({
         tableName={selectedTable || ""}
         columns={columns}
         onInsert={async (data) => {
-          await insertMutation.mutateAsync(data);
+          if (!workspaceTab || !selectedTable) throw new Error(t("data_preview.no_rows"));
+          await insertMutation.mutateAsync({ tabId: workspaceTab.id, tableName: selectedTable, data });
           toast({ title: t("toast.row_inserted"), variant: "success" });
         }}
       />

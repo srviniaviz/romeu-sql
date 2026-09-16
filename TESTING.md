@@ -5,12 +5,15 @@ Romeu SQL is a desktop Tauri app, so the test suite is split by the layer that c
 ## Local commands
 
 ```bash
+npm run lint
 npm run test:run
 npm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
+
+Use `npm run lint:fix` to apply safe automatic fixes reported by Biome.
 
 ## Postgres integration tests
 
@@ -30,7 +33,7 @@ cargo test --manifest-path src-tauri/Cargo.toml postgres_pool -- --nocapture
 
 ## GitHub Actions jobs
 
-- `frontend`: Vitest, TypeScript, Vite production build.
+- `frontend`: Biome lint, Vitest, TypeScript, Vite production build.
 - `rust`: Rust format, unit tests, `cargo check`.
 - `postgres-integration`: real Postgres CRUD through the Rust pool.
 

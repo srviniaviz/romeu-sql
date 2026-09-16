@@ -1,7 +1,7 @@
 {
   "name": "romeu-sql",
   "private": true,
-  "version": "0.1.0-alpha.19",
+  "version": "0.1.0-alpha.20",
   "license": "GPL-3.0-only",
   "type": "module",
   "engines": {
@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
     "preview": "vite preview",
     "landing:dev": "vite --config docs/vite.config.ts --host 127.0.0.1 --port 4177",
     "landing:build": "vite build --config docs/vite.config.ts",
@@ -67,6 +69,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.13",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

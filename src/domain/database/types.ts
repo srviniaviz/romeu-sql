@@ -1,4 +1,4 @@
-import { Connection, DbEngine } from "../connections/types";
+import type { Connection, DbEngine } from "../connections/types";
 
 export type { Connection, DbEngine };
 
@@ -24,11 +24,38 @@ export interface ForeignKeyInfo {
   targetColumn: string;
 }
 
+export interface SchemaDiagramColumn extends ColumnInfo {
+  tableName: string;
+}
+
+export interface SchemaDiagramForeignKey extends ForeignKeyInfo {
+  sourceTable: string;
+}
+
+export interface SchemaDiagramMetadata {
+  columns: SchemaDiagramColumn[];
+  foreignKeys: SchemaDiagramForeignKey[];
+}
+
 export interface TableInfo {
   name: string;
   type: string;
   estimatedRows: number | null;
   totalBytes: number | null;
+}
+
+export interface SchemaDiagramTable extends TableInfo {
+  columns: ColumnInfo[];
+}
+
+export interface SchemaDiagramRelation extends ForeignKeyInfo {
+  id: string;
+  sourceTable: string;
+}
+
+export interface SchemaDiagramData {
+  tables: SchemaDiagramTable[];
+  relations: SchemaDiagramRelation[];
 }
 
 export interface BenchmarkTableResult {

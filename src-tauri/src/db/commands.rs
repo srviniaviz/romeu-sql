@@ -3,8 +3,8 @@ use super::pool::DbPoolState;
 use super::types::{
     BenchmarkAnalyzeResult, BenchmarkTableResult, ClusterPermissionInfo, ClusterUserInfo,
     ColumnInfo, ConnectionInput, DbEngine, DeleteCascadeImpact, ExportFormat, ExportResult,
-    ForeignKeyInfo,
-    IndexInfo, JsonRow, RowQueryOptions, TableInfo,
+    ForeignKeyInfo, IndexInfo, JsonRow, RowQueryOptions, SchemaDiagramColumn,
+    SchemaDiagramForeignKey, SchemaDiagramMetadata, TableInfo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -388,9 +388,48 @@ pub async fn db_list_foreign_keys(
 ) -> DbResult<Vec<ForeignKeyInfo>> {
     with_query_timeout(query_timeout_ms, async {
         let rows = state
-            .select(&connection, &dialect::list_foreign_keys(&connection, &table_name))
+            .select(
+                &connection,
+                &dialect::list_foreign_keys(&connection, &table_name),
+            )
             .await?;
         Ok(rows.iter().map(normalize_foreign_key).collect())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn db_load_schema_diagram(
+    state: State<'_, DbPoolState>,
+    connection: ConnectionInput,
+    query_timeout_ms: Option<u64>,
+) -> DbResult<SchemaDiagramMetadata> {
+    with_query_timeout(query_timeout_ms, async {
+        let columns_sql = dialect::list_schema_diagram_columns(&connection);
+        let foreign_keys_sql = dialect::list_schema_diagram_foreign_keys(&connection);
+        let (column_rows, foreign_key_rows) = tokio::try_join!(
+            state.select(&connection, &columns_sql),
+            state.select(&connection, &foreign_keys_sql),
+        )?;
+
+        Ok(SchemaDiagramMetadata {
+            columns: column_rows
+                .iter()
+                .map(|row| SchemaDiagramColumn {
+                    table_name: get_string(row, &["tableName", "table_name", "TABLE_NAME"]),
+                    column: normalize_column(row),
+                })
+                .filter(|column| !column.table_name.is_empty())
+                .collect(),
+            foreign_keys: foreign_key_rows
+                .iter()
+                .map(|row| SchemaDiagramForeignKey {
+                    source_table: get_string(row, &["sourceTable", "source_table", "TABLE_NAME"]),
+                    foreign_key: normalize_foreign_key(row),
+                })
+                .filter(|foreign_key| !foreign_key.source_table.is_empty())
+                .collect(),
+        })
     })
     .await
 }
@@ -720,7 +759,8 @@ fn names_from(rows: &[JsonRow], keys: &[&str], fallback: &str) -> Vec<String> {
 
 fn normalize_column(row: &JsonRow) -> ColumnInfo {
     let default_value = get_value(row, &["defaultValue", "Default", "COLUMN_DEFAULT"]);
-    let is_primary_key = number_eq(row.get("pk"), 1)
+    let is_primary_key = get_bool(row, &["isPrimaryKey", "is_primary_key"]).unwrap_or(false)
+        || number_eq(row.get("pk"), 1)
         || string_eq(row.get("Key"), "PRI")
         || number_eq(row.get("is_identity"), 1)
         || default_value
