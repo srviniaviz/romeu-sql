@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
+import "@fontsource-variable/inter/opsz.css";
+import "@fontsource-variable/geist-mono";
 import "./index.css";
 import "./i18n/config";
 import { benchmarkStronghold } from "./domain/connections/secretsRepository";

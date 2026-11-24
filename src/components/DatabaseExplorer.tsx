@@ -575,7 +575,7 @@ export function DatabaseExplorer({
         onDisconnect={onDisconnect}
       />
 
-      <div className={isDiagramOpen ? "min-h-0 flex-1 overflow-hidden" : selectedTable ? "min-h-0 flex-1 overflow-hidden p-5" : "min-h-0 flex-1 space-y-4 overflow-auto p-5"}>
+      <div className={isDiagramOpen ? "min-h-0 flex-1 overflow-hidden" : selectedTable ? "min-h-0 flex-1 overflow-hidden p-5" : "min-h-0 flex-1 space-y-4 overflow-auto bg-muted/20 p-5"}>
         {isDiagramOpen ? (
           <SchemaDiagram
             data={schemaDiagramQuery.data}
@@ -720,7 +720,7 @@ export function DatabaseExplorer({
         </div>
       )}
 
-      <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border/30 bg-background px-3 text-[11px] text-muted-foreground">
+      <footer className="flex h-6 shrink-0 items-center justify-between border-t border-border bg-chrome px-3 text-[11px] text-muted-foreground">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate">{connection.database || connection.name}</span>
           <span className="text-muted-foreground/40">•</span>

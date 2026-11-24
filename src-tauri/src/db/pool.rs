@@ -152,6 +152,162 @@ impl DbPoolState {
         }
     }
 
+    /// Runs one query inside a read-only transaction that is always rolled back.
+    /// Returns at most `max_rows` rows and whether more rows were available.
+    pub async fn select_read_only(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+        max_rows: usize,
+    ) -> Result<(Vec<JsonRow>, bool), String> {
+        let started = Instant::now();
+        let result = match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let mut tx = pool.begin_with("BEGIN READ ONLY").await.map_err(to_error)?;
+                let wrapped = postgres_text_wrapped_query(sql);
+                let rows = collect_limited(
+                    sqlx::query(&wrapped).fetch(&mut *tx),
+                    max_rows,
+                    pg_row_to_json,
+                )
+                .await;
+                let _ = tx.rollback().await;
+                rows?
+            }
+            DatabasePool::Mysql(pool) => {
+                let mut tx = pool
+                    .begin_with("START TRANSACTION READ ONLY")
+                    .await
+                    .map_err(to_error)?;
+                let rows = collect_limited(
+                    sqlx::query(sql).fetch(&mut *tx),
+                    max_rows,
+                    mysql_row_to_json,
+                )
+                .await;
+                let _ = tx.rollback().await;
+                rows?
+            }
+            DatabasePool::Sqlite(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                sqlx::query("PRAGMA query_only = ON")
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?;
+                let rows = collect_limited(
+                    sqlx::query(sql).fetch(&mut *tx),
+                    max_rows,
+                    sqlite_row_to_json,
+                )
+                .await;
+                let _ = tx.rollback().await;
+                rows?
+            }
+        };
+        log_slow("select_read_only", started, sql);
+        Ok(result)
+    }
+
+    /// Runs one data-changing statement in its own transaction and commits it.
+    pub async fn execute_write(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+    ) -> Result<u64, String> {
+        let started = Instant::now();
+        let rows = match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                let rows = sqlx::query(sql)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                tx.commit().await.map_err(to_error)?;
+                rows
+            }
+            DatabasePool::Mysql(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                let rows = sqlx::query(sql)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                tx.commit().await.map_err(to_error)?;
+                rows
+            }
+            DatabasePool::Sqlite(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                sqlx::query("PRAGMA query_only = OFF")
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?;
+                let rows = sqlx::query(sql)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                tx.commit().await.map_err(to_error)?;
+                rows
+            }
+        };
+        log_slow("execute_write", started, sql);
+        Ok(rows)
+    }
+
+    /// Runs a statement inside a transaction and commits only if it touched exactly one row.
+    pub async fn execute_single_row(
+        &self,
+        connection: &ConnectionInput,
+        sql: &str,
+        values: &[Value],
+    ) -> Result<u64, String> {
+        let started = Instant::now();
+        let rows = match self.get(connection).await? {
+            DatabasePool::Postgres(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_pg(query, value);
+                }
+                let rows = query
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                finish_single_row_tx(tx, rows).await?
+            }
+            DatabasePool::Mysql(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_mysql(query, value);
+                }
+                let rows = query
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                finish_single_row_tx(tx, rows).await?
+            }
+            DatabasePool::Sqlite(pool) => {
+                let mut tx = pool.begin().await.map_err(to_error)?;
+                let mut query = sqlx::query(sql);
+                for value in values {
+                    query = bind_sqlite(query, value);
+                }
+                let rows = query
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(to_error)?
+                    .rows_affected();
+                finish_single_row_tx(tx, rows).await?
+            }
+        };
+        log_slow("execute_single_row", started, sql);
+        Ok(rows)
+    }
+
     pub async fn export_query(
         &self,
         connection: &ConnectionInput,
@@ -380,6 +536,43 @@ fn postgres_text_wrapped_query(sql: &str) -> String {
 fn to_error(error: sqlx::Error) -> String {
     error.to_string()
 }
+
+async fn collect_limited<R, S>(
+    mut stream: S,
+    max_rows: usize,
+    to_json: fn(&R) -> Result<JsonRow, String>,
+) -> Result<(Vec<JsonRow>, bool), String>
+where
+    S: futures_util::Stream<Item = Result<R, sqlx::Error>> + Unpin,
+{
+    let mut rows = Vec::new();
+    while let Some(row) = stream.try_next().await.map_err(to_error)? {
+        if rows.len() == max_rows {
+            return Ok((rows, true));
+        }
+        rows.push(to_json(&row)?);
+    }
+    Ok((rows, false))
+}
+
+async fn finish_single_row_tx<DB: sqlx::Database>(
+    tx: sqlx::Transaction<'_, DB>,
+    rows: u64,
+) -> Result<u64, String> {
+    if rows == 1 {
+        tx.commit().await.map_err(to_error)?;
+        return Ok(rows);
+    }
+    tx.rollback().await.map_err(to_error)?;
+    if rows == 0 {
+        Err(ROW_NOT_FOUND_ERROR.to_string())
+    } else {
+        Err(format!("{MULTIPLE_ROWS_ERROR_PREFIX}{rows}"))
+    }
+}
+
+pub const ROW_NOT_FOUND_ERROR: &str = "ROMEU_ROW_NOT_FOUND";
+pub const MULTIPLE_ROWS_ERROR_PREFIX: &str = "ROMEU_MULTIPLE_ROWS:";
 
 fn bind_pg<'q>(
     query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,

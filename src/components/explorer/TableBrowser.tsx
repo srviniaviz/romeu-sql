@@ -71,10 +71,10 @@ export function TableBrowser({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-4">
+    <section className="mx-auto max-w-6xl space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-[14px] font-semibold text-foreground">{t("table_browser.title")}</h3>
+          <h3 className="text-[15px] font-semibold tracking-tight text-foreground">{t("table_browser.title")}</h3>
           <p className="text-[12px] text-muted-foreground">{t("table_browser.description")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -85,7 +85,7 @@ export function TableBrowser({
               onChange={(event) => setSearch(event.target.value)}
               placeholder={t("shell.search_tables")}
               aria-label={t("shell.search_tables")}
-              className="h-8 border-border/50 bg-background pl-8 text-[12px] shadow-none"
+              className="h-8 pl-8 text-[12px]"
             />
           </div>
           <Button
@@ -105,9 +105,9 @@ export function TableBrowser({
         <BenchmarkPanel benchmark={benchmark} benchmarking={benchmarking} error={benchmarkError} />
       )}
 
-      <div className="px-3 pb-3">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
         <table className="w-full text-left text-[12px]">
-          <thead className="text-muted-foreground">
+          <thead className="border-b border-border bg-muted/50 text-[11.5px] text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">{t("table_browser.name")}</th>
               <th className="px-3 py-2 font-medium">{t("table_browser.type")}</th>
@@ -116,23 +116,25 @@ export function TableBrowser({
               <th className="w-20 px-3 py-2" />
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/70">
             {filteredTables.map((table) => {
               const stats = statsByName.get(table.name);
               const tableType = table.type || stats?.type || "table";
               const isView = tableType.includes("view");
               return (
-                <tr key={table.name} className="group cursor-pointer rounded-md hover:bg-muted/25" onClick={() => onSelectTable(table.name)}>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      {isView ? <Eye size={14} className="text-muted-foreground" /> : <Table size={14} className="text-muted-foreground" />}
-                      <span className="font-semibold text-foreground">{table.name}</span>
+                <tr key={table.name} className="group cursor-pointer transition-colors hover:bg-primary/[0.04]" onClick={() => onSelectTable(table.name)}>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                        {isView ? <Eye size={13} /> : <Table size={13} />}
+                      </span>
+                      <span className="font-medium text-foreground">{table.name}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">{tableType}</td>
+                  <td className="px-3 py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{tableType}</span></td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatRows(stats?.estimatedRows ?? null)}</td>
                   <td className="px-3 py-2 font-mono text-muted-foreground">{formatBytes(stats?.totalBytes ?? null)}</td>
-                  <td className="px-3 py-2 text-right text-primary opacity-0 transition-opacity group-hover:opacity-100">{t("table_browser.open")}</td>
+                  <td className="px-3 py-2 text-right font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">{t("table_browser.open")}</td>
                 </tr>
               );
             })}
@@ -161,7 +163,7 @@ function BenchmarkPanel({
   const topTables = benchmark?.tables.slice(0, 6) ?? [];
 
   return (
-    <div className="mx-5 rounded-lg bg-muted/20 p-4">
+    <div className="rounded-lg border border-border bg-card p-4 shadow-xs">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <BarChart3 size={16} className="text-primary" />
@@ -198,7 +200,7 @@ function BenchmarkPanel({
 
           <div className="mt-4 grid gap-2">
             {topTables.map((table) => (
-              <div key={table.tableName} className="rounded-md bg-background/70 p-3">
+              <div key={table.tableName} className="rounded-md border border-border/70 bg-background p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-foreground">{table.tableName}</div>
@@ -235,7 +237,7 @@ function BenchmarkPanel({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-background/70 p-3">
+    <div className="rounded-md border border-border/70 bg-background p-3">
       <div className="text-[11px] text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-[15px] font-semibold text-foreground">{value}</div>
     </div>

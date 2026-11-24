@@ -24,7 +24,10 @@ fn normalized_timeout_ms(query_timeout_ms: Option<u64>) -> u64 {
         .clamp(MIN_QUERY_TIMEOUT_MS, MAX_QUERY_TIMEOUT_MS)
 }
 
-async fn with_query_timeout<T, F>(query_timeout_ms: Option<u64>, future: F) -> DbResult<T>
+pub(crate) async fn with_query_timeout<T, F>(
+    query_timeout_ms: Option<u64>,
+    future: F,
+) -> DbResult<T>
 where
     F: Future<Output = DbResult<T>>,
 {
@@ -84,37 +87,40 @@ pub async fn db_list_tables(
         let rows = state
             .select(&connection, &dialect::list_tables(&connection))
             .await?;
-        Ok(rows
-            .iter()
-            .map(|row| {
-                let name = row
-                    .get("name")
-                    .or_else(|| row.get("TABLE_NAME"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let table_type = row
-                    .get("type")
-                    .or_else(|| row.get("TABLE_TYPE"))
-                    .and_then(|v| v.as_str())
-                    .map(|t| {
-                        if t.eq_ignore_ascii_case("view") {
-                            "view".to_string()
-                        } else {
-                            "table".to_string()
-                        }
-                    })
-                    .unwrap_or_else(|| "table".to_string());
-                TableInfo {
-                    name,
-                    table_type,
-                    estimated_rows: None,
-                    total_bytes: None,
-                }
-            })
-            .collect())
+        Ok(tables_from_rows(&rows))
     })
     .await
+}
+
+pub(crate) fn tables_from_rows(rows: &[JsonRow]) -> Vec<TableInfo> {
+    rows.iter()
+        .map(|row| {
+            let name = row
+                .get("name")
+                .or_else(|| row.get("TABLE_NAME"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let table_type = row
+                .get("type")
+                .or_else(|| row.get("TABLE_TYPE"))
+                .and_then(|v| v.as_str())
+                .map(|t| {
+                    if t.eq_ignore_ascii_case("view") {
+                        "view".to_string()
+                    } else {
+                        "table".to_string()
+                    }
+                })
+                .unwrap_or_else(|| "table".to_string());
+            TableInfo {
+                name,
+                table_type,
+                estimated_rows: None,
+                total_bytes: None,
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -666,7 +672,7 @@ pub async fn db_update_row(
                     _ => value.clone(),
                 }),
         );
-        state.execute(&connection, &sql, &values).await?;
+        state.execute_single_row(&connection, &sql, &values).await?;
         Ok(sql)
     })
     .await
@@ -740,7 +746,7 @@ pub async fn db_create_database(
     .await
 }
 
-fn names_from(rows: &[JsonRow], keys: &[&str], fallback: &str) -> Vec<String> {
+pub(crate) fn names_from(rows: &[JsonRow], keys: &[&str], fallback: &str) -> Vec<String> {
     let names = rows
         .iter()
         .filter_map(|row| {
@@ -757,7 +763,7 @@ fn names_from(rows: &[JsonRow], keys: &[&str], fallback: &str) -> Vec<String> {
     }
 }
 
-fn normalize_column(row: &JsonRow) -> ColumnInfo {
+pub(crate) fn normalize_column(row: &JsonRow) -> ColumnInfo {
     let default_value = get_value(row, &["defaultValue", "Default", "COLUMN_DEFAULT"]);
     let is_primary_key = get_bool(row, &["isPrimaryKey", "is_primary_key"]).unwrap_or(false)
         || number_eq(row.get("pk"), 1)
@@ -782,7 +788,7 @@ fn normalize_column(row: &JsonRow) -> ColumnInfo {
     }
 }
 
-fn normalize_foreign_key(row: &JsonRow) -> ForeignKeyInfo {
+pub(crate) fn normalize_foreign_key(row: &JsonRow) -> ForeignKeyInfo {
     ForeignKeyInfo {
         source_column: get_string(row, &["sourceColumn", "COLUMN_NAME", "from"]),
         target_table: get_string(row, &["targetTable", "REFERENCED_TABLE_NAME", "table"]),
@@ -790,7 +796,7 @@ fn normalize_foreign_key(row: &JsonRow) -> ForeignKeyInfo {
     }
 }
 
-fn normalize_index(row: &JsonRow) -> IndexInfo {
+pub(crate) fn normalize_index(row: &JsonRow) -> IndexInfo {
     let non_unique = row.get("Non_unique").and_then(value_to_i64);
     IndexInfo {
         name: get_string(row, &["name", "indexname", "Key_name", "INDEX_NAME"]),

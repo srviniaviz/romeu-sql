@@ -1,9 +1,29 @@
-import { useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Ban,
+  KeyRound,
+  Lock,
+  MoreHorizontal,
+  RotateCcw,
+  Search,
+  Unlock,
+  WandSparkles,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ColumnInfo } from "@/domain/database/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type EditorMode = "insert" | "edit";
 type FieldKind = "text" | "integer" | "decimal" | "boolean" | "json" | "date" | "binary" | "enum";
@@ -19,11 +39,6 @@ interface RowDataEditorProps {
   submitLabel: string;
 }
 
-interface FieldState {
-  raw: string;
-  touched: boolean;
-}
-
 interface ParsedField {
   column: ColumnInfo;
   kind: FieldKind;
@@ -34,15 +49,7 @@ interface ParsedField {
 }
 
 const DEFAULT_TOKEN = "__ROMEUSQL_DEFAULT__";
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  field: ParsedField;
-}
-
-const FIELD_MENU_WIDTH = 240;
-const FIELD_MENU_MAX_HEIGHT = 300;
+const NULL_TOKEN = "__ROMEUSQL_NULL__";
 
 function normalizeType(type: string) {
   return type.toLowerCase().replace(/\s+/g, " ").trim();
@@ -64,53 +71,47 @@ function hasDefault(column: ColumnInfo) {
   return column.defaultValue !== null && column.defaultValue !== undefined && String(column.defaultValue).trim() !== "";
 }
 
-function cleanStringLiteral(value: string) {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return value;
-}
-
 function valueToRaw(value: unknown, kind: FieldKind) {
   if (value === undefined) return "";
-  if (value === null) return "null";
+  if (value === null) return NULL_TOKEN;
   if (kind === "json") return JSON.stringify(value, null, 2);
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
-function defaultRawFor(column: ColumnInfo, mode: EditorMode) {
-  const kind = getFieldKind(column.type, column);
-  if (mode === "insert" && (column.isPrimaryKey || hasDefault(column))) return DEFAULT_TOKEN;
-  if (column.nullable) return "null";
+function emptyRawFor(kind: FieldKind) {
   if (kind === "boolean") return "false";
   if (kind === "integer" || kind === "decimal") return "0";
   if (kind === "json") return "{}";
   return "";
 }
 
+function defaultRawFor(column: ColumnInfo, mode: EditorMode) {
+  const kind = getFieldKind(column.type, column);
+  if (mode === "insert" && (column.isPrimaryKey || hasDefault(column))) return DEFAULT_TOKEN;
+  if (column.nullable) return NULL_TOKEN;
+  if (kind === "enum") return column.enumValues?.[0] ?? "";
+  return emptyRawFor(kind);
+}
+
 function parseField(column: ColumnInfo, raw: string, mode: EditorMode): ParsedField {
   const kind = getFieldKind(column.type, column);
   const trimmed = raw.trim();
 
-  if (trimmed === DEFAULT_TOKEN) {
+  if (raw === DEFAULT_TOKEN) {
     if (mode === "insert") return { column, kind, raw, include: false };
     return { column, kind, raw, include: false, error: "required_field" };
   }
 
-  if (trimmed.length === 0) {
-    if (mode === "insert" && (column.isPrimaryKey || hasDefault(column))) return { column, kind, raw, include: false };
-    if (kind === "text" || kind === "binary" || kind === "date") return { column, kind, raw, include: true, value: "" };
+  if (raw === NULL_TOKEN) {
     if (column.nullable) return { column, kind, raw, include: true, value: null };
-    return { column, kind, raw, include: false, error: "required_field" };
+    return { column, kind, raw, include: false, error: "not_nullable" };
   }
 
-  if (trimmed.toLowerCase() === "null") {
-    if (column.nullable || mode === "edit") return { column, kind, raw, include: true, value: null };
-    return { column, kind, raw, include: false, error: "not_nullable" };
+  if (trimmed.length === 0) {
+    if (mode === "insert" && (column.isPrimaryKey || hasDefault(column))) return { column, kind, raw, include: false };
+    if (kind === "text" || kind === "binary") return { column, kind, raw, include: true, value: "" };
+    return { column, kind, raw, include: false, error: column.nullable ? "empty_value" : "required_field" };
   }
 
   if (kind === "boolean") {
@@ -141,49 +142,25 @@ function parseField(column: ColumnInfo, raw: string, mode: EditorMode): ParsedFi
   }
 
   if (kind === "date") {
-    const value = cleanStringLiteral(raw).trim();
-    if (!Number.isNaN(Date.parse(value)) || /^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
-      return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value } };
+    if (!Number.isNaN(Date.parse(trimmed)) || /^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(trimmed)) {
+      return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value: trimmed } };
     }
     return { column, kind, raw, include: false, error: "date_error" };
   }
 
   if (kind === "binary") {
-    const value = cleanStringLiteral(raw).trim();
-    if (!/^\\x[0-9a-f]+$/i.test(value)) return { column, kind, raw, include: false, error: "binary_error" };
-    return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value } };
+    if (!/^\\x[0-9a-f]+$/i.test(trimmed)) return { column, kind, raw, include: false, error: "binary_error" };
+    return { column, kind, raw, include: true, value: { __romeuSqlType: column.type, value: trimmed } };
   }
 
   if (kind === "enum") {
-    const value = cleanStringLiteral(raw).trim();
-    if (column.enumValues?.length && !column.enumValues.includes(value)) {
+    if (column.enumValues?.length && !column.enumValues.includes(trimmed)) {
       return { column, kind, raw, include: false, error: "enum_error" };
     }
-    return { column, kind, raw, include: true, value: { __romeuSqlEnum: column.type, value } };
+    return { column, kind, raw, include: true, value: { __romeuSqlEnum: column.type, value: trimmed } };
   }
 
-  return { column, kind, raw, include: true, value: cleanStringLiteral(raw) };
-}
-
-function literalClass(kind: FieldKind, error?: string) {
-  if (error) return "text-destructive";
-  if (kind === "json") return "text-fuchsia-700 dark:text-fuchsia-300";
-  if (kind === "boolean") return "text-indigo-700 dark:text-violet-300";
-  if (kind === "integer" || kind === "decimal") return "text-blue-700 dark:text-sky-300";
-  if (kind === "date") return "text-cyan-700 dark:text-cyan-300";
-  if (kind === "binary") return "text-amber-700 dark:text-amber-300";
-  if (kind === "enum") return "text-violet-700 dark:text-violet-300";
-  return "text-emerald-700 dark:text-stone-200";
-}
-
-function displayRaw(raw: string, kind: FieldKind) {
-  if (raw === DEFAULT_TOKEN) return "<default>";
-  if (kind === "text" || kind === "date" || kind === "binary") return raw;
-  return raw;
-}
-
-function randomId() {
-  return crypto.randomUUID();
+  return { column, kind, raw, include: true, value: raw };
 }
 
 function randomInt() {
@@ -209,43 +186,12 @@ function sampleString(column: ColumnInfo) {
   return `${column.name}_value`;
 }
 
-function generatedValueFor(field: ParsedField) {
-  if (field.kind === "boolean") return "true";
-  if (field.kind === "integer") return randomInt();
-  if (field.kind === "decimal") return randomDecimal();
-  if (field.kind === "json") return JSON.stringify({ active: true, meta: field.column.name }, null, 2);
-  if (field.kind === "date") return new Date().toISOString();
-  if (field.kind === "binary") return randomHex();
-  if (field.kind === "enum") return field.column.enumValues?.[0] ?? sampleString(field.column);
-  return sampleString(field.column);
-}
-
-function contextOptions(field: ParsedField, mode: EditorMode, t: (key: string) => string) {
-  const options: Array<{ label: string; value: string; disabled?: boolean }> = [
-    { label: t("row_editor.context.fill_value"), value: generatedValueFor(field) },
-  ];
-  if (field.column.nullable || mode === "edit") options.push({ label: t("row_editor.context.null"), value: "null" });
-  if (mode === "insert" && (field.column.isPrimaryKey || hasDefault(field.column))) {
-    options.push({ label: t("row_editor.context.default"), value: DEFAULT_TOKEN });
-  }
-
-  if (field.kind === "enum" && field.column.enumValues?.length) {
-    options.push(...field.column.enumValues.map((value) => ({ label: value, value })));
-  } else if (field.kind === "boolean") {
-    options.push(
-      { label: "true", value: "true" },
-      { label: "false", value: "false" }
-    );
-  } else if (field.kind === "integer") {
-    options.push(
-      { label: t("row_editor.context.zero"), value: "0" },
-      { label: t("row_editor.context.random_int"), value: randomInt() }
-    );
+function quickValues(field: ParsedField, t: (key: string) => string) {
+  const options: Array<{ label: string; value: string }> = [];
+  if (field.kind === "integer") {
+    options.push({ label: t("row_editor.context.zero"), value: "0" }, { label: t("row_editor.context.random_int"), value: randomInt() });
   } else if (field.kind === "decimal") {
-    options.push(
-      { label: t("row_editor.context.zero"), value: "0" },
-      { label: t("row_editor.context.random_decimal"), value: randomDecimal() }
-    );
+    options.push({ label: t("row_editor.context.zero"), value: "0" }, { label: t("row_editor.context.random_decimal"), value: randomDecimal() });
   } else if (field.kind === "json") {
     options.push(
       { label: t("row_editor.context.empty_object"), value: "{}" },
@@ -259,119 +205,213 @@ function contextOptions(field: ParsedField, mode: EditorMode, t: (key: string) =
     );
   } else if (field.kind === "binary") {
     options.push({ label: t("row_editor.context.random_hex"), value: randomHex() });
-  } else {
+  } else if (field.kind === "text") {
     options.push(
+      { label: t("row_editor.context.uuid"), value: crypto.randomUUID() },
       { label: t("row_editor.context.sample_text"), value: sampleString(field.column) },
-      { label: t("row_editor.context.uuid"), value: randomId() },
       { label: t("row_editor.context.empty_string"), value: "" }
     );
   }
   return options;
 }
 
-function EditableLiteral({
-  parsed,
-  onChange,
-  onContextMenu,
-}: {
-  parsed: ParsedField;
-  onChange?: (name: string, value: string) => void;
-  onContextMenu?: (event: React.MouseEvent, field: ParsedField) => void;
-}) {
-  const displayValue = displayRaw(parsed.raw, parsed.kind);
-  const shouldUseTextarea = parsed.kind === "json" || displayValue.length > 72 || displayValue.includes("\n");
-  const className = cn(
-    "rounded bg-transparent px-1 py-0.5 font-mono outline-none focus:bg-primary/10 focus:ring-1 focus:ring-primary/30 disabled:cursor-default",
-    literalClass(parsed.kind, parsed.error)
-  );
+function previewRaw(raw: string) {
+  if (raw === NULL_TOKEN) return "NULL";
+  if (raw === DEFAULT_TOKEN) return "DEFAULT";
+  if (raw === "") return '""';
+  return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+}
 
-  if (shouldUseTextarea) {
+const controlClass =
+  "w-full min-w-0 rounded-md border border-input bg-card px-2.5 font-mono text-[12px] text-foreground shadow-xs outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60";
+
+function FieldControl({
+  field,
+  disabled,
+  invalid,
+  autoFocus,
+  onChange,
+  onActivate,
+}: {
+  field: ParsedField;
+  disabled: boolean;
+  invalid: boolean;
+  autoFocus: boolean;
+  onChange: (raw: string) => void;
+  onActivate: () => void;
+}) {
+  const { t } = useTranslation();
+  const { kind, raw, column } = field;
+  const focusOnMount = useCallback(
+    (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null) => {
+      if (!element || !autoFocus) return;
+      element.focus();
+      if (!(element instanceof HTMLSelectElement)) element.select();
+    },
+    [autoFocus]
+  );
+  const invalidClass = invalid && "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20";
+
+  if (raw === NULL_TOKEN || raw === DEFAULT_TOKEN) {
+    const isNull = raw === NULL_TOKEN;
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          onActivate();
+          onChange(kind === "enum" ? column.enumValues?.[0] ?? "" : emptyRawFor(kind));
+        }}
+        className={cn(
+          "flex h-8 w-full items-center justify-between rounded-md border border-dashed px-2.5 text-left text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+          invalid ? "border-destructive/60" : "border-border hover:border-primary/40 hover:bg-primary/[0.03]"
+        )}
+      >
+        <span className="font-mono font-medium italic text-muted-foreground">
+          {isNull ? "NULL" : `DEFAULT${hasDefault(column) ? ` (${String(column.defaultValue)})` : ""}`}
+        </span>
+        <span className="text-[11px] text-muted-foreground">{t("row_editor.set_value")}</span>
+      </button>
+    );
+  }
+
+  if (kind === "boolean") {
+    const current = /^(true|1|yes)$/i.test(raw.trim()) ? "true" : /^(false|0|no)$/i.test(raw.trim()) ? "false" : null;
+    return (
+      <div className={cn("inline-flex h-8 rounded-md bg-muted p-[3px]", invalid && "ring-1 ring-destructive")}>
+        {["true", "false"].map((option) => (
+          <button
+            key={option}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(option)}
+            className={cn(
+              "min-w-16 rounded-[5px] px-3 font-mono text-[12px] font-medium transition-colors disabled:cursor-not-allowed",
+              current === option ? "bg-card text-foreground shadow-sm dark:bg-white/10" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (kind === "enum" && column.enumValues?.length) {
+    return (
+      <select
+        value={raw}
+        disabled={disabled}
+        ref={focusOnMount}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(controlClass, "h-8 pr-7", invalidClass)}
+      >
+        {!column.enumValues.includes(raw) && <option value={raw}>{raw || t("row_editor.select_value")}</option>}
+        {column.enumValues.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  const multiline = kind === "json" || raw.includes("\n") || raw.length > 90;
+  if (multiline) {
+    const lines = raw.split("\n").length;
     return (
       <textarea
-        value={displayValue}
-        disabled={!onChange}
+        value={raw}
+        disabled={disabled}
+        ref={focusOnMount}
         spellCheck={false}
-        rows={Math.max(1, Math.min(8, displayValue.split("\n").length))}
-        className={cn(
-          className,
-          "inline-block min-h-7 w-[min(100%,72rem)] max-w-full resize-y whitespace-pre-wrap align-top leading-6"
-        )}
-        onChange={(event) => onChange?.(parsed.column.name, event.target.value)}
-        onContextMenu={(event) => onContextMenu?.(event, parsed)}
+        rows={Math.max(kind === "json" ? 3 : 2, Math.min(12, lines + (raw.length > 90 && lines === 1 ? 1 : 0)))}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(controlClass, "resize-y py-1.5 leading-5", invalidClass)}
       />
     );
   }
 
+  const placeholder =
+    kind === "date"
+      ? "YYYY-MM-DD HH:MM:SS"
+      : kind === "binary"
+        ? "\\xDEADBEEF"
+        : kind === "integer" || kind === "decimal"
+          ? "0"
+          : "";
+
   return (
     <input
-      value={displayValue}
-      disabled={!onChange}
+      value={raw}
+      disabled={disabled}
+      ref={focusOnMount}
       spellCheck={false}
-      className={cn(className, "inline-block min-w-8")}
-      style={{ width: `${Math.min(Math.max(displayValue.length + 1, 4), 72)}ch` }}
-      onChange={(event) => onChange?.(parsed.column.name, event.target.value)}
-      onContextMenu={(event) => onContextMenu?.(event, parsed)}
-      onKeyDown={(event) => {
-        if (parsed.kind !== "json" && event.key === "Enter") event.preventDefault();
-      }}
+      inputMode={kind === "integer" ? "numeric" : kind === "decimal" ? "decimal" : undefined}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      className={cn(controlClass, "h-8", invalidClass)}
     />
   );
 }
 
-export function RowDataEditor({ mode, columns, initialValue = {}, disabled, cancelLabel, onCancel, onSubmit, submitLabel }: RowDataEditorProps) {
+export function RowDataEditor({ mode, columns, initialValue = {}, disabled = false, cancelLabel, onCancel, onSubmit, submitLabel }: RowDataEditorProps) {
   const { t } = useTranslation();
-  const editorRootRef = useRef<HTMLDivElement | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const editableColumns = useMemo(() => columns, [columns]);
-  const [fields, setFields] = useState<Record<string, FieldState>>(() =>
+  const isEdit = mode === "edit";
+  const initialRaw = useRef<Record<string, string>>(
     Object.fromEntries(
-      editableColumns.map((column) => {
+      columns.map((column) => {
         const kind = getFieldKind(column.type, column);
-        const raw =
-          Object.prototype.hasOwnProperty.call(initialValue, column.name)
-            ? valueToRaw(initialValue[column.name], kind)
-            : defaultRawFor(column, mode);
-        return [column.name, { raw, touched: false }];
+        const raw = Object.prototype.hasOwnProperty.call(initialValue, column.name)
+          ? valueToRaw(initialValue[column.name], kind)
+          : defaultRawFor(column, mode);
+        return [column.name, raw];
       })
     )
-  );
+  ).current;
+  const [fields, setFields] = useState<Record<string, string>>(() => ({ ...initialRaw }));
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [search, setSearch] = useState("");
+  const [onlyChanged, setOnlyChanged] = useState(false);
+  const [unlockedKeys, setUnlockedKeys] = useState<Record<string, boolean>>({});
+  const [focusName, setFocusName] = useState<string | null>(null);
 
   const parsedFields = useMemo(
-    () => editableColumns.map((column) => parseField(column, fields[column.name]?.raw ?? "", mode)),
-    [editableColumns, fields, mode]
+    () => columns.map((column) => parseField(column, fields[column.name] ?? "", mode)),
+    [columns, fields, mode]
   );
-  const errors = parsedFields.filter((field) => field.error);
-  const output = useMemo(
-    () => Object.fromEntries(parsedFields.filter((field) => field.include).map((field) => [field.column.name, field.value])),
-    [parsedFields]
-  );
+  const isDirty = (name: string) => fields[name] !== initialRaw[name];
+  const dirtyCount = parsedFields.filter((field) => isDirty(field.column.name)).length;
+  const errors = parsedFields.filter((field) => field.error && (!isEdit || isDirty(field.column.name)));
+  const canSubmit = !disabled && errors.length === 0 && (!isEdit || dirtyCount > 0);
+
+  const visibleFields = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return parsedFields.filter((field) => {
+      if (onlyChanged && fields[field.column.name] === initialRaw[field.column.name]) return false;
+      if (!term) return true;
+      return field.column.name.toLowerCase().includes(term) || field.column.type.toLowerCase().includes(term);
+    });
+  }, [parsedFields, search, onlyChanged, fields, initialRaw]);
 
   function updateField(name: string, raw: string) {
-    setFields((current) => ({ ...current, [name]: { raw, touched: true } }));
-    setContextMenu(null);
-  }
-
-function openContextMenu(event: React.MouseEvent, field: ParsedField) {
-    if (disabled) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const rect = editorRootRef.current?.getBoundingClientRect();
-    const localX = rect ? event.clientX - rect.left : event.clientX;
-    const localY = rect ? event.clientY - rect.top : event.clientY;
-    const maxX = Math.max(8, (rect?.width ?? window.innerWidth) - FIELD_MENU_WIDTH - 8);
-    const maxY = Math.max(8, (rect?.height ?? window.innerHeight) - FIELD_MENU_MAX_HEIGHT - 8);
-    const x = Math.min(localX, maxX);
-    const y = Math.min(localY, maxY);
-    setContextMenu({ x: Math.max(8, x), y: Math.max(8, y), field });
+    setFields((current) => ({ ...current, [name]: raw }));
+    setTouched((current) => ({ ...current, [name]: true }));
   }
 
   async function handleSubmit() {
-    setFields((current) => Object.fromEntries(Object.entries(current).map(([key, value]) => [key, { ...value, touched: true }])));
-    if (errors.length > 0) return;
+    setSubmitted(true);
+    if (!canSubmit) return;
+    const output = Object.fromEntries(
+      parsedFields
+        .filter((field) => field.include && (!isEdit || isDirty(field.column.name)))
+        .map((field) => [field.column.name, field.value])
+    );
     await onSubmit(output);
   }
 
-  if (editableColumns.length === 0) {
+  if (columns.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-muted-foreground">
         <AlertCircle size={22} />
@@ -381,110 +421,243 @@ function openContextMenu(event: React.MouseEvent, field: ParsedField) {
   }
 
   return (
-    <div ref={editorRootRef} className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-auto p-5 custom-scrollbar" onClick={() => setContextMenu(null)}>
-        <div className="rounded-md bg-muted/20 px-4 py-3 font-mono text-[12px] leading-6 text-foreground">
-          <div>{"{"}</div>
-          <div className="pl-5">
-            {parsedFields.map((field, index) => {
-              const showError = Boolean(field.error && fields[field.column.name]?.touched);
+    <div
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          void handleSubmit();
+        }
+      }}
+    >
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-5 py-2.5">
+        <div className="relative max-w-xs flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("row_editor.search_fields")}
+            aria-label={t("row_editor.search_fields")}
+            className="h-8 pl-8 text-[12px]"
+          />
+        </div>
+        {isEdit && (
+          <button
+            type="button"
+            onClick={() => setOnlyChanged((value) => !value)}
+            aria-pressed={onlyChanged}
+            disabled={dirtyCount === 0 && !onlyChanged}
+            className={cn(
+              "h-8 rounded-md border px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              onlyChanged ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground shadow-xs hover:text-foreground"
+            )}
+          >
+            {t("row_editor.only_changed")}
+          </button>
+        )}
+        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+          {t("row_editor.field_count", { count: columns.length })}
+        </span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
+        {visibleFields.length === 0 ? (
+          <div className="py-14 text-center text-[12px] text-muted-foreground">{t("row_editor.no_matching_fields")}</div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {visibleFields.map((field) => {
+              const { column } = field;
+              const name = column.name;
+              const dirty = isDirty(name);
+              const keyLocked = isEdit && column.isPrimaryKey && !unlockedKeys[name];
+              const showError = Boolean(field.error && (touched[name] || submitted) && (!isEdit || dirty));
+              const quick = quickValues(field, t);
+              const canNull = column.nullable && field.raw !== NULL_TOKEN;
+              const canDefault = !isEdit && (column.isPrimaryKey || hasDefault(column)) && field.raw !== DEFAULT_TOKEN;
+
               return (
-                <div key={field.column.name} className="group relative">
-                  <span className="text-slate-800 dark:text-stone-100">"{field.column.name}"</span>
-                  <span className="text-muted-foreground">: </span>
-                  {field.raw === DEFAULT_TOKEN ? (
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className="rounded px-1 py-0.5 font-mono text-muted-foreground outline-none hover:bg-muted"
-                      onContextMenu={(event) => openContextMenu(event, field)}
-                      onClick={() => updateField(field.column.name, defaultRawFor({ ...field.column, defaultValue: null, isPrimaryKey: false }, "insert"))}
-                    >
-                      &lt;default&gt;
-                    </button>
-                  ) : field.raw.trim().toLowerCase() === "null" ? (
-                    <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
-                  ) : field.kind === "text" || field.kind === "date" || field.kind === "binary" || field.kind === "enum" ? (
-                    <>
-                      <span className="text-muted-foreground">"</span>
-                      <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
-                      <span className="text-muted-foreground">"</span>
-                    </>
-                  ) : (
-                    <EditableLiteral parsed={field} onChange={disabled ? undefined : updateField} onContextMenu={openContextMenu} />
+                <div
+                  key={name}
+                  className={cn(
+                    "relative grid grid-cols-[minmax(150px,220px)_minmax(0,1fr)_88px] items-start gap-x-4 px-5 py-2.5 transition-colors",
+                    dirty && "bg-primary/[0.035]",
+                    showError && "bg-destructive/[0.04]"
                   )}
-                  {index < parsedFields.length - 1 && <span className="text-muted-foreground">,</span>}
-                  <span className="ml-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{field.column.type}</span>
-                  </span>
-                  {showError && (
-                    <div className="ml-4 inline-flex items-center gap-1 text-[11px] text-destructive">
-                      <AlertCircle size={11} />
-                      {t(`row_editor.${field.error}`)}
+                >
+                  {(dirty || showError) && (
+                    <span className={cn("absolute inset-y-0 left-0 w-0.5", showError ? "bg-destructive" : "bg-primary")} />
+                  )}
+
+                  <div className="min-w-0 pt-1">
+                    <div className="flex items-center gap-1.5">
+                      {column.isPrimaryKey && <KeyRound size={12} className="shrink-0 text-amber-500" aria-label={t("row_editor.primary_key")} />}
+                      <span className="truncate font-mono text-[12px] font-medium text-foreground" title={name}>
+                        {name}
+                      </span>
                     </div>
-                  )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="rounded bg-muted px-1.5 py-px font-mono text-[10.5px] text-muted-foreground" title={column.type}>
+                        {column.type.length > 22 ? `${column.type.slice(0, 22)}…` : column.type}
+                      </span>
+                      {!column.nullable && (
+                        <span className="rounded px-1 py-px text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+                          {t("row_editor.not_null")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
+                    <FieldControl
+                      field={field}
+                      disabled={disabled || keyLocked}
+                      invalid={showError}
+                      autoFocus={focusName === name}
+                      onChange={(raw) => updateField(name, raw)}
+                      onActivate={() => setFocusName(name)}
+                    />
+                    {keyLocked && (
+                      <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Lock size={11} />
+                        {t("row_editor.pk_locked")}
+                      </p>
+                    )}
+                    {isEdit && column.isPrimaryKey && !keyLocked && (
+                      <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+                        <AlertCircle size={11} />
+                        {t("row_editor.pk_warning")}
+                      </p>
+                    )}
+                    {isEdit && dirty && (
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground" title={initialRaw[name]}>
+                        {t("row_editor.was")}{" "}
+                        <span className="font-mono line-through decoration-muted-foreground/50">{previewRaw(initialRaw[name])}</span>
+                      </p>
+                    )}
+                    {showError && field.error && (
+                      <p className="mt-1 flex items-center gap-1 text-[11px] text-destructive">
+                        <AlertCircle size={11} />
+                        {t(`row_editor.${field.error}`)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-0.5 pt-0.5">
+                    {isEdit && column.isPrimaryKey && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={disabled}
+                        className="text-muted-foreground"
+                        title={keyLocked ? t("row_editor.unlock_pk") : t("row_editor.lock_pk")}
+                        aria-label={keyLocked ? t("row_editor.unlock_pk") : t("row_editor.lock_pk")}
+                        onClick={() => {
+                          setUnlockedKeys((current) => ({ ...current, [name]: keyLocked }));
+                          if (!keyLocked) updateField(name, initialRaw[name]);
+                        }}
+                      >
+                        {keyLocked ? <Unlock size={13} /> : <Lock size={13} />}
+                      </Button>
+                    )}
+                    {isEdit && dirty && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={disabled}
+                        className="text-muted-foreground"
+                        title={t("row_editor.revert")}
+                        aria-label={t("row_editor.revert")}
+                        onClick={() => updateField(name, initialRaw[name])}
+                      >
+                        <RotateCcw size={13} />
+                      </Button>
+                    )}
+                    {!keyLocked && (canNull || canDefault || quick.length > 0 || field.kind === "json") && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={disabled}
+                            className="text-muted-foreground"
+                            title={t("row_editor.more_actions")}
+                            aria-label={t("row_editor.more_actions")}
+                          >
+                            <MoreHorizontal size={14} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">
+                            {name}
+                          </DropdownMenuLabel>
+                          {canNull && (
+                            <DropdownMenuItem onSelect={() => updateField(name, NULL_TOKEN)}>
+                              <Ban className="size-3.5" />
+                              {t("row_editor.set_null")}
+                            </DropdownMenuItem>
+                          )}
+                          {canDefault && (
+                            <DropdownMenuItem onSelect={() => updateField(name, DEFAULT_TOKEN)}>
+                              <WandSparkles className="size-3.5" />
+                              {t("row_editor.context.default")}
+                            </DropdownMenuItem>
+                          )}
+                          {field.kind === "json" && !field.error && field.raw !== NULL_TOKEN && (
+                            <DropdownMenuItem onSelect={() => updateField(name, JSON.stringify(JSON.parse(field.raw), null, 2))}>
+                              <WandSparkles className="size-3.5" />
+                              {t("row_editor.format_json")}
+                            </DropdownMenuItem>
+                          )}
+                          {quick.length > 0 && (canNull || canDefault || field.kind === "json") && <DropdownMenuSeparator />}
+                          {quick.map((option) => (
+                            <DropdownMenuItem key={option.label} onSelect={() => updateField(name, option.value)}>
+                              <span className="flex-1">{option.label}</span>
+                              <span className="max-w-24 truncate font-mono text-[10.5px] text-muted-foreground">
+                                {option.value === "" ? '""' : option.value}
+                              </span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
-          <div>{"}"}</div>
-        </div>
+        )}
       </div>
 
-      {contextMenu && (
-        <div
-          className="absolute inset-0 z-[80]"
-          onClick={() => setContextMenu(null)}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setContextMenu(null);
-          }}
-        >
-        <div
-          className="absolute z-[81] max-h-[300px] min-w-56 overflow-y-auto rounded-md border border-border/70 bg-popover p-1 text-popover-foreground shadow-xl custom-scrollbar"
-          style={{ left: contextMenu.x, top: contextMenu.y, width: FIELD_MENU_WIDTH }}
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          <div className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-            {contextMenu.field.column.name} · {contextMenu.field.column.type}
-          </div>
-          {contextOptions(contextMenu.field, mode, t).map((option) => (
-            <button
-              key={`${option.label}-${option.value}`}
-              type="button"
-              disabled={option.disabled}
-              className="flex h-8 w-full items-center justify-between rounded px-2 text-left text-[12px] hover:bg-muted disabled:opacity-50"
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                updateField(contextMenu.field.column.name, option.value);
-              }}
-            >
-              <span>{option.label}</span>
-              <span className="max-w-28 truncate font-mono text-[11px] text-muted-foreground">
-                {option.value === DEFAULT_TOKEN ? "<default>" : option.value}
-              </span>
-            </button>
-          ))}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-chrome/50 px-5 py-3">
+        <div className="flex min-w-0 items-center gap-2 text-[12px]">
+          {errors.length > 0 ? (
+            <span className="flex items-center gap-1.5 text-destructive">
+              <AlertCircle size={13} />
+              {t("row_editor.error_count", { count: errors.length })}
+            </span>
+          ) : isEdit ? (
+            <span className={cn("flex items-center gap-1.5", dirtyCount ? "text-foreground" : "text-muted-foreground")}>
+              {dirtyCount > 0 && <span className="size-1.5 rounded-full bg-primary" />}
+              {dirtyCount > 0 ? t("row_editor.changes_count", { count: dirtyCount }) : t("row_editor.no_changes")}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <CheckCircle2 size={13} className="text-primary" />
+              {t("row_editor.ready_to_save")}
+            </span>
+          )}
+          <span className="hidden text-[11px] text-muted-foreground/80 md:inline">· {t("row_editor.save_shortcut")}</span>
         </div>
-        </div>
-      )}
-
-      <div className="flex shrink-0 items-center justify-between border-t border-border/45 px-5 py-4">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          {errors.length ? <AlertCircle size={13} className="text-destructive" /> : <CheckCircle2 size={13} className="text-primary" />}
-          <span className={errors.length ? "text-destructive" : undefined}>
-            {errors.length ? t("row_editor.error_count", { count: errors.length }) : t("row_editor.ready_to_save")}
-          </span>
-        </div>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2">
           {onCancel && (
-            <Button type="button" variant="ghost" disabled={disabled} onClick={onCancel} className="h-9 rounded-md px-4 text-[12px] font-medium text-muted-foreground">
+            <Button type="button" variant="ghost" disabled={disabled} onClick={onCancel} className="h-8 px-3 text-[12px] text-muted-foreground">
               {cancelLabel}
             </Button>
           )}
-          <Button type="button" disabled={disabled || errors.length > 0} onClick={handleSubmit} className="h-9 rounded-md px-5 text-[12px] font-medium">
+          <Button type="button" disabled={disabled || (isEdit && dirtyCount === 0)} onClick={() => void handleSubmit()} className="h-8 px-4 text-[12px]">
             {submitLabel}
           </Button>
         </div>

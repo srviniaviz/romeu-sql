@@ -137,7 +137,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group/db-item flex items-center justify-between gap-2 rounded-md px-2 py-1 cursor-pointer group/item transition-all hover:bg-background/70 ${isCurrentDb ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+        className={`group/db-item flex items-center justify-between gap-2 rounded-md px-2 py-1 cursor-pointer group/item transition-colors hover:bg-foreground/[0.045] ${isCurrentDb ? 'bg-primary/[0.08] text-primary' : 'text-muted-foreground'}`}
         onClick={(e) => {
           e.stopPropagation();
           setIsExpanded((expanded) => {
@@ -184,7 +184,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="ml-4 mt-0.5 flex flex-col gap-0.5 overflow-hidden pl-2"
+            className="ml-[15px] mt-0.5 flex flex-col gap-px overflow-hidden border-l border-border pl-1.5"
           >
             {loading ? (
               <div className="flex items-center gap-2 px-3 py-1 text-[11px] text-muted-foreground">
@@ -195,7 +195,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
               filteredTables.map(table => (
                 <div 
                   key={table.name}
-                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 cursor-pointer group/table transition-all hover:bg-background/70 ${activeTable === table.name && isCurrentDb ? 'bg-primary/10 text-primary' : ''}`}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer group/table transition-colors hover:bg-foreground/[0.045] ${activeTable === table.name && isCurrentDb ? 'bg-primary/[0.08] text-primary' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isCurrentDb) onSelect({ ...conn, database: dbName });
@@ -232,7 +232,7 @@ function DatabaseItem({ conn, dbName, isCurrentDb, onSelect, onCreateAction, onS
         <div
           ref={contextMenuRef}
           role="menu"
-          className="fixed z-[100] min-w-52 rounded-md border border-border bg-popover p-1 shadow-lg"
+          className="fixed z-[100] min-w-52 rounded-lg border border-border bg-popover p-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -355,7 +355,7 @@ export function SidebarConnection({
   return (
     <div className="flex flex-col gap-0.5">
       <div 
-        className={`group flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 transition-all hover:bg-background/70 ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+        className={`group flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 transition-colors ${isActive ? 'bg-card text-foreground shadow-xs ring-1 ring-border' : 'text-muted-foreground hover:bg-foreground/[0.045]'}`}
         onClick={() => {
           onSelect(conn);
           setIsExpanded(!isExpanded);
@@ -378,7 +378,7 @@ export function SidebarConnection({
                 />
               )}
             </div>
-            <span className={`truncate text-[12px] font-medium transition-colors ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+            <span className={`truncate text-[12px] font-medium transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`}>
               {conn.name}
             </span>
           </div>
@@ -391,7 +391,7 @@ export function SidebarConnection({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-6 rounded-md text-primary hover:bg-primary/10"
+                  className="size-6 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   onClick={(e) => onDisconnect(e)}
                   title={t("explorer.disconnect")}
                 >
@@ -479,7 +479,7 @@ export function SidebarConnection({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col gap-0.5 py-1 pl-6 pr-2">
+            <div className="ml-[15px] flex flex-col gap-px border-l border-border py-1 pl-1.5 pr-1">
               {databases.map((dbName) => (
                 <DatabaseItem 
                     key={dbName}
@@ -514,12 +514,12 @@ export function SidebarConnection({
 }
 
 function DatabaseEngineIcon({ engine, active }: { engine: DbEngine; active: boolean }) {
-  const baseClass = active ? "text-primary" : "text-muted-foreground group-hover:text-foreground";
+  const baseClass = active ? "bg-primary/10! text-primary" : "text-muted-foreground group-hover:text-foreground";
 
   if (engine === "postgres") {
     return (
       <span
-        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        className={`flex size-5 items-center justify-center rounded-[5px] bg-foreground/[0.05] transition-colors ${baseClass}`}
         title="PostgreSQL"
       >
         <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
@@ -540,7 +540,7 @@ function DatabaseEngineIcon({ engine, active }: { engine: DbEngine; active: bool
   if (engine === "mysql") {
     return (
       <span
-        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        className={`flex size-5 items-center justify-center rounded-[5px] bg-foreground/[0.05] transition-colors ${baseClass}`}
         title="MySQL"
       >
         <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
@@ -560,7 +560,7 @@ function DatabaseEngineIcon({ engine, active }: { engine: DbEngine; active: bool
   if (engine === "sqlite") {
     return (
       <span
-        className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 transition-colors ${baseClass}`}
+        className={`flex size-5 items-center justify-center rounded-[5px] bg-foreground/[0.05] transition-colors ${baseClass}`}
         title="SQLite"
       >
         <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden="true">
@@ -573,7 +573,7 @@ function DatabaseEngineIcon({ engine, active }: { engine: DbEngine; active: bool
 
   return (
     <span
-      className={`flex size-4 items-center justify-center rounded-[5px] bg-background/80 text-[9px] font-semibold leading-none transition-colors ${baseClass}`}
+      className={`flex size-5 items-center justify-center rounded-[5px] bg-foreground/[0.05] text-[9px] font-semibold leading-none transition-colors ${baseClass}`}
       title="SQL Server"
     >
       MS

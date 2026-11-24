@@ -2,6 +2,7 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 import {
   type AppSettings,
   DEFAULT_APP_SETTINGS,
+  type McpAccess,
   type QuerySettings,
   clampNumber,
   clampQueryTimeout,
@@ -9,6 +10,21 @@ import {
 
 const store = new LazyStore("settings.json");
 const SETTINGS_KEY = "app";
+
+function normalizeMcpPermissions(value: unknown): Record<string, McpAccess> {
+  const mcp = (value ?? {}) as { permissions?: unknown; connectionIds?: unknown };
+  const permissions: Record<string, McpAccess> = {};
+  // Earlier builds stored a plain list of shared ids; those were read-only.
+  if (Array.isArray(mcp.connectionIds)) {
+    for (const id of mcp.connectionIds) if (typeof id === "string") permissions[id] = "read";
+  }
+  if (mcp.permissions && typeof mcp.permissions === "object") {
+    for (const [id, access] of Object.entries(mcp.permissions as Record<string, unknown>)) {
+      if (access === "read" || access === "write") permissions[id] = access;
+    }
+  }
+  return permissions;
+}
 
 function normalizeSettings(value: Partial<AppSettings> | null | undefined): AppSettings {
   return {
@@ -51,6 +67,13 @@ function normalizeSettings(value: Partial<AppSettings> | null | undefined): AppS
     advanced: {
       ...DEFAULT_APP_SETTINGS.advanced,
       ...value?.advanced,
+    },
+    mcp: {
+      ...DEFAULT_APP_SETTINGS.mcp,
+      ...value?.mcp,
+      port: clampNumber(value?.mcp?.port ?? DEFAULT_APP_SETTINGS.mcp.port, DEFAULT_APP_SETTINGS.mcp.port, 1024, 65535),
+      maxRows: clampNumber(value?.mcp?.maxRows ?? DEFAULT_APP_SETTINGS.mcp.maxRows, DEFAULT_APP_SETTINGS.mcp.maxRows, 1, 5000),
+      permissions: normalizeMcpPermissions(value?.mcp),
     },
   };
 }

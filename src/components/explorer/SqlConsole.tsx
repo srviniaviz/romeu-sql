@@ -34,13 +34,13 @@ export function SqlConsole({
 }: SqlConsoleProps) {
   const { t } = useTranslation();
   return (
-    <section className="overflow-hidden border-t border-border/50 bg-background shadow-[0_-16px_36px_rgba(15,23,42,0.08)]">
-      <div className="flex h-8 items-center justify-between bg-muted/20 px-3">
-        <div className="flex rounded-md bg-muted/60 p-0.5">
+    <section className="overflow-hidden border-t border-border bg-background shadow-[0_-8px_24px_-12px_hsl(var(--shadow-color)/0.18)]">
+      <div className="flex h-9 items-center justify-between border-b border-border/70 bg-chrome/60 px-2.5">
+        <div className="flex rounded-md bg-muted p-0.5">
           <Button
             variant="ghost"
             size="sm"
-            className={`h-6 rounded px-2.5 text-[12px] ${activeTab === "editor" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            className={`h-6 rounded px-2.5 text-[12px] ${activeTab === "editor" ? "bg-card text-foreground shadow-sm hover:bg-card dark:bg-white/10 dark:hover:bg-white/10" : "text-muted-foreground"}`}
             onClick={() => onActiveTabChange("editor")}
           >
             <Code size={13} className="mr-1.5" />
@@ -49,7 +49,7 @@ export function SqlConsole({
           <Button
             variant="ghost"
             size="sm"
-            className={`h-6 rounded px-2.5 text-[12px] ${activeTab === "history" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            className={`h-6 rounded px-2.5 text-[12px] ${activeTab === "history" ? "bg-card text-foreground shadow-sm hover:bg-card dark:bg-white/10 dark:hover:bg-white/10" : "text-muted-foreground"}`}
             onClick={() => onActiveTabChange("history")}
           >
             <History size={13} className="mr-1.5" />
@@ -85,7 +85,7 @@ export function SqlConsole({
               placeholder="SELECT * FROM table_name LIMIT 100;"
               minHeight="96px"
               dark
-              className="bg-slate-950 shadow-inner"
+              className="overflow-hidden rounded-md border border-border bg-slate-950"
               fontSize={editorSettings.fontSize}
               autocomplete={editorSettings.autocomplete}
             />
@@ -104,7 +104,7 @@ export function SqlConsole({
         ) : (
           <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
             {history.map((entry) => (
-              <div key={entry.id} className="rounded-md bg-muted/30 p-3">
+              <div key={entry.id} className="rounded-md border border-border/70 bg-card p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] font-semibold text-foreground">{entry.action}</span>
                   <span className="text-[11px] text-muted-foreground">{entry.timestamp.toLocaleTimeString()}</span>

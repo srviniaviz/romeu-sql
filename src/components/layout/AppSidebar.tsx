@@ -1,5 +1,6 @@
 import {
   Database,
+  Plus,
   RefreshCw,
   Search,
 } from "lucide-react";
@@ -59,52 +60,64 @@ export function AppSidebar({
   const { t } = useTranslation();
   return (
     <aside
-      className="hidden shrink-0 bg-muted/25 lg:flex lg:flex-col"
+      className="hidden shrink-0 bg-sidebar lg:flex lg:flex-col"
       style={{ width }}
     >
-      <div className="flex h-16 items-center justify-between px-4">
-        <div>
-          <h1 className="text-[18px] font-semibold tracking-tight">{t("shell.workspace")}</h1>
-          <p className="text-[11px] text-muted-foreground">{t("shell.workspace_desc")}</p>
+      <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Database size={15} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-[13px] font-semibold leading-tight tracking-tight">{t("shell.workspace")}</h1>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">{t("shell.workspace_desc")}</p>
+          </div>
         </div>
-        <Database size={18} className="text-primary" />
+        <Button
+          size="sm"
+          className="h-7 shrink-0 gap-1 rounded-md px-2.5 text-[12px] font-medium"
+          onClick={onCreateConnection}
+        >
+          <Plus size={14} />
+          {t("shell.new")}
+        </Button>
       </div>
 
-      <div className="flex items-center justify-between px-4 pb-3 pt-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-medium text-foreground">
-            Connections
+      <div className="px-3 pb-2 pt-1">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder={t("shell.search_connections")}
+            className="h-8 rounded-md border-border bg-card pl-8 text-[12.5px]"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between px-4 pb-1 pt-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {t("shell.connections")}
           </span>
-          <span className="rounded bg-background/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          <span className="rounded-full bg-foreground/[0.06] px-1.5 text-[10.5px] font-semibold tabular-nums leading-4 text-muted-foreground">
             {totalConnections}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" onClick={onRefresh}>
-            <RefreshCw size={14} />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-7 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-primary" onClick={onCreateConnection}>
-            {t("shell.new")}
-          </Button>
-        </div>
-      </div>
-
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder={t("shell.search_connections")}
-              className="h-9 rounded-md border-border/60 bg-background/80 pl-8 text-[13px] shadow-none focus-visible:ring-1 focus-visible:ring-primary"
-            />
-          </div>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-6 rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+          onClick={onRefresh}
+          title={t("shell.refresh_connections")}
+          aria-label={t("shell.refresh_connections")}
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : undefined} />
+        </Button>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-2 pb-8">
+        <div className="px-2 pb-6">
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-2 text-[12px] text-muted-foreground">
               <RefreshCw size={14} className="animate-spin" />
@@ -113,7 +126,7 @@ export function AppSidebar({
           ) : connections.length === 0 ? (
             <button
               type="button"
-              className="mx-2 flex w-[calc(100%-1rem)] flex-col items-start rounded-md bg-background/60 px-3 py-4 text-left text-muted-foreground hover:text-foreground"
+              className="mx-1 mt-1 flex w-[calc(100%-0.5rem)] flex-col items-start rounded-lg border border-dashed border-border px-3 py-4 text-left text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/[0.03] hover:text-foreground"
               onClick={onCreateConnection}
             >
               <span className="text-[13px] font-semibold">{t("shell.no_connections")}</span>

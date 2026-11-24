@@ -1,6 +1,6 @@
 [package]
 name = "romeu-sql"
-version = "0.1.0-alpha.20"
+version = "0.1.0-alpha.21"
 description = "Desktop PostgreSQL client"
 authors = ["Vinicius"]
 edition = "2021"
@@ -31,12 +31,15 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "stream"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "chrono", "uuid", "rust_decimal"] }
 rust_decimal = "1"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "time"] }
 urlencoding = "2"
 tauri-plugin-store = "2.0.0-rc.0"
 tauri-plugin-stronghold = "2"
 tauri-plugin-single-instance = "2"
 sha2 = "0.10"
+rmcp = { version = "3.11.0", features = ["server", "macros", "schemars", "transport-streamable-http-server"] }
+axum = "0.8.9"
+tokio-util = "0.7.20"
 
 [profile.dev.package.scrypt]
 opt-level = 3

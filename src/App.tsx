@@ -16,6 +16,7 @@ import { loadSettings } from "./domain/settings/repository";
 import { DEFAULT_APP_SETTINGS } from "./domain/settings/types";
 import { useSettings } from "./domain/settings/useSettings";
 import { useWorkspaceTabs } from "./domain/workspace/useWorkspaceTabs";
+import { useMcpServer } from "./domain/mcp/useMcpServer";
 import { useConnections, type Connection } from "./lib/useConnections";
 
 const SIDEBAR_WIDTH_KEY = "romeu-sql:sidebar-width";
@@ -42,6 +43,7 @@ function App() {
   const { connections, loading, removeConnection, refresh } = useConnections();
   const { settings } = useSettings();
   const appSettings = settings ?? DEFAULT_APP_SETTINGS;
+  useMcpServer(connections, appSettings);
   const {
     tabs: openTabs,
     activeTab,
@@ -309,10 +311,10 @@ function App() {
               role="separator"
               aria-orientation="vertical"
               aria-label={t("shell.resize_sidebar")}
-              className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch justify-center bg-muted/25 lg:flex"
+              className="group relative z-10 -mx-[3px] hidden w-[7px] shrink-0 cursor-col-resize items-stretch justify-center lg:flex"
               onPointerDown={startSidebarResize}
             >
-              <div className="h-full w-px bg-border/40 transition-colors group-hover:bg-primary/60" />
+              <div className="h-full w-px bg-border transition-[background-color,width] group-hover:w-0.5 group-hover:bg-primary/60" />
             </div>
 
             <WorkspacePanel

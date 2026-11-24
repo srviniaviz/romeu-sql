@@ -55,11 +55,11 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
     >
       <DialogContent
         showCloseButton={!loading}
-        className="max-w-[980px] overflow-hidden rounded-lg border-border/60 bg-background p-0 shadow-2xl"
+        className="flex max-h-[86vh] max-w-[980px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[980px]"
       >
-        <DialogHeader className="border-b border-border/50 px-6 py-5">
-          <DialogTitle className="flex items-center gap-2 text-[16px] font-semibold tracking-tight">
-            <Plus size={17} className="text-primary" />
+        <DialogHeader className="shrink-0 gap-1 border-b border-border px-5 py-3.5 pr-12">
+          <DialogTitle className="flex items-center gap-2">
+            <Plus size={15} className="text-primary" />
             {t('modal_insert.title', { tableName })}
           </DialogTitle>
           <DialogDescription className="text-[12px] text-muted-foreground">
@@ -67,7 +67,7 @@ export function InsertDataModal({ isOpen, onClose, tableName, onInsert, columns 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex max-h-[78vh] flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           <RowDataEditor
             key={`${tableName}-${isOpen}`}
             mode="insert"

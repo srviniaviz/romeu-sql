@@ -19,6 +19,7 @@ import {
   Trash2,
   X,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
@@ -26,6 +27,7 @@ import type { ColumnInfo, DeleteCascadeImpact, ExportFormat, ForeignKeyInfo, Ind
 import { pickSaveFile, saveTextFile } from "@/lib/exportFile";
 import { SqlEditor } from "@/components/ui/SqlEditor";
 import { RowDataEditor } from "@/components/explorer/RowDataEditor";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { useSettings } from "@/domain/settings/useSettings";
 import { DEFAULT_APP_SETTINGS } from "@/domain/settings/types";
@@ -137,8 +139,31 @@ function sortRowObject(row: Record<string, unknown>) {
   return Object.fromEntries(sortRowKeys(row).map((key) => [key, row[key]]));
 }
 
-function valuesEqual(left: unknown, right: unknown) {
-  return JSON.stringify(left) === JSON.stringify(right);
+function unwrapTypedValue(value: unknown) {
+  if (value && typeof value === "object" && "value" in value && ("__romeuSqlType" in value || "__romeuSqlEnum" in value)) {
+    return (value as { value: unknown }).value;
+  }
+  return value;
+}
+
+function valuesEqual(original: unknown, next: unknown) {
+  const unwrapped = unwrapTypedValue(next);
+  if (typeof original === "string" && typeof unwrapped === "string") return original === unwrapped;
+  return JSON.stringify(original) === JSON.stringify(unwrapped);
+}
+
+const ROW_NOT_FOUND_ERROR = "ROMEU_ROW_NOT_FOUND";
+const MULTIPLE_ROWS_ERROR_PREFIX = "ROMEU_MULTIPLE_ROWS:";
+
+function describeUpdateError(error: string | undefined, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (!error) return t("common.error");
+  if (error.includes(ROW_NOT_FOUND_ERROR)) return t("toast.update_no_rows");
+  const multiple = error.indexOf(MULTIPLE_ROWS_ERROR_PREFIX);
+  if (multiple >= 0) {
+    const count = Number.parseInt(error.slice(multiple + MULTIPLE_ROWS_ERROR_PREFIX.length), 10);
+    return t("toast.update_multiple_rows", { count: Number.isFinite(count) ? count : 2 });
+  }
+  return error;
 }
 
 function changedRowValues(original: Record<string, unknown>, next: Record<string, unknown>) {
@@ -348,7 +373,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-        primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted/25 text-foreground hover:bg-muted/45"
+        primary ? "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90" : "border border-border bg-card text-foreground shadow-xs hover:bg-muted"
       )}
     >
       {children}
@@ -376,7 +401,7 @@ function IconButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex size-7 items-center justify-center rounded-md bg-muted/25 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex size-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40",
         active && "bg-foreground text-background hover:bg-foreground hover:text-background"
       )}
     >
@@ -394,7 +419,7 @@ function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode:
   ];
 
   return (
-    <div className="inline-flex h-7 items-center rounded-md bg-muted/25 p-0.5">
+    <div className="inline-flex h-7 items-center rounded-md bg-muted p-0.5">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -404,8 +429,8 @@ function ViewToggle({ value, onChange }: { value: DataViewMode; onChange: (mode:
             title={item.title}
             onClick={() => onChange(item.value)}
             className={cn(
-              "flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted/45",
-              value === item.value && "bg-foreground text-background hover:bg-foreground"
+              "flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+              value === item.value && "bg-card text-foreground shadow-sm dark:bg-white/10"
             )}
           >
             <Icon size={13} />
@@ -482,7 +507,7 @@ function DocumentRow({
   const visibleEntries = expanded ? entries : entries.slice(0, cardLimit);
 
   return (
-    <article className="group/row relative overflow-hidden rounded-md border border-border bg-card/70 transition-colors hover:bg-muted/35">
+    <article className="group/row relative overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-colors hover:border-primary/30">
       <div className="absolute left-3 top-3 z-10">
         <IconButton
           title={expanded
@@ -563,30 +588,30 @@ function RowsTable({
 }) {
   const columns = useMemo(() => (rows[0] ? sortRowKeys(rows[0]) : []), [rows]);
   return (
-    <div className={cn("h-full w-full max-w-full overflow-auto rounded-md bg-background", fill && "min-w-0")}>
+    <div className={cn("h-full w-full max-w-full overflow-auto rounded-lg border border-border bg-background shadow-xs", fill && "min-w-0")}>
       <table className="min-w-max border-separate border-spacing-0 text-left text-[12px]">
         <thead>
           <tr>
-            <th className="sticky left-0 top-0 z-30 w-10 min-w-10 bg-background px-2 py-2 text-muted-foreground shadow-[1px_1px_0_hsl(var(--border))]">#</th>
+            <th className="sticky left-0 top-0 z-30 w-10 min-w-10 bg-muted px-2 py-2 text-[11px] font-medium text-muted-foreground shadow-[inset_-1px_-1px_0_var(--border)]">#</th>
             {columns.map((column) => (
-              <th key={column} className="sticky top-0 z-20 min-w-[150px] max-w-[260px] bg-background px-3 py-2 font-medium text-foreground shadow-[0_1px_0_hsl(var(--border))]">
+              <th key={column} className="sticky top-0 z-20 min-w-[150px] max-w-[260px] bg-muted px-3 py-2 font-medium text-foreground shadow-[inset_0_-1px_0_var(--border)]">
                 {column}
               </th>
             ))}
-            {!readOnly && <th className="sticky right-0 top-0 z-30 w-[116px] min-w-[116px] bg-background px-2 py-2 shadow-[-1px_1px_0_hsl(var(--border))]" />}
+            {!readOnly && <th className="sticky right-0 top-0 z-30 w-[116px] min-w-[116px] bg-muted px-2 py-2 shadow-[inset_1px_-1px_0_var(--border)]" />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="group/row hover:bg-muted/25">
-              <td className="sticky left-0 z-10 bg-background px-2 py-1.5 font-mono text-muted-foreground group-hover/row:bg-muted/25">{page * pageSize + rowIndex + 1}</td>
+            <tr key={rowIndex} className="group/row hover:bg-primary/[0.05] [&>td]:border-b [&>td]:border-border/60">
+              <td className="sticky left-0 z-10 bg-background px-2 py-1.5 font-mono text-[11px] text-muted-foreground shadow-[inset_-1px_0_0_var(--border)] group-hover/row:bg-[color-mix(in_oklab,var(--primary)_5%,var(--background))]">{page * pageSize + rowIndex + 1}</td>
               {columns.map((column) => (
                 <td key={column} className="max-w-[260px] truncate px-3 py-1.5 font-mono">
                   <FieldValue value={row[column]} fieldName={column} settings={settings} />
                 </td>
               ))}
               {!readOnly && (
-                <td className="sticky right-0 z-10 bg-background px-2 py-1.5 group-hover/row:bg-muted/25">
+                <td className="sticky right-0 z-10 bg-background px-2 py-1.5 shadow-[inset_1px_0_0_var(--border)] group-hover/row:bg-[color-mix(in_oklab,var(--primary)_5%,var(--background))]">
                   <RowActions row={row} busy={busy} allowDelete={settings.security.allowDeleteRows} onEdit={onEdit} onDelete={onDelete} />
                 </td>
               )}
@@ -624,17 +649,18 @@ function RowEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
-      <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-background shadow-xl">
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/45 px-5">
-          <div>
-            <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.edit_row")}</h2>
-            <p className="text-[12px] text-muted-foreground">{t("data_preview.update_typed_fields")}</p>
-          </div>
-          <IconButton title={t("common.close")} disabled={saving} onClick={onClose}>
-            <X size={14} />
-          </IconButton>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open && !saving) onClose(); }}>
+      <DialogContent
+        showCloseButton={!saving}
+        className="flex max-h-[86vh] w-full max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      >
+        <DialogHeader className="shrink-0 gap-1 border-b border-border px-5 py-3.5 pr-12">
+          <DialogTitle className="flex items-center gap-2">
+            <Edit3 size={14} className="text-primary" />
+            {t("data_preview.edit_row")}
+          </DialogTitle>
+          <DialogDescription className="text-[12px]">{t("data_preview.update_typed_fields")}</DialogDescription>
+        </DialogHeader>
         <RowDataEditor
           key={JSON.stringify(row)}
           mode="edit"
@@ -652,9 +678,14 @@ function RowEditor({
           submitLabel={saving ? t("data_preview.saving") : t("common.save")}
           onSubmit={handleSave}
         />
-        {error && <p className="border-t border-border/40 px-5 py-3 text-[12px] text-destructive">{error}</p>}
-      </div>
-    </div>
+        {error && (
+          <p className="flex shrink-0 items-start gap-2 border-t border-destructive/20 bg-destructive/[0.06] px-5 py-2.5 text-[12px] text-destructive">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span className="whitespace-pre-wrap break-words">{error}</span>
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -683,7 +714,7 @@ function DeleteRowDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
-      <div className="w-full max-w-md overflow-hidden rounded-lg bg-background shadow-xl">
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
         <div className="flex items-start justify-between gap-4 px-5 py-4">
           <div className="flex gap-3">
             <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
@@ -774,7 +805,7 @@ function ExportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-6">
-      <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-background shadow-xl">
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
         <div className="flex h-12 items-center justify-between px-4">
           <div>
             <h2 className="text-[14px] font-semibold text-foreground">{t("data_preview.export_title", { tableName })}</h2>
@@ -799,7 +830,7 @@ function ExportModal({
             <select
               value={format}
               onChange={(event) => setFormat(event.target.value as ExportFormat)}
-              className="h-8 rounded-md bg-muted/25 px-2 text-[12px] outline-none"
+              className="h-8 rounded-md border border-input bg-card px-2 text-[12px] shadow-xs outline-none"
             >
               <option value="csv">CSV</option>
               <option value="xls">Excel</option>
@@ -1177,27 +1208,27 @@ export function DataPreview({
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-background">
       <div className="z-20 shrink-0 bg-background pb-1">
         <div className="flex h-10 items-center gap-2 px-5">
-          <button type="button" onClick={onBack} className="text-muted-foreground hover:text-foreground">
+          <button type="button" onClick={onBack} className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             <ChevronLeft size={14} />
           </button>
           <Database size={15} className="text-foreground" />
           <span className="font-mono text-[13px] font-semibold text-foreground">{selectedTable}</span>
         </div>
 
-        <div className="flex h-11 items-end gap-7 px-5">
+        <div className="flex h-11 items-end gap-6 border-b border-border px-5">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => onActiveTabChange(tab.id)}
               className={cn(
-                "h-11 border-b-2 px-0 text-[13px] font-semibold",
-                activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"
+                "h-11 border-b-2 px-0 text-[13px] font-medium transition-colors",
+                activeTab === tab.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
               {tab.label}
               {tab.count !== undefined && (
-                <span className="ml-1 rounded-full bg-muted/45 px-1.5 py-0.5 text-[11px] text-muted-foreground">{tab.count}</span>
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">{tab.count}</span>
               )}
             </button>
           ))}
@@ -1207,7 +1238,7 @@ export function DataPreview({
           <>
             <div className="space-y-2 px-5 py-2">
               <div className="flex min-h-8 items-center gap-3">
-                <div className="relative flex h-8 flex-1 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+                <div className="relative flex h-8 flex-1 items-center rounded-md border border-input bg-card px-2 text-[12px] shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
                   <Search size={14} className="mr-2 text-muted-foreground" />
                   <span className="mr-2 font-semibold text-foreground">WHERE</span>
                   <input
@@ -1300,7 +1331,7 @@ export function DataPreview({
                   {filterError}
                 </p>
               )}
-              <div className="relative flex h-8 items-center rounded-md bg-muted/25 px-2 text-[12px]">
+              <div className="relative flex h-8 items-center rounded-md border border-input bg-card px-2 text-[12px] shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
                 <span className="mr-2 font-semibold text-foreground">ORDER BY</span>
                 <input
                   ref={sortInputRef}
@@ -1368,14 +1399,14 @@ export function DataPreview({
               </div>
               {message && <pre className="max-h-32 overflow-auto rounded-md bg-muted/25 p-2 font-mono text-[11px] leading-4 text-foreground">{message}</pre>}
               {optionsOpen && (
-                <div className="grid gap-3 rounded-md bg-muted/25 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 rounded-md border border-border bg-muted/40 p-3 text-[12px] md:grid-cols-2 xl:grid-cols-3">
                   <label className="space-y-1">
                     <span className="font-medium text-foreground">{t("data_preview.project")}</span>
                     <input
                       value={rowOptionsDraft.project}
                       onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, project: event.target.value })}
                       placeholder={t("data_preview.project_placeholder")}
-                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                      className="h-8 w-full rounded border border-input bg-card px-2 font-mono outline-none focus:border-ring"
                     />
                   </label>
                   <label className="space-y-1">
@@ -1384,7 +1415,7 @@ export function DataPreview({
                       value={rowOptionsDraft.skip}
                       onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, skip: event.target.value.replace(/\D/g, "") })}
                       placeholder="0"
-                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                      className="h-8 w-full rounded border border-input bg-card px-2 font-mono outline-none focus:border-ring"
                     />
                   </label>
                   <label className="space-y-1">
@@ -1393,7 +1424,7 @@ export function DataPreview({
                       value={rowOptionsDraft.limit}
                       onChange={(event) => onRowOptionsDraftChange({ ...rowOptionsDraft, limit: event.target.value.replace(/\D/g, "") })}
                       placeholder="0"
-                      className="h-8 w-full rounded bg-background px-2 font-mono outline-none"
+                      className="h-8 w-full rounded border border-input bg-card px-2 font-mono outline-none focus:border-ring"
                     />
                   </label>
                 </div>
@@ -1414,7 +1445,7 @@ export function DataPreview({
               </div>
 
               <div className="flex items-center gap-2">
-                <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md bg-muted/25 px-2 text-[12px] outline-none">
+                <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="h-7 rounded-md border border-input bg-card px-2 text-[12px] shadow-xs outline-none">
                   {[10, 25, 50, 100, 250].map((size) => <option key={size} value={size}>{size}</option>)}
                 </select>
                 <span className="min-w-[104px] text-right text-[12px] text-foreground">
@@ -1443,7 +1474,7 @@ export function DataPreview({
             className={cn("grid h-full min-h-0", queryResizing && "select-none")}
             style={{ gridTemplateColumns: `${querySplit}fr 8px ${100 - querySplit}fr` }}
           >
-            <div className="flex min-h-0 min-w-0 flex-col rounded-md bg-muted/25 p-3">
+            <div className="flex min-h-0 min-w-0 flex-col rounded-lg border border-border bg-muted/30 p-3">
               <SqlEditor
                 value={sql}
                 onChange={onSqlChange}
@@ -1470,7 +1501,7 @@ export function DataPreview({
             >
               <div className="h-16 w-px rounded-full bg-border/50 transition-colors group-hover:bg-primary/70" />
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col rounded-md bg-muted/25 p-3">
+            <div className="flex min-h-0 min-w-0 flex-col rounded-lg border border-border bg-muted/30 p-3">
               <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
                 <div>
                   <div className="text-[12px] font-semibold text-foreground">{t("data_preview.result_preview")}</div>
@@ -1486,7 +1517,7 @@ export function DataPreview({
                       type="button"
                       title={t("data_preview.export_result")}
                       disabled={exporting || !queryRows.length || !appSettings.security.allowExports}
-                      className="inline-flex size-7 items-center justify-center rounded-md bg-muted/25 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {exporting ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
                     </button>
@@ -1519,8 +1550,8 @@ export function DataPreview({
             </div>
           </div>
         ) : activeTab === "schema" ? (
-          <div className="rounded-md bg-muted/25 p-2">
-            <div className="mb-2 flex items-center justify-end gap-2">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <div className="flex items-center justify-end gap-2 border-b border-border px-2 py-1.5">
               {schemaMessage && <span className="text-[11px] text-muted-foreground">{schemaMessage}</span>}
               <ToolbarButton onClick={() => void copySchemaJson()}>
                 <Copy size={13} />
@@ -1528,8 +1559,8 @@ export function DataPreview({
               </ToolbarButton>
             </div>
             <table className="w-full text-left text-[12px]">
-              <thead>
-                <tr className="text-muted-foreground">
+              <thead className="border-b border-border bg-muted/50">
+                <tr className="text-[11.5px] text-muted-foreground">
                   <th className="px-3 py-2 font-medium">{t("data_preview.column")}</th>
                   <th className="px-3 py-2 font-medium">{t("data_preview.type")}</th>
                   <th className="px-3 py-2 font-medium">{t("data_preview.nullable")}</th>
@@ -1539,7 +1570,7 @@ export function DataPreview({
               </thead>
               <tbody>
                 {schemaColumns.map((column) => (
-                  <tr key={column.name} className="hover:bg-background">
+                  <tr key={column.name} className="border-t border-border/60 hover:bg-primary/[0.04]">
                     <td className="px-3 py-2 font-mono font-semibold text-foreground">{column.name}</td>
                     <td className="px-3 py-2 font-mono text-muted-foreground">{column.type}</td>
                     <td className="px-3 py-2 text-muted-foreground">{column.nullable ? t("data_preview.yes") : t("data_preview.no")}</td>
@@ -1551,11 +1582,11 @@ export function DataPreview({
             </table>
           </div>
         ) : activeTab === "indexes" ? (
-          <div className="rounded-md bg-muted/25 p-2">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
             {indexes.length ? (
               <table className="w-full text-left text-[12px]">
-                <thead>
-                  <tr className="text-muted-foreground">
+                <thead className="border-b border-border bg-muted/50">
+                  <tr className="text-[11.5px] text-muted-foreground">
                     <th className="px-3 py-2 font-medium">{t("data_preview.index")}</th>
                     <th className="px-3 py-2 font-medium">{t("data_preview.column")}</th>
                     <th className="px-3 py-2 font-medium">{t("data_preview.unique")}</th>
@@ -1564,7 +1595,7 @@ export function DataPreview({
                 </thead>
                 <tbody>
                   {indexes.map((index) => (
-                    <tr key={`${index.name}-${index.columns}`} className="hover:bg-background">
+                    <tr key={`${index.name}-${index.columns}`} className="border-t border-border/60 hover:bg-primary/[0.04]">
                       <td className="px-3 py-2 font-mono font-semibold">{index.name}</td>
                       <td className="px-3 py-2 font-mono text-muted-foreground">{index.columns || "-"}</td>
                       <td className="px-3 py-2 text-muted-foreground">{index.unique ? t("data_preview.yes") : t("data_preview.no")}</td>
@@ -1588,13 +1619,13 @@ export function DataPreview({
             <span className="text-[12px]">{t("data_preview.syncing_rows")}</span>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-md bg-muted/25 py-20 text-center text-[13px] text-muted-foreground">{t("data_preview.no_rows")}</div>
+          <div className="rounded-lg border border-dashed border-border py-20 text-center text-[13px] text-muted-foreground">{t("data_preview.no_rows")}</div>
         ) : viewMode === "table" ? (
           <RowsTable rows={rows} page={page} pageSize={pageSize} busy={busy} settings={appSettings} onEdit={setEditingRow} onDelete={handleDelete} />
         ) : viewMode === "json" ? (
           <div className="space-y-2 overflow-auto">
             {rows.map((row, rowIndex) => (
-              <pre key={rowIndex} className="rounded-md bg-muted/25 p-3 font-mono text-[12px] leading-5 text-foreground">
+              <pre key={rowIndex} className="rounded-lg border border-border bg-card p-3 font-mono text-[12px] leading-5 text-foreground">
                 {JSON.stringify(sortRowObject(row), null, 2)}
               </pre>
             ))}
@@ -1627,8 +1658,9 @@ export function DataPreview({
               toast({ title: t("toast.row_updated"), variant: "success" });
               return;
             }
-            toast({ title: t("toast.update_failed"), description: result.error ?? t("common.error"), variant: "error" });
-            throw new Error(result.error ?? t("common.error"));
+            const message = describeUpdateError(result.error, t);
+            toast({ title: t("toast.update_failed"), description: message, variant: "error" });
+            throw new Error(message);
           }}
         />
       )}

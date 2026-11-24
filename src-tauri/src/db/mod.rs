@@ -1,6 +1,6 @@
 pub mod commands;
-mod dialect;
+pub(crate) mod dialect;
 mod pool;
-mod types;
+pub(crate) mod types;
 
 pub use pool::DbPoolState;

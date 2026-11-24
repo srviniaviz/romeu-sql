@@ -116,7 +116,7 @@ export function SqlEditor({
               backgroundColor: "transparent",
             },
             ".cm-scroller": {
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontFamily: "var(--font-mono)",
             },
             ".cm-tooltip": {
               borderRadius: "6px",

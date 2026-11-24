@@ -64,8 +64,8 @@ export function WorkspaceTabs({
   if (tabs.length === 0) return null;
 
   return (
-    <div aria-label={t("workspace_tabs.open_tables")} role="tablist" className="flex h-11 shrink-0 items-end overflow-visible border-b border-border/50 bg-muted/20 px-2">
-      <div className="flex h-full min-w-0 flex-1 items-end">
+    <div aria-label={t("workspace_tabs.open_tables")} role="tablist" className="flex h-10 shrink-0 items-end overflow-x-auto overflow-y-hidden border-b border-border bg-chrome/60 px-1.5 [scrollbar-width:none]">
+      <div className="flex h-full min-w-0 flex-1 items-end gap-px">
         {tabs.map((tab) => {
           const active = tab.id === activeTabId;
           return (
@@ -73,10 +73,10 @@ export function WorkspaceTabs({
               key={tab.id}
               onContextMenu={(event) => openContextMenu(event, tab.id)}
               className={cn(
-                "group/tab flex h-9 w-64 min-w-0 shrink items-center gap-2 overflow-hidden border-x border-t border-transparent px-3 text-[12px] text-muted-foreground transition-colors",
+                "group/tab relative -mb-px flex h-[34px] w-56 min-w-28 shrink items-center gap-2 overflow-hidden rounded-t-md border-x border-t border-transparent pl-3 pr-1.5 text-[12px] text-muted-foreground transition-colors",
                 active
-                  ? "rounded-t-md border-border bg-background text-foreground"
-                  : "hover:bg-muted/45 hover:text-foreground",
+                  ? "border-border bg-background text-foreground before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary"
+                  : "hover:bg-foreground/[0.04] hover:text-foreground",
               )}
             >
               <button
@@ -93,7 +93,7 @@ export function WorkspaceTabs({
               <button
                 type="button"
                 onClick={() => onClose(tab.id)}
-                className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-colors hover:bg-muted hover:text-foreground focus:opacity-100 group-hover/tab:opacity-100"
+                className={cn("flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus:opacity-100 group-hover/tab:opacity-100", active ? "opacity-100" : "opacity-0")}
                 aria-label={`${t("common.close")} ${tab.tableName}`}
               >
                 <X size={13} />
@@ -107,7 +107,7 @@ export function WorkspaceTabs({
           ref={contextMenuRef}
           role="menu"
           aria-label={t("workspace_tabs.context_menu")}
-          className="fixed z-[100] min-w-48 rounded-md border border-border bg-popover p-1 shadow-lg"
+          className="fixed z-[100] min-w-48 rounded-lg border border-border bg-popover p-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button

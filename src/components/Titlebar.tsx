@@ -20,6 +20,11 @@ interface TitlebarProps {
   onOpenSettings: () => void;
 }
 
+const toolButtonClass =
+  "h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground active:translate-y-0";
+const windowButtonClass =
+  "flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-foreground/[0.07] hover:text-foreground";
+
 type UpdateStatus = "idle" | "checking" | "downloading" | "available" | "current" | "error";
 
 export function Titlebar({ onOpenSettings }: TitlebarProps) {
@@ -114,110 +119,105 @@ export function Titlebar({ onOpenSettings }: TitlebarProps) {
 
   return (
     <>
-    <div className="titlebar select-none z-50 flex h-12 items-center justify-between border-b border-border bg-background text-foreground">
-      <div 
-        data-tauri-drag-region 
-        className="flex-1 h-full flex items-center gap-5 px-3"
+    <div className="titlebar z-50 border-b border-border bg-chrome text-foreground">
+      <div
+        data-tauri-drag-region
+        className="flex h-full flex-1 items-center gap-2.5 pl-3"
       >
-        <div className="flex items-center gap-2">
-          <img src={appIcon} alt="" className="size-4 rounded-[3px]" draggable={false} />
-          <span className="text-[13px] font-semibold">Romeu SQL</span>
-        </div>
+        <img src={appIcon} alt="" className="pointer-events-none size-[18px] rounded-[4px] shadow-xs" draggable={false} />
+        <span className="pointer-events-none text-[12.5px] font-semibold tracking-tight">Romeu SQL</span>
       </div>
 
-      <div className="flex h-full items-center px-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onOpenSettings}
-          className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={t("settings.title")}
+      <div className="flex h-full items-center">
+        <div className="mr-2 flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenSettings}
+            className={toolButtonClass}
+            title={t("settings.title")}
+            aria-label={t("settings.title")}
+          >
+            <Settings size={15} strokeWidth={2} />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void checkUpdates()}
+            className={`relative ${toolButtonClass}`}
+            title={
+              updateStatus === "available" && updateResult
+                ? t("updates.available", { version: updateResult.latestVersion })
+                : updateStatus === "downloading" && updateResult
+                  ? t("updates.downloading", { version: updateResult.latestVersion })
+                : updateStatus === "current" && updateResult
+                  ? t("updates.current", { version: updateResult.currentVersion })
+                  : updateStatus === "error"
+                    ? t("updates.error")
+                    : t("updates.check")
+            }
+          >
+            {updateStatus === "checking" || updateStatus === "downloading" ? (
+              <Loader2 size={15} className="animate-spin" strokeWidth={2} />
+            ) : (
+              <DownloadCloud size={15} strokeWidth={2} />
+            )}
+            {updateStatus === "available" && (
+              <span className="absolute right-1 top-1 size-2 rounded-full bg-primary ring-2 ring-chrome" />
+            )}
+            {updateStatus === "error" && (
+              <span className="absolute right-1 top-1 size-2 rounded-full bg-destructive ring-2 ring-chrome" />
+            )}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleLanguage}
+            className={`${toolButtonClass} w-auto px-2 text-[11px] font-semibold tracking-wide`}
+            title={t("shell.change_language")}
+          >
+            {i18n.language.startsWith('en') ? 'PT' : 'EN'}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleThemeAndSettings();
+            }}
+            className={toolButtonClass}
+            title={theme === 'dark' ? t("shell.switch_to_light") : t("shell.switch_to_dark")}
+          >
+            {theme === 'dark' ? <Sun size={15} strokeWidth={2} /> : <Moon size={15} strokeWidth={2} />}
+          </Button>
+        </div>
+
+        <Separator orientation="vertical" className="h-4" />
+
+        <button type="button" onClick={minimize} className={windowButtonClass} aria-label="Minimize">
+          <Minus size={15} strokeWidth={1.75} />
+        </button>
+        <button type="button" onClick={toggleMaximize} className={windowButtonClass} aria-label="Maximize">
+          <Square size={12} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={close}
+          className={`${windowButtonClass} hover:bg-[#e81123] hover:text-white`}
+          aria-label={t("common.close")}
         >
-          <Settings size={14} strokeWidth={2.4} />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void checkUpdates()}
-          className="relative h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={
-            updateStatus === "available" && updateResult
-              ? t("updates.available", { version: updateResult.latestVersion })
-              : updateStatus === "downloading" && updateResult
-                ? t("updates.downloading", { version: updateResult.latestVersion })
-              : updateStatus === "current" && updateResult
-                ? t("updates.current", { version: updateResult.currentVersion })
-                : updateStatus === "error"
-                  ? t("updates.error")
-                  : t("updates.check")
-          }
-        >
-          {updateStatus === "checking" || updateStatus === "downloading" ? (
-            <Loader2 size={14} className="animate-spin" strokeWidth={2.4} />
-          ) : (
-            <DownloadCloud size={14} strokeWidth={2.4} />
-          )}
-          {updateStatus === "available" && (
-            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
-          )}
-          {updateStatus === "error" && (
-            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-destructive" />
-          )}
-        </Button>
-
-        <Separator orientation="vertical" className="h-4 mx-1.5" />
-
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={toggleLanguage}
-          className="h-8 w-8 p-0 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={t("shell.change_language")}
-        >
-          {i18n.language.startsWith('en') ? 'PT' : 'EN'}
-        </Button>
-
-        <Separator orientation="vertical" className="h-4 mx-1.5" />
-
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleThemeAndSettings();
-          }}
-          className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={theme === 'dark' ? t("shell.switch_to_light") : t("shell.switch_to_dark")}
-        >
-          {theme === 'dark' ? <Sun size={14} strokeWidth={2.5} /> : <Moon size={14} strokeWidth={2.5} />}
-        </Button>
-
-        <Separator orientation="vertical" className="h-4 mx-1.5" />
-
-        <Button variant="ghost" size="sm" onClick={minimize} className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <Minus size={14} strokeWidth={2.5} />
-        </Button>
-        
-        <Button variant="ghost" size="sm" onClick={toggleMaximize} className="h-8 w-8 p-0 text-muted-foreground hover:bg-muted hover:text-foreground">
-          <Square size={12} strokeWidth={2.5} />
-        </Button>
-        
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={close} 
-          className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
-        >
-          <X size={14} strokeWidth={2.5} />
-        </Button>
+          <X size={16} strokeWidth={1.75} />
+        </button>
       </div>
     </div>
 
       <Dialog open={updateModalOpen} onOpenChange={(open) => {
         if (updateStatus !== "downloading") setUpdateModalOpen(open);
       }}>
-        <DialogContent showCloseButton={updateStatus !== "downloading"} className="max-w-md rounded-lg p-0">
+        <DialogContent showCloseButton={updateStatus !== "downloading"} className="max-w-md gap-0 p-0">
           <DialogHeader className="border-b border-border/50 px-5 py-4">
             <DialogTitle>{t("updates.modal_title")}</DialogTitle>
             <DialogDescription>

@@ -1,4 +1,5 @@
 mod db;
+mod mcp;
 mod updates;
 
 use tauri::Manager;
@@ -13,6 +14,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(db::DbPoolState::new())
+        .manage(mcp::McpState::new())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -58,6 +60,10 @@ pub fn run() {
             db::commands::db_delete_row,
             db::commands::db_create_table,
             db::commands::db_create_database,
+            mcp::mcp_start,
+            mcp::mcp_stop,
+            mcp::mcp_status,
+            mcp::mcp_set_connections,
             updates::download_and_install_update
         ])
         .run(tauri::generate_context!())

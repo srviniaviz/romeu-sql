@@ -50,6 +50,17 @@ export interface AdvancedSettings {
   debugLogs: boolean;
 }
 
+export type McpAccess = "read" | "write";
+
+export interface McpSettings {
+  enabled: boolean;
+  port: number;
+  token: string;
+  maxRows: number;
+  /** Connections shared with MCP, by connection id. Missing ids are not shared. */
+  permissions: Record<string, McpAccess>;
+}
+
 export interface AppSettings {
   query: QuerySettings;
   editor: EditorSettings;
@@ -59,6 +70,7 @@ export interface AppSettings {
   appearance: AppearanceSettings;
   updates: UpdateSettings;
   advanced: AdvancedSettings;
+  mcp: McpSettings;
 }
 
 export const MIN_QUERY_TIMEOUT_MS = 1_000;
@@ -109,6 +121,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   advanced: {
     debugLogs: false,
+  },
+  mcp: {
+    enabled: false,
+    port: 7413,
+    token: "",
+    maxRows: 200,
+    permissions: {},
   },
 };
 

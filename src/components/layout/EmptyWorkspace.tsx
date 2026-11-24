@@ -11,21 +11,24 @@ export function EmptyWorkspace({ onCreateConnection }: EmptyWorkspaceProps) {
 
   return (
     <div className="flex min-h-[calc(100vh-6rem)] items-center justify-center px-8">
-      <div className="flex max-w-md flex-col items-center text-center">
-        <div className="mb-7 flex size-28 items-center justify-center rounded-full bg-muted text-muted-foreground/30">
-          <Database size={58} strokeWidth={1.5} />
+      <div className="flex max-w-sm flex-col items-center text-center">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-2xl border border-border bg-muted/60" />
+          <div className="relative flex size-16 items-center justify-center rounded-2xl border border-border bg-card text-primary shadow-md">
+            <Database size={28} strokeWidth={1.75} />
+          </div>
         </div>
-        <h2 className="text-[22px] font-semibold tracking-tight text-foreground">
+        <h2 className="text-[18px] font-semibold tracking-tight text-foreground">
           {t("dashboard.title")}
         </h2>
-        <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+        <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
           {t("dashboard.empty_desc")}
         </p>
         <Button
-          className="mt-6 h-9 rounded-md bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90"
+          className="mt-6 h-9 gap-1.5 rounded-md px-4 text-[13px] font-medium"
           onClick={onCreateConnection}
         >
-          <Plus size={15} className="mr-2" />
+          <Plus size={15} />
           {t("dashboard.new_connection")}
         </Button>
       </div>
